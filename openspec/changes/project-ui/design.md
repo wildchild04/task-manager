@@ -35,8 +35,8 @@ Actions generate task, project and document IDs with `crypto.randomUUID()`. The 
 ### 5. Times are formatted on the server in the workspace time zone
 View builders format due times with `Intl.DateTimeFormat` in `services.tasks.timeZone` and send strings (and the raw ISO value for sorting), so server and client render the same text and hydration can't disagree. Schedules are described in words by one helper (`describeSchedule`): "Every Monday at 09:00", "Every 6 hours", "On 3 Nov 2026 at 14:30", "30 minutes after creation", "At 09:00".
 
-### 6. Navigation is two flat groups plus the current project
-`PageNavigation` is flat, so the shell's navigation is a stack: the projects group, the current project's sections (when a project, task or document is open), and the "Pages" group. The shell loader finds the current project from the route: the `projectId` param, a task's project, or a page's project through `LibraryService.projectOfPage`. The library tree is shown on the library page, not in the navigation, until a tree component exists.
+### 6. Navigation: flat groups plus the current project's tree
+The shell's navigation is a stack: the projects group (`PageNavigation`), the current project's sections (`PageNavigation`) followed by its library (`TreeNavigation`, design system v0.4.0) when a project, task or document is open, and the "Pages" group. The shell loader finds the current project from the route: the `projectId` param, a task's project, or a page's project through `LibraryService.projectOfPage`. Tree items render through React Router's `Link` (`component` and `to`), and the open document is the active item, so `TreeNavigation` expands its ancestors. The library page uses the same component with every level expanded.
 
 ### 7. Page viewer scope
 `buildPageView` accepts pages whose root is a workspace page or is owned by a project (`project` owner kind), and returns the owning project for a back link. Task and comment roots stay excluded. The task overview renders a task's body by building the same view from the body page directly.
@@ -48,7 +48,7 @@ Task list filters are a `?state=` search parameter (`open`, `tombstoned`, `promo
 `scripts/seed.ts` checks the workspace pages and the sample project separately, so databases seeded before this change get the project added. The sample project is built through the services (projects, tasks, transitions, chores, comments), so it is valid by construction. It uses a fixed project ID (`seed-project`) and generated IDs for the rest.
 
 ### 10. Details settled during implementation
-- **`DatePicker` posts its displayed text under `name`** (e.g. `11/03/2026`), not ISO. The chore form keeps the date in state and posts it through a hidden `date` input as `YYYY-MM-DD`. `Select` posts its real value, so it uses `name` directly.
+- **`DatePicker` posts its displayed text under `name`** (e.g. `11/03/2026`), not ISO. The chore form keeps the date in state and posts it through a hidden `date` input as `YYYY-MM-DD`. `Select` posts its real value, and v0.4.0's `TimePicker` posts a hidden `HH:mm` input, so both use `name` directly.
 - **Dialogs submit with `requestSubmit()`.** `Dialog`'s confirm action is a plain button, so `FormDialog` wraps its content in a `fetcher.Form` and submits that, keeping the post a normal form submission.
 - **Cards don't set `headingLevel`.** `Card` maps `headingLevel={2}` to the `h2` typography variant (45px), too large for dashboard cards; the default title style is used.
 - **Index-route posts go to `/?index`.** React Router's forms add it automatically; plain posts to `/` reach the layout route, which has no action (405).
@@ -57,8 +57,7 @@ Task list filters are a `?state=` search parameter (`open`, `tombstoned`, `promo
 
 ## Risks / Trade-offs
 
-- [The HH:MM text field is a weaker input than a time picker] → Server validation with a clear message; replaced when the design system ships a time picker (feature request).
-- [Library depth isn't visible in the navigation] → The library page shows the full tree; the tree view feature request brings it into the navigation later.
+- [A very large library makes the navigation long] → `TreeNavigation` starts collapsed apart from the open document's ancestors.
 - [Dashboard and lists recompute on every request] → Single user with small data; the domain queries are indexed.
 - [Pages remain read-only] → Expected until the editor; titles of new tasks and documents are set at creation.
 

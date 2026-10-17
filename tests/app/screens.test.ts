@@ -68,7 +68,15 @@ describe("project screens", () => {
       ["/tasks/W", "work"],
       ["/pages/doc", "library"],
     ])("marks the section for %s", (path, section) => {
-      expect(shellView(services, path).current).toEqual({ id: "P", title: "Taskhub", section });
+      expect(shellView(services, path).current).toMatchObject({ id: "P", title: "Taskhub", section });
+    });
+
+    it("includes the current project's library and the open document", () => {
+      services.blocks.apply([{ op: "insert", block: { id: "child", type: "page", content: [{ text: "Child" }] }, parentId: "doc" }]);
+      const current = shellView(services, "/pages/child").current!;
+      expect(current.activePageId).toBe("child");
+      expect(current.library).toEqual([{ id: "doc", title: "Doc", children: [{ id: "child", title: "Child", children: [] }] }]);
+      expect(shellView(services, "/projects/P/work").current?.activePageId).toBeNull();
     });
 
     it("marks home for the project's home page and nothing for workspace pages", () => {
@@ -181,7 +189,7 @@ describe("project screens", () => {
       );
       expect(result).toMatchObject({
         ok: false,
-        fieldErrors: { time: "Enter a time as HH:MM, e.g. 09:00" },
+        fieldErrors: { time: "Choose a time" },
         values: { title: "Feed cat", time: "25:00" },
       });
       expect(services.tasks.list("P", { kind: "chore" })).toEqual([]);

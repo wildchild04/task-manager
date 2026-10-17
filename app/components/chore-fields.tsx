@@ -1,4 +1,4 @@
-import { DatePicker, Select, Stack, TextField } from "@wildchild/design-system";
+import { DatePicker, Select, Stack, TextField, TimePicker } from "@wildchild/design-system";
 import { useState } from "react";
 
 import type { ActionResult } from "../lib/forms.server";
@@ -18,25 +18,16 @@ const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Satur
   label,
 }));
 
-/**
- * The fields of the create-chore form. Field names match what
- * `createTaskAction` reads. The time is typed as HH:MM until the design
- * system has a time picker (feature-requests/time-picker.md).
- */
+/** The fields of the create-chore form. Field names match what `createTaskAction` reads. */
 export function ChoreFields({ result }: { result: ActionResult | undefined }) {
   const [scheduleType, setScheduleType] = useState(lastValue(result, "scheduleType") ?? "none");
   const [every, setEvery] = useState(lastValue(result, "every") ?? "daily");
   // DatePicker submits its displayed text under `name`, so the ISO date goes through a hidden input.
   const [date, setDate] = useState(lastValue(result, "date") ?? "");
 
+  // TimePicker submits a hidden HH:mm input under `name`.
   const time = (
-    <TextField
-      name="time"
-      label="Time"
-      placeholder="09:00"
-      defaultValue={lastValue(result, "time")}
-      {...fieldError(result, "time")}
-    />
+    <TimePicker name="time" label="Time" minutesStep={5} defaultValue={lastValue(result, "time")} {...fieldError(result, "time")} />
   );
 
   return (

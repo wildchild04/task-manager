@@ -1,10 +1,10 @@
-import { Alert, Button, Link, Select, Stack, TextField, Typography } from "@wildchild/design-system";
+import { Alert, Button, Select, Stack, TextField, Typography } from "@wildchild/design-system";
 import { useState } from "react";
-import { data, Link as RouterLink, useFetcher } from "react-router";
+import { data, useFetcher } from "react-router";
 
 import { fieldError, FormDialog, lastValue } from "../components/form-dialog";
+import { LibraryTree } from "../components/library-tree";
 import { NotFound } from "../components/not-found";
-import type { LibraryNode } from "~/domain/library/library.service";
 import type { ActionResult } from "../lib/forms.server";
 import { createDocumentAction, libraryView } from "../lib/library.server";
 import { services } from "../lib/services.server";
@@ -21,22 +21,6 @@ export async function action({ params, request }: Route.ActionArgs) {
 
 export function meta({ data }: Route.MetaArgs) {
   return [{ title: data?.view ? `Knowledge library · ${data.view.project.title}` : "Not found" }];
-}
-
-/** The library tree as nested links, until the design system has a tree component (feature-requests/tree-navigation.md). */
-function Tree({ nodes }: { nodes: LibraryNode[] }) {
-  return (
-    <ul className="block-list library-tree">
-      {nodes.map((node) => (
-        <li key={node.id}>
-          <Link component={RouterLink} to={`/pages/${node.id}`} variant="standalone">
-            {node.title || "Untitled"}
-          </Link>
-          {node.children.length > 0 && <Tree nodes={node.children} />}
-        </li>
-      ))}
-    </ul>
-  );
 }
 
 export default function Library({ loaderData }: Route.ComponentProps) {
@@ -56,7 +40,7 @@ export default function Library({ loaderData }: Route.ComponentProps) {
           This library has no documents yet.
         </Alert>
       ) : (
-        <Tree nodes={view.tree} />
+        <LibraryTree ariaLabel="Knowledge library" nodes={view.tree} activePageId={null} expandAll />
       )}
 
       <FormDialog open={creating} title="New document" confirmLabel="Create" fetcher={fetcher} onClose={() => setCreating(false)}>

@@ -33,3 +33,11 @@
 - [x] 6.1 Seed the sample project per part (idempotent; adds the project to older databases)
 - [x] 6.2 Tests: every scenario in project-screens, app-shell, page-viewer and dev-data through the view builders and action handlers, plus rendering tests for the dashboard card and chore form
 - [x] 6.3 `typecheck`, tests and `build` pass; run the app and check every screen (checked over HTTP: every route's status and content, and every form as a plain HTML post; dialogs not exercised in a real browser)
+
+## 7. Adopt design system v0.4.0
+
+- [x] 7.1 Upgrade `@wildchild/design-system` to v0.4.0
+- [x] 7.2 Replace the HH:MM text fields in the chore form with `TimePicker`
+- [x] 7.3 Show the current project's library in the navigation with `TreeNavigation` (open document active, ancestors expanded)
+- [x] 7.4 Render the library page's tree with `TreeNavigation` and remove the nested-links stopgap
+- [x] 7.5 Update tests, typecheck, build, and check the navigation tree and chore form over HTTP

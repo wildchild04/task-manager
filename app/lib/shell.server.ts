@@ -1,5 +1,6 @@
 import type { AppServices } from "~/composition";
 import { plainText } from "~/domain/blocks/text";
+import type { LibraryNode } from "~/domain/library/library.service";
 
 import { isTaskListSlug, slugOfKind, type TaskListSlug } from "./format";
 
@@ -7,8 +8,17 @@ export type ProjectSection = "home" | TaskListSlug | "library";
 
 export type ShellView = {
   projects: { id: string; title: string }[];
-  /** The project being viewed (directly, or through one of its tasks or pages) and its current section. */
-  current: { id: string; title: string; section: ProjectSection } | null;
+  /**
+   * The project being viewed (directly, or through one of its tasks or pages),
+   * its current section, its library tree, and the open document if any.
+   */
+  current: {
+    id: string;
+    title: string;
+    section: ProjectSection;
+    library: LibraryNode[];
+    activePageId: string | null;
+  } | null;
   pages: { id: string; title: string }[];
 };
 
@@ -32,7 +42,14 @@ function currentProject(services: AppServices, pathname: string): ShellView["cur
   }
 
   const project = projectId ? services.projects.get(projectId) : undefined;
-  return project ? { id: project.id, title: project.title || "Untitled", section } : null;
+  if (!project) return null;
+  return {
+    id: project.id,
+    title: project.title || "Untitled",
+    section,
+    library: services.library.getLibraryTree(project.id) ?? [],
+    activePageId: first === "pages" && id ? id : null,
+  };
 }
 
 export function shellView(services: AppServices, pathname: string): ShellView {

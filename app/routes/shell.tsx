@@ -2,6 +2,7 @@ import { Container, PageNavigation, PageShell, Stack, ThemeToggle, Typography } 
 import type { MouseEvent } from "react";
 import { Outlet, type ShouldRevalidateFunctionArgs, useNavigate } from "react-router";
 
+import { LibraryTree } from "../components/library-tree";
 import { services } from "../lib/services.server";
 import { type ProjectSection, shellView } from "../lib/shell.server";
 import { useThemeMode } from "../theme-mode";
@@ -66,6 +67,14 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
             ariaLabel={`${current.title} sections`}
             items={SECTIONS.map((s) => item(s.label, `/projects/${current.id}${s.path}`, s.section === current.section))}
           />
+          {current.library.length > 0 && (
+            <LibraryTree
+              key={current.id}
+              ariaLabel={`${current.title} knowledge library`}
+              nodes={current.library}
+              activePageId={current.activePageId}
+            />
+          )}
         </Group>
       )}
       {pages.length > 0 && (

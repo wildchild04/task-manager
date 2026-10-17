@@ -127,7 +127,7 @@ export function scheduleFromForm(values: Record<string, string>): { schedule?: S
   const errors: FieldErrors = {};
   for (const issue of parsed.error.issues) {
     const field = typeof issue.path[0] === "string" && issue.path[0] !== "type" ? issue.path[0] : "scheduleType";
-    errors[field] ??= field === "time" ? "Enter a time as HH:MM, e.g. 09:00" : issue.message;
+    errors[field] ??= field === "time" ? "Choose a time" : issue.message;
   }
   return { errors };
 }

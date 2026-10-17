@@ -70,7 +70,7 @@ Rejected input (for example an empty title, an invalid time or a missing field) 
 - **THEN** no chore is created and the dialog shows the time error, keeping the other fields
 
 ### Requirement: Knowledge library page
-`/projects/:projectId/library` SHALL show the project's library as a nested tree of document links (to `/pages/:pageId`), in sibling order. It SHALL offer creating a document with a title, either at the top level or inside an existing document, added after that parent's last child. An empty library SHALL show an empty state.
+`/projects/:projectId/library` SHALL show the project's library as a tree of document links (to `/pages/:pageId`), in sibling order, with every level expanded. It SHALL offer creating a document with a title, either at the top level or inside an existing document, added after that parent's last child. An empty library SHALL show an empty state.
 
 #### Scenario: Nested document
 - **WHEN** a document "Auth design" is created inside "Architecture"

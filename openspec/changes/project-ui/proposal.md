@@ -11,7 +11,7 @@ Projects, tasks, chores and the dashboard exist in the domain but nothing in the
   - explorations and work: quick add by title
   - updates: a dialog with the title and the done work it iterates on
   - chores: a dialog with title, urgency and schedule (all five schedule types)
-- **Knowledge library (`/projects/:projectId/library`)**: the document tree, and creating a document at the top level or inside another.
+- **Knowledge library (`/projects/:projectId/library`)**: the document tree, and creating a document at the top level or inside another. The tree is also shown in the navigation under the current project.
 - **Task overview (`/tasks/:taskId`)**: a read-only task page (title, kind, state, project, body; for chores urgency, schedule and due time). `task-ui` adds actions to it.
 - The **page viewer** also opens a project's home page and library documents.
 - **Seed data** adds a sample project with tasks of every kind, chores and library documents.
@@ -35,11 +35,11 @@ Projects, tasks, chores and the dashboard exist in the domain but nothing in the
 
 ## External dependencies
 
-Design-system feature requests (stopgaps in brackets, to be removed when the components ship):
-- **Time picker** for HH:MM fields in chore schedules (`~/dev/design-system/feature-requests/time-picker.md`). [`TextField` with an HH:MM placeholder, validated on the server.]
-- **Tree view** for the knowledge library in the navigation (`~/dev/design-system/feature-requests/tree-navigation.md`). [The library tree is shown on the library page as nested links.]
+Design-system feature requests, both delivered in `@wildchild/design-system` v0.4.0 and adopted by this change:
+- **`TimePicker`** for HH:MM fields in chore schedules (`~/dev/design-system/feature-requests/time-picker.md`).
+- **`TreeNavigation`** for the knowledge library in the navigation (`~/dev/design-system/feature-requests/tree-navigation.md`).
 
-Everything else uses existing components: `PageShell`, `PageNavigation`, `Card`, `SummaryRow`, `Table` and `TableAddRow`, `Tabs`, `Chip`, `Dialog`, `TextField`, `Select`, `SearchSelect`, `DatePicker`, `Alert`, `Link`, `Typography`.
+Everything else uses existing components: `PageShell`, `PageNavigation`, `TreeNavigation`, `TimePicker`, `Card`, `SummaryRow`, `Table` and `TableAddRow`, `Tabs`, `Chip`, `Dialog`, `TextField`, `Select`, `SearchSelect`, `DatePicker`, `Alert`, `Link`, `Typography`.
 
 ## Prerequisites
 
@@ -50,4 +50,5 @@ Everything else uses existing components: `PageShell`, `PageNavigation`, `Card`,
 - New routes in `app/routes/`, view and action modules in `app/lib/`, components in `app/components/`.
 - `app/routes/shell.tsx` and `app/routes/home.tsx` change; `app/lib/page-view.server.ts` accepts project pages.
 - `scripts/seed.ts` gains a sample project.
+- `@wildchild/design-system` upgraded from v0.3.3 to v0.4.0.
 - No domain or schema changes.
