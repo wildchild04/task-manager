@@ -1,0 +1,159 @@
+import type { Mark, RichText } from "~/domain/blocks/types";
+import type { Selection } from "~/editor/editor-state";
+
+/**
+ * The DOM side of the editor: drawing rich text into an editable element and
+ * mapping DOM positions to plain-text offsets and back. Editable elements carry
+ * `data-block-id`; their text uses `white-space: pre-wrap`, so `\n` is a line
+ * break and offsets match text node characters one to one.
+ */
+
+const MARK_TAGS: Record<Exclude<Mark, object>, string> = {
+  bold: "strong",
+  italic: "em",
+  underline: "u",
+  strikethrough: "s",
+  code: "code",
+};
+
+/**
+ * Replaces an editable element's content with the rich text. React never
+ * renders inside it. A selection inside the element is kept at the same offsets.
+ */
+export function renderRichText(element: HTMLElement, content: RichText): void {
+  const selection = readSelection();
+  const kept = selection?.blockId === element.dataset.blockId ? selection : null;
+  const nodes: Node[] = content.map((span) => {
+    let node: Node = document.createTextNode(span.text);
+    for (const mark of span.marks ?? []) {
+      const wrapper =
+        typeof mark === "object" ? Object.assign(document.createElement("a"), { href: mark.href }) : document.createElement(MARK_TAGS[mark]);
+      wrapper.appendChild(node);
+      node = wrapper;
+    }
+    return node;
+  });
+  // An empty block, or a trailing line break, needs a <br> to have a line to put the caret on.
+  const text = content.map((s) => s.text).join("");
+  if (text === "" || text.endsWith("\n")) nodes.push(Object.assign(document.createElement("br"), { className: "editor-filler" }));
+  element.replaceChildren(...nodes);
+  element.dataset.empty = String(text === "");
+  if (kept) setSelectionIn(element, kept.anchor, kept.focus);
+}
+
+function setSelectionIn(element: HTMLElement, anchorOffset: number, focusOffset: number) {
+  const anchor = positionOf(element, anchorOffset);
+  const focus = positionOf(element, focusOffset);
+  window.getSelection()?.setBaseAndExtent(anchor.node, anchor.offset, focus.node, focus.offset);
+}
+
+/** The editable element of a block. */
+export function editableOf(root: ParentNode, blockId: string): HTMLElement | null {
+  return root.querySelector<HTMLElement>(`[data-block-id="${CSS.escape(blockId)}"]`);
+}
+
+/** The plain text of an editable element, as the editor counts it. */
+export function textOf(element: HTMLElement): string {
+  let text = "";
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) text += node.nodeValue ?? "";
+  return text;
+}
+
+/** The text offset of a DOM position inside an editable element. */
+function offsetOf(element: HTMLElement, node: Node, offset: number): number {
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  range.setEnd(node, offset);
+  // Count only text nodes, so the filler <br> adds nothing.
+  const fragment = range.cloneContents();
+  let length = 0;
+  const walker = document.createTreeWalker(fragment, NodeFilter.SHOW_TEXT);
+  for (let text = walker.nextNode(); text; text = walker.nextNode()) length += text.nodeValue?.length ?? 0;
+  return length;
+}
+
+const blockElementOf = (node: Node | null): HTMLElement | null =>
+  (node instanceof HTMLElement ? node : node?.parentElement)?.closest<HTMLElement>("[data-block-id]") ?? null;
+
+/** The editor selection matching the DOM selection, when it lies inside one editable block. */
+export function readSelection(): Selection | null {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || !selection.anchorNode || !selection.focusNode) return null;
+  const element = blockElementOf(selection.anchorNode);
+  if (!element || element !== blockElementOf(selection.focusNode)) return null;
+  return {
+    blockId: element.dataset.blockId!,
+    anchor: offsetOf(element, selection.anchorNode, selection.anchorOffset),
+    focus: offsetOf(element, selection.focusNode, selection.focusOffset),
+  };
+}
+
+/** The DOM position of a text offset inside an editable element. */
+function positionOf(element: HTMLElement, offset: number): { node: Node; offset: number } {
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  let remaining = offset;
+  let last: Text | null = null;
+  for (let node = walker.nextNode() as Text | null; node; node = walker.nextNode() as Text | null) {
+    const length = node.nodeValue?.length ?? 0;
+    if (remaining <= length) return { node, offset: remaining };
+    remaining -= length;
+    last = node;
+  }
+  return last ? { node: last, offset: last.nodeValue?.length ?? 0 } : { node: element, offset: 0 };
+}
+
+/** Puts the DOM selection (and focus) where the editor selection is. */
+export function writeSelection(root: ParentNode, selection: Selection): void {
+  const element = editableOf(root, selection.blockId);
+  if (!element) return;
+  if (document.activeElement !== element) element.focus({ preventScroll: true });
+  setSelectionIn(element, selection.anchor, selection.focus);
+  element.scrollIntoView?.({ block: "nearest" });
+}
+
+/** The client rectangle of the caret, or `null` when the browser can't tell (empty lines). */
+export function caretRect(): DOMRect | null {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return null;
+  const range = selection.getRangeAt(0).cloneRange();
+  range.collapse(false);
+  const rect = range.getClientRects()[0];
+  return rect && rect.height > 0 ? rect : null;
+}
+
+/** The rectangles of an element's first and last lines of text. */
+function lineRects(element: HTMLElement): { first: DOMRect; last: DOMRect } | null {
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  const rects = [...range.getClientRects()].filter((r) => r.height > 0);
+  if (rects.length === 0) return null;
+  return { first: rects[0]!, last: rects.at(-1)! };
+}
+
+/** Whether the caret is on the first (or last) visual line of its block. */
+export function caretOnEdgeLine(element: HTMLElement, edge: "first" | "last"): boolean {
+  const caret = caretRect();
+  const lines = lineRects(element);
+  if (!caret || !lines) return true;
+  const line = edge === "first" ? lines.first : lines.last;
+  const middle = caret.top + caret.height / 2;
+  return middle >= line.top - 1 && middle <= line.bottom + 1;
+}
+
+/** The text offset in an element closest to horizontal position `x` on its first or last line. */
+export function offsetAtX(element: HTMLElement, x: number, edge: "first" | "last"): number {
+  const lines = lineRects(element);
+  if (!lines) return 0;
+  const line = edge === "first" ? lines.first : lines.last;
+  const y = line.top + line.height / 2;
+  const doc = document as Document & {
+    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+    caretRangeFromPoint?: (x: number, y: number) => Range | null;
+  };
+  const position = doc.caretPositionFromPoint?.(x, y);
+  const node = position?.offsetNode ?? doc.caretRangeFromPoint?.(x, y)?.startContainer;
+  const offset = position?.offset ?? doc.caretRangeFromPoint?.(x, y)?.startOffset ?? 0;
+  if (!node || !element.contains(node)) return edge === "first" ? 0 : textOf(element).length;
+  return offsetOf(element, node, offset);
+}

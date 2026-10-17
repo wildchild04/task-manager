@@ -17,26 +17,26 @@
 
 ## 3. Editing loop in the browser (gate)
 
-- [ ] 3.1 `dom-caret.ts`: DOM selection ↔ offsets, caret restore, line-edge detection, point to offset
-- [ ] 3.2 `EditableBlock` and `PageEditor` with the `beforeinput` loop and composition handling, for paragraphs only, on `/pages/:pageId`
+- [x] 3.1 `dom-caret.ts`: DOM selection ↔ offsets, caret restore, line-edge detection, point to offset
+- [x] 3.2 `EditableBlock` and `PageEditor` with the `beforeinput` loop and composition handling, for paragraphs only, on `/pages/:pageId`
 - [ ] 3.3 Manual check by the user: typing, deleting, selection replace, accented input (é, ñ), caret stays put after re-render; adjust before going on
 
 ## 4. Full editing behaviour
 
-- [ ] 4.1 Every block type's editable component (headings, lists with numbering, todo with checkbox, toggle with open/close, quote, divider, sub-page and reference as non-text blocks with navigation)
-- [ ] 4.2 Keyboard: Enter, Shift+Enter, Backspace/Delete at edges, Tab/Shift+Tab, arrows across blocks and wrapped lines, title ↔ first block
-- [ ] 4.3 Mark shortcuts and the link prompt; markdown shortcuts
-- [ ] 4.4 Undo/redo keys and `historyUndo`/`historyRedo` input events
+- [x] 4.1 Every block type's editable component (headings, lists with numbering, todo with checkbox, toggle with open/close, quote, divider, sub-page and reference as non-text blocks with navigation)
+- [x] 4.2 Keyboard: Enter, Shift+Enter, Backspace/Delete at edges, Tab/Shift+Tab, arrows across blocks and wrapped lines, title ↔ first block
+- [x] 4.3 Mark shortcuts and the link prompt; markdown shortcuts
+- [x] 4.4 Undo/redo keys and `historyUndo`/`historyRedo` input events
 
 ## 5. Saving in the browser
 
-- [ ] 5.1 Wire the save queue to a fetcher per surface; saving indicator; error and reload on rejection
-- [ ] 5.2 Leave warnings (`beforeunload`, `useBlocker`) while edits are unsaved
-- [ ] 5.3 Reset from the loader when the server version changes and nothing is pending
+- [x] 5.1 Wire the save queue to a fetcher per surface; saving indicator; error and reload on rejection
+- [x] 5.2 Leave warnings (`beforeunload`, `useBlocker`) while edits are unsaved
+- [x] 5.3 Reset from the loader when the server version changes and nothing is pending
 
 ## 6. Surfaces
 
-- [ ] 6.1 Library documents and workspace pages (`/pages/:pageId`), title included
+- [x] 6.1 Library documents and workspace pages (`/pages/:pageId`), title included
 - [ ] 6.2 Project home page content on `/projects/:projectId`
 - [ ] 6.3 Task title and description on `/tasks/:taskId`, staying in sync after transitions that change the body (return)
 

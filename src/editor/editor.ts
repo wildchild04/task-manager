@@ -21,6 +21,8 @@ export type EditorOptions = {
 export class Editor {
   state: EditorState;
   selection: Selection;
+  /** Increases on every change, for views subscribing to the editor. */
+  revision = 0;
   /** Toggles that are closed. Local to this view, never saved. */
   closed: ReadonlySet<string> = new Set();
   private history = new History();
@@ -48,6 +50,7 @@ export class Editor {
   }
 
   private notify() {
+    this.revision += 1;
     for (const listener of this.listeners) listener();
   }
 

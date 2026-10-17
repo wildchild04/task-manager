@@ -123,15 +123,15 @@ Cmd/Ctrl+Z SHALL undo the last edit and Shift+Cmd/Ctrl+Z (or Ctrl+Y) SHALL redo 
 - **THEN** the whole word is removed in one step, and the removal is saved
 
 ### Requirement: Saving edits
-Every edit SHALL show at once and be saved in the background as a batch of block operations: typing after it pauses briefly, and any structural edit at once, preserving the order of edits. The page SHALL show whether edits are being saved, are saved, or couldn't be saved. A failed save SHALL keep the edits on the page and retry; a save the server rejects SHALL show the reason and reload the page's content from the server. Leaving the page, or closing the browser tab, with unsaved edits SHALL ask for confirmation. A change made elsewhere to the page while it is open with no unsaved edits (for example a task's return appending to its description) SHALL appear in the editor.
+Every edit SHALL show at once and be saved in the background as a batch of block operations: typing after it pauses briefly, and any structural edit at once, preserving the order of edits. The page SHALL show whether edits are being saved, are saved, or couldn't be saved. A failed save SHALL keep the edits on the page and retry; a save the server rejects SHALL show the reason and reload the page's content from the server. Following a link with unsaved edits SHALL save them first and leave once they are saved; while they aren't, it SHALL ask whether to leave and lose them. Closing the browser tab with unsaved edits SHALL ask for confirmation. A change made elsewhere to the page while it is open with no unsaved edits (for example a task's return appending to its description) SHALL appear in the editor.
 
 #### Scenario: Fast typing then Enter
 - **WHEN** text is typed and Enter pressed several times quickly, then the page is reloaded once saved
 - **THEN** the reloaded page has exactly the same blocks and text
 
 #### Scenario: Leaving with unsaved edits
-- **WHEN** a link is followed while an edit hasn't been saved
-- **THEN** the browser asks whether to leave and lose it
+- **WHEN** a link is followed while an edit hasn't been saved, and the server can't be reached
+- **THEN** the page asks whether to leave and lose the edit, and stays if asked to
 
 ### Requirement: Edits stay inside the edited page
 The server SHALL accept an edit batch only if every block it touches is in the edited page's own content, outside any sub-page's content; it SHALL reject a batch that deletes a sub-page, deletes or changes the type of the page block itself, or inserts a page or comment block. A rejected batch SHALL change nothing.

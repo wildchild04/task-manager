@@ -9,7 +9,7 @@ import { plainText } from "./view-model";
 type ContentBlock = Extract<ViewBlock, { kind: "content" }>;
 
 /** A page inside or referenced from a page: its own block row, as Notion shows sub-pages. */
-function PageLink({ id, title }: { id: string; title: RichTextValue }) {
+export function PageLink({ id, title }: { id: string; title: RichTextValue }) {
   return (
     <div className="block-page-link">
       <Link component={RouterLink} to={`/pages/${id}`}>
@@ -88,7 +88,7 @@ function ContentBlockView({ block }: { block: ContentBlock }) {
   }
 }
 
-function ReferenceBlockView({ target }: { target: ReferenceView }) {
+export function ReferenceBlockView({ target }: { target: ReferenceView }) {
   switch (target.status) {
     case "page":
       return <PageLink id={target.pageId} title={target.title} />;

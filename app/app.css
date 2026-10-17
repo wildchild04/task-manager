@@ -22,3 +22,66 @@ body {
 .block-page-link:hover {
   background: rgba(127, 127, 127, 0.12);
 }
+
+/* ----- Block editor ----- */
+
+.page-editor {
+  position: relative;
+}
+
+.editor-status {
+  position: absolute;
+  top: -1.75rem;
+  right: 0;
+}
+
+.editable {
+  display: block;
+  min-height: 1.5em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  outline: none;
+  cursor: text;
+}
+
+/* The placeholder shows on an empty block while the caret is in it, and always for an empty title. */
+.editable[data-empty="true"]:focus::before,
+.editable[aria-label="Title"][data-empty="true"]::before {
+  content: attr(data-placeholder);
+  opacity: 0.45;
+  pointer-events: none;
+  position: absolute;
+}
+
+.editor-block {
+  margin: 2px 0;
+}
+
+.editor-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.editor-row > :last-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.editor-gutter {
+  flex: none;
+  margin-top: -4px;
+}
+
+.editor-done .editable {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.editor-empty {
+  all: unset;
+  display: block;
+  width: 100%;
+  cursor: text;
+  padding: 4px 0;
+}

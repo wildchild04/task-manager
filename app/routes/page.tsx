@@ -5,9 +5,11 @@ import { Blocks } from "../blocks/block-view";
 import { RichText } from "../blocks/rich-text";
 import { plainText } from "../blocks/view-model";
 import { NotFound } from "../components/not-found";
+import { PageEditor } from "../editor/page-editor";
 import { deletePage, editablePage, pageDeletion } from "../lib/page-edit.server";
 import { buildPageView, pageTrail } from "../lib/page-view.server";
 import { services } from "../lib/services.server";
+import { useHydrated } from "../lib/use-hydrated";
 import type { Route } from "./+types/page";
 
 export function loader({ params }: Route.LoaderArgs) {
@@ -38,8 +40,11 @@ export function meta({ data }: Route.MetaArgs) {
 }
 
 export default function Page({ loaderData }: Route.ComponentProps) {
-  const { page, trail } = loaderData;
+  const { page, trail, editable } = loaderData;
+  const hydrated = useHydrated();
   if (!page) return <NotFound />;
+  // The server renders the page read-only; the editor takes over in the browser.
+  const editing = hydrated && editable;
 
   return (
     <article>
@@ -51,11 +56,13 @@ export default function Page({ loaderData }: Route.ComponentProps) {
             )}
           />
         )}
-        <Typography variant="h1" gutterBottom>
-          {page.title.length > 0 ? <RichText value={page.title} /> : "Untitled"}
-        </Typography>
+        {!(editing && editable.title) && (
+          <Typography variant="h1" gutterBottom>
+            {page.title.length > 0 ? <RichText value={page.title} /> : "Untitled"}
+          </Typography>
+        )}
       </Stack>
-      <Blocks blocks={page.blocks} />
+      {editing ? <PageEditor key={editable.id} page={editable} /> : <Blocks blocks={page.blocks} />}
     </article>
   );
 }
