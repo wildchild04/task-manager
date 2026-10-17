@@ -80,7 +80,7 @@ Rejected input (for example an empty title, an invalid time or a missing field) 
 - **THEN** the library page shows "Auth design" nested under "Architecture", linking to its page
 
 ### Requirement: Task overview
-`/tasks/:taskId` SHALL show a task read-only: its title, kind, state, a link to its project, and its body page content rendered like any page. For a chore it SHALL also show its urgency (including when urgent because overdue), its schedule in words, and its due time in the workspace time zone. An unknown task SHALL show the not-found page with status 404.
+`/tasks/:taskId` SHALL show a task: its title, kind, state, a link to its project, and its body page content rendered like any page. For a chore it SHALL also show its urgency (including when urgent because overdue), its schedule in words, and its due time in the workspace time zone. The title and body SHALL stay read-only; acting on the task (transitions, comments, references, lineage) is specified by the `task-screen` capability. An unknown task SHALL show the not-found page with status 404.
 
 #### Scenario: Chore overview
 - **WHEN** the overview of a weekly Monday 09:00 chore is opened
