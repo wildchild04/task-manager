@@ -28,7 +28,11 @@ context: |
   (git+ssh://git@github.com/wildchild04/Wildchild-Design-System.git#vX.Y.Z), as in
   ~/dev/typescript/kikimora. Never import @mui/material directly in product code.
   Missing primitives are requested as design-system feature requests and listed as
-  external dependencies in the change; they are not built inside this repo.
+  external dependencies in the change; they are not built inside this repo. A feature
+  request is a Markdown file in ~/dev/design-system/feature-requests/<name>.md following
+  the format of the existing files there (Status, Problem, Request, use case, Suggested API,
+  Proposed Types, Requirements, Acceptance Criteria, Storybook Coverage, Tests, MCP
+  Documentation). Not GitHub issues.
 
 rules:
   proposal:

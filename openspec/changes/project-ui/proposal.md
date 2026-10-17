@@ -36,8 +36,8 @@ Projects, tasks, chores and the dashboard exist in the domain but nothing in the
 ## External dependencies
 
 Design-system feature requests (stopgaps in brackets, to be removed when the components ship):
-- **Time picker** for HH:MM fields in chore schedules ([design-system#1](https://github.com/wildchild04/Wildchild-Design-System/issues/1)). [`TextField` with an HH:MM placeholder, validated on the server.]
-- **Tree view** for the knowledge library in the navigation ([design-system#2](https://github.com/wildchild04/Wildchild-Design-System/issues/2)). [The library tree is shown on the library page as nested links.]
+- **Time picker** for HH:MM fields in chore schedules (`~/dev/design-system/feature-requests/time-picker.md`). [`TextField` with an HH:MM placeholder, validated on the server.]
+- **Tree view** for the knowledge library in the navigation (`~/dev/design-system/feature-requests/tree-navigation.md`). [The library tree is shown on the library page as nested links.]
 
 Everything else uses existing components: `PageShell`, `PageNavigation`, `Card`, `SummaryRow`, `Table` and `TableAddRow`, `Tabs`, `Chip`, `Dialog`, `TextField`, `Select`, `SearchSelect`, `DatePicker`, `Alert`, `Link`, `Typography`.
 
