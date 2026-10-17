@@ -1,12 +1,12 @@
 ## 1. Editor state (pure TypeScript)
 
-- [ ] 1.1 Rich-text operations: insert and delete at offsets, toggle marks over a range, add/remove links, split and join, keeping marks and merging equal neighbouring spans
-- [ ] 1.2 Block type declarations (`defineBlockType`) and the markdown shortcut table
-- [ ] 1.3 Editor state from a page tree: blocks, ordered children, visual order for navigation, selection, version
-- [ ] 1.4 Commands: insert/delete text, marks, link, split (Enter with type rules), line break, Backspace/Delete at edges (demote, merge, skip sub-pages, remove references and dividers), Tab/Shift+Tab, markdown shortcuts, todo check, title edits
-- [ ] 1.5 Inverse batches and undo/redo history with typing coalescing
-- [ ] 1.6 Save queue: ordering, coalescing content updates, flush rules, in-flight request, retry, rejection
-- [ ] 1.7 Vitest coverage for every command and spec scenario, including undo of each, and that applying a command's batch through the in-memory block repository gives the same tree as the editor state
+- [x] 1.1 Rich-text operations: insert and delete at offsets, toggle marks over a range, add/remove links, split and join, keeping marks and merging equal neighbouring spans
+- [x] 1.2 Block type declarations (`defineBlockType`) and the markdown shortcut table
+- [x] 1.3 Editor state from a page tree: blocks, ordered children, visual order for navigation, selection, version
+- [x] 1.4 Commands: insert/delete text, marks, link, split (Enter with type rules), line break, Backspace/Delete at edges (demote, merge, skip sub-pages, remove references and dividers), Tab/Shift+Tab, markdown shortcuts, todo check, title edits
+- [x] 1.5 Inverse batches and undo/redo history with typing coalescing
+- [x] 1.6 Save queue: ordering, coalescing content updates, flush rules, in-flight request, retry, rejection
+- [x] 1.7 Vitest coverage for every command and spec scenario, including undo of each, and that applying a command's batch through the in-memory block repository gives the same tree as the editor state
 
 ## 2. Server
 
