@@ -8,12 +8,12 @@
 
 ## 2. Chore domain
 
-- [ ] 2.1 Replace the chore kind's attribute schema; apply defaults (`urgency: normal`, `seriesId: id`) when reading chores with empty attributes
+- [ ] 2.1 Replace the chore kind's attribute schema (`urgency`, `baseUrgency`, `schedule`, `dueAt`, `seriesId`); apply defaults when reading chores with empty attributes
 - [ ] 2.2 Add `TaskRepository.updateAttributes` to the port and both implementations
 - [ ] 2.3 Give the task service a workspace time zone and expose the clock, time zone and a `copyBody` helper on the effect context
 - [ ] 2.4 Implement body copying (children with fresh IDs, order and nesting kept, references copied as-is)
-- [ ] 2.5 Implement `createNextOccurrence` and call it from `complete` and from `cancel` with scope `occurrence`; reject `series` unless the schedule is recurring
-- [ ] 2.6 Implement `ChoreService`: create (resolving `dueAt`), set urgency, set or clear schedule (todo only), `isUrgent`, list a series
+- [ ] 2.5 Add the `next` input to `complete` (default yes when recurring); implement `createNextOccurrence` (base urgency, schedule carried, due time per schedule type, `date` rejects `next: yes`) and call it from `complete` and from `cancel` with scope `occurrence`; reject `series` unless the schedule is recurring
+- [ ] 2.6 Implement `ChoreService`: create (resolving `dueAt`, setting `baseUrgency`), set urgency (occurrence only), set or clear schedule (configuration), todo only, `isUrgent`, list a series
 
 ## 3. Dashboard and composition
 

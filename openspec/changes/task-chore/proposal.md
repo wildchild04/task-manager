@@ -9,9 +9,10 @@ Chores are repetitive or time-bound work that needs attention: updating a librar
   - one-off: **specific time** (HH:MM, the next time it comes round), **specific date** (a date and a time), **timer** (X minutes from now)
   - recurring: **frequency** (daily, weekly or monthly at a time) and **every X** (a fixed interval of minutes, hours, days or weeks, for cron-like jobs)
 - A chore with a schedule has a **due time**. A chore in `todo` whose due time has passed **counts as urgent**, computed when read.
-- Completing a recurring chore **creates the next occurrence**: a new chore in the same series, with a copy of the body page and the next due time on the schedule's calendar. Missed slots are skipped.
+- Completing a chore **answers "create a following chore with the same configuration?"**: yes by default for recurring chores (the next slot on the schedule's calendar, missed slots skipped), no by default for one-off ones. The following chore is in the same series, with a copy of the body page.
+- **Promoting a chore to urgent keeps its original configuration**: it affects that occurrence only, and the next occurrence returns to the configured urgency.
 - **Cancel scope** gets its effects: `occurrence` on a recurring chore skips to the next occurrence; `series` ends the schedule.
-- Urgency and schedule can be changed while a chore is in `todo`.
+- Urgency (per occurrence) and schedule (configuration, carried forward) can be changed while a chore is in `todo`.
 - The dashboard's **chores** section lists urgent chores first, then by due time, and its items show urgency and due time. **BREAKING** for that section's order only.
 
 ## Capabilities

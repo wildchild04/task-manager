@@ -15,7 +15,7 @@
 ## Decisions
 
 ### 1. Everything lives in the task's attributes
-`attributes = { urgency, schedule?, dueAt?, seriesId }`, validated by the chore kind's zod schema (a discriminated union on `schedule.type`). `dueAt` is an ISO timestamp derived from the schedule, stored so the dashboard can sort without recomputing. No new tables or columns: chores per project are few, and filtering and sorting happen in the domain like the other dashboard sections.
+`attributes = { urgency, baseUrgency, schedule?, dueAt?, seriesId }`, validated by the chore kind's zod schema (a discriminated union on `schedule.type`). `dueAt` is an ISO timestamp derived from the schedule, stored so the dashboard can sort without recomputing. No new tables or columns: chores per project are few, and filtering and sorting happen in the domain like the other dashboard sections.
 
 **Alternative considered:** a `chore_schedules` table. Rejected: one row per chore with no queries that need SQL-level filtering on schedule fields.
 
@@ -39,19 +39,24 @@ All wall-clock schedule fields are interpreted in one **workspace time zone**, a
 ### 5. Effective urgency is computed on read
 `isUrgent(chore, now) = urgency === "urgent" || (state === "todo" && dueAt !== undefined && dueAt <= now)`. Stored urgency never changes by itself, so a rescheduled chore stops being urgent without anyone resetting a flag.
 
-### 6. Next occurrence is a transition effect
-The chore kind's `complete` effect, and `cancel` with scope `occurrence`, call a shared `createNextOccurrence` inside the transition's unit of work. It:
-1. creates a new chore through the effect context's `createTask`, with the same project and title, attributes `{ urgency, schedule, seriesId, dueAt: next }`, and a new ID
+### 6. Next occurrence is a transition effect, answered at completion
+`complete` takes an optional `next` input, the answer to "create a following chore with the same configuration?". The UI asks; the domain only takes the answer, defaulting to yes for recurring schedules and no otherwise. Answering no on a recurring chore ends its series; answering yes on a one-off chore repeats it. This replaces a "from completion" interval option: instead of a drifting schedule, the user decides at each completion.
+
+The chore kind's `complete` effect (when `next` is yes), and `cancel` with scope `occurrence`, call a shared `createNextOccurrence` inside the transition's unit of work. It:
+1. creates a new chore through the effect context's `createTask`, with the same project and title, attributes `{ urgency: baseUrgency, baseUrgency, schedule, seriesId, dueAt }`, and a new ID. `dueAt` is the next calendar slot for recurring schedules, re-resolved from now for `time` and `timer`, and absent without a schedule; a `date` schedule rejects `next: yes`
 2. copies the body page's children into the new body page with fresh block IDs, keeping order and nesting
 
 Reference blocks are copied as-is, so they still point at the same targets. Comments are not copied.
 
 The effect context gains `copyBody(fromTaskId, toTaskId)` and access to the clock and time zone, both provided by the task service.
 
-### 7. A chore service for attribute changes
+### 7. Configuration versus occurrence state
+A chore's **configuration** is `baseUrgency` plus `schedule`; its occurrence state is `urgency` and `dueAt`. Promoting an occurrence to urgent changes only `urgency`, so the next occurrence starts again from `baseUrgency`. Changing the schedule changes the configuration and is carried forward. `baseUrgency` is set from the urgency given at creation and is not changed by `setUrgency`.
+
+### 8. A chore service for attribute changes
 `ChoreService` (in `src/domain/chores/`) creates chores (resolving the schedule into `dueAt`), sets urgency, sets or clears the schedule, reports effective urgency, and lists a series. Attribute writes go through a new `TaskRepository.updateAttributes`. Only chores in `todo` can change.
 
-### 8. The dashboard section is replaced, not edited
+### 9. The dashboard section is replaced, not edited
 `composition.ts` calls `dashboardSections.replace` with a chores section that sorts by effective urgency, then `dueAt` (with no due time last), then recency, and adds `urgent` and `dueAt` to its items. `DashboardItem` gains those two optional fields.
 
 ## Risks / Trade-offs
@@ -67,5 +72,4 @@ No schema migration. Existing chores have empty attributes; reading them applies
 
 ## Open Questions
 
-- Should "every X" also offer "from completion" (a drifting interval) as an option? Assumed not, for now.
-- Should a chore marked urgent go back to normal when it is rescheduled? Assumed no: urgency and schedule are independent.
+- None. Resolved with the user: completion asks whether to create a following chore with the same configuration (no "from completion" interval option), and promoting a chore to urgent keeps its original configuration, so the next occurrence returns to the base urgency.
