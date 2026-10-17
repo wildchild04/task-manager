@@ -15,7 +15,7 @@ Every page SHALL render inside an app shell. Its navigation SHALL list the proje
 - **WHEN** document "Auth design", nested in "Architecture" in project "Taskhub", is open
 - **THEN** the navigation shows Taskhub's library tree with "Architecture" expanded and "Auth design" marked as current
 
-#### Scenario: Workspace pages
+#### Scenario: Navigation lists root pages
 - **WHEN** the workspace has root pages "Welcome" and "Block showcase"
 - **THEN** the navigation's "Pages" group shows both, in that order, as links
 
