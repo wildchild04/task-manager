@@ -16,9 +16,9 @@
 
 ## 3. Dashboard (after task-core)
 
-- [ ] 3.1 Define the `DashboardSection` interface and the ordered section registry
-- [ ] 3.2 Implement the six sections: work-in-progress, returned-work, open-explorations, open-updates, chores, library
-- [ ] 3.3 Add the `task_transitions (task_id, at)` index if `task-core` didn't, and implement the returned-work query
-- [ ] 3.4 Implement `getDashboard(projectId, limit = 5)` returning every section with count and items, including empty ones
-- [ ] 3.5 Test every scenario in the project-dashboard spec with both repository implementations
-- [ ] 3.6 Confirm `typecheck` and the full test suite pass
+- [x] 3.1 Define the `DashboardSection` interface and the ordered section registry
+- [x] 3.2 Implement the six sections: work-in-progress, returned-work, open-explorations, open-updates, chores, library
+- [x] 3.3 Rely on `task-core`'s `task_transitions (task_id, at)` index and implement the returned-work section (see design 6)
+- [x] 3.4 Implement `getDashboard(projectId, limit = 5)` returning every section with count and items, including empty ones
+- [x] 3.5 Test every scenario in the project-dashboard spec with both repository implementations
+- [x] 3.6 Confirm `typecheck` and the full test suite pass

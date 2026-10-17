@@ -7,6 +7,7 @@ import { BlockService } from "~/domain/blocks/block.service";
 import type { ProtectionHooks } from "~/domain/blocks/validate";
 import type { ProjectResolvers } from "~/domain/library/library.service";
 import { LibraryService } from "~/domain/library/library.service";
+import { DashboardRegistry, DashboardService, registerCoreSections } from "~/domain/projects/dashboard";
 import { ProjectService, projectProtection } from "~/domain/projects/project.service";
 import { PROJECT_OWNER_KIND } from "~/domain/projects/types";
 import { plainText } from "~/domain/blocks/text";
@@ -41,23 +42,27 @@ export type AppServices = {
   library: LibraryService;
   tasks: TaskService;
   comments: CommentService;
+  dashboard: DashboardService;
+  /** Where later changes add dashboard sections. */
+  dashboardSections: DashboardRegistry;
   close(): void;
 };
 
-/** Overrides for tests: deterministic IDs. */
-export type ServiceOptions = { newId?: () => string };
+/** Overrides for tests: deterministic IDs and clock. */
+export type ServiceOptions = { newId?: () => string; now?: () => string };
 
 function buildServices(uow: UnitOfWork, close: () => void, options: ServiceOptions): AppServices {
   const blocks = new BlockService(uow.repositories.blocks);
-  const projects = new ProjectService(uow, options.newId);
+  const projects = new ProjectService(uow, options.newId, options.now);
   const { repositories } = uow;
   const resolvers: ProjectResolvers = {
     [PROJECT_OWNER_KIND]: (ownerId) => (repositories.projects.get(ownerId) ? ownerId : undefined),
     [TASK_OWNER_KIND]: (ownerId) => repositories.tasks.get(ownerId)?.projectId,
   };
-  const comments = new CommentService(uow, options.newId);
+  const comments = new CommentService(uow, options.newId, options.now);
   const tasks: TaskService = new TaskService(uow, referenceable(), {
     newId: options.newId,
+    now: options.now,
     // Returning work posts the reason, plus any extra blocks, as a comment by the same actor.
     onReturn: (repos, { task, actor, reason, commentId, commentBlocks, at }) => {
       const id = commentId ?? crypto.randomUUID();
@@ -66,7 +71,10 @@ function buildServices(uow: UnitOfWork, close: () => void, options: ServiceOptio
     },
   });
   const library = new LibraryService(blocks, projects, resolvers);
-  return { blocks, projects, library, tasks, comments, close };
+  const dashboardSections = new DashboardRegistry();
+  registerCoreSections(dashboardSections, { tasks, blocks, projects });
+  const dashboard = new DashboardService(dashboardSections, projects);
+  return { blocks, projects, library, tasks, comments, dashboard, dashboardSections, close };
 
   /** Entity kinds a task can reference. Later domains (comments, subtasks) add theirs. */
   function referenceable(): ReferenceableKinds {

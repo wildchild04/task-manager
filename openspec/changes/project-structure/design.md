@@ -37,7 +37,13 @@ Creating a project writes a project row and two owned root pages, which must com
 ### 5. Project resolution for pages is a registry
 `LibraryService.projectOfPage` walks to the page's root and asks a resolver registered for the root's owner kind. `project` is registered here; `task-core` registers `task` (a task's project).
 
-### 6. Implementation order across changes
+### 6. Dashboard details settled during implementation
+- **Sections are computed in the domain**, from `TaskService`, `BlockService` and `ProjectService`, so both stores share one implementation. "Returned work" reads each candidate's last transition from its history instead of a dedicated SQL query; the `task_transitions (task_id, at)` index from `task-core` keeps that cheap.
+- **A section's `query` returns all matching items**, most recently updated first; the dashboard counts them and keeps the first `limit`. Ties in `updatedAt` go to the later-created item.
+- **The registry is exposed as `dashboardSections`** from `composition.ts`, with `register(section, { after })` and `replace(section)`, for the chore, work-log and graveyard changes.
+- **The clock is injectable** through the composition options (like IDs), so ordering by recency is testable.
+
+### 7. Implementation order across changes
 Migrations run in the order `blocks`, `projects`, `tasks`, `comments`. The project entity and library are implemented before `task-core`; the dashboard sections that read tasks are implemented after `task-core` is applied. `tasks.md` is split accordingly.
 
 ## Risks / Trade-offs
