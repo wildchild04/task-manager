@@ -11,3 +11,14 @@ body {
   margin: 0;
   padding-inline-start: 1.5em;
 }
+
+/* A sub-page is a block of its own: one row per page, highlighted on hover. */
+.block-page-link {
+  margin: 2px 0;
+  padding: 3px 6px;
+  border-radius: 4px;
+}
+
+.block-page-link:hover {
+  background: rgba(127, 127, 127, 0.12);
+}

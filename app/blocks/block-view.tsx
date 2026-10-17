@@ -8,11 +8,14 @@ import { plainText } from "./view-model";
 
 type ContentBlock = Extract<ViewBlock, { kind: "content" }>;
 
+/** A page inside or referenced from a page: its own block row, as Notion shows sub-pages. */
 function PageLink({ id, title }: { id: string; title: RichTextValue }) {
   return (
-    <Link component={RouterLink} to={`/pages/${id}`} variant="standalone">
-      {plainText(title) || "Untitled"}
-    </Link>
+    <div className="block-page-link">
+      <Link component={RouterLink} to={`/pages/${id}`}>
+        {plainText(title) || "Untitled"}
+      </Link>
+    </div>
   );
 }
 
