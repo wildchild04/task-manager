@@ -52,19 +52,30 @@ async function sendBatch(page: EditablePage, batch: Operation[]): Promise<SendRe
   }
 }
 
-type SlashMenu = { blockId: string; start: number; anchor: DOMRect; active: string | null };
+type SlashMenu = { blockId: string; start: number; anchor: DOMRect; active: string | null; expanded: boolean };
 
-/** The slash menu's filter text and matching commands, or `null` when the menu should close. */
-function slashMatches(editor: Editor, menu: SlashMenu): { query: string; commands: SlashCommand[] } | null {
+/** How many commands the slash menu shows before a "more" row. */
+const SLASH_VISIBLE = 5;
+const SLASH_MORE = "more";
+
+/** A row of the slash menu: a command, or the row that shows the rest. */
+type SlashItem = { value: string; label: string; description?: string; command?: SlashCommand };
+
+/** The slash menu's rows, or `null` when the menu should close. */
+function slashMatches(editor: Editor, menu: SlashMenu): { query: string; commands: SlashItem[] } | null {
   const block = editor.state.blocks[menu.blockId];
   const { selection } = editor;
   if (!block || selection.blockId !== menu.blockId || selection.focus <= menu.start) return null;
   const value = plain(block.content);
   if (value[menu.start] !== "/") return null;
   const query = value.slice(menu.start + 1, selection.focus);
-  const commands = matchSlashCommands(query);
-  if (commands.length === 0 && query.endsWith(" ")) return null;
-  return { query, commands };
+  const matches = matchSlashCommands(query);
+  if (matches.length === 0 && query.endsWith(" ")) return null;
+  const rows = (list: SlashCommand[]): SlashItem[] =>
+    list.map((command) => ({ value: command.value, label: command.label, description: command.description, command }));
+  if (menu.expanded || matches.length <= SLASH_VISIBLE + 1) return { query, commands: rows(matches) };
+  const hidden = matches.length - SLASH_VISIBLE;
+  return { query, commands: [...rows(matches.slice(0, SLASH_VISIBLE)), { value: SLASH_MORE, label: `${hidden} more…` }] };
 }
 
 /** Asks for a link's URL; an empty URL removes the link. */
@@ -104,7 +115,7 @@ export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; 
   const restoreSelection = useRef(false);
   const composing = useRef(false);
   const goalX = useRef<number | null>(null);
-  const applySlashRef = useRef<((command: SlashCommand) => void) | null>(null);
+  const applySlashRef = useRef<((item: SlashItem) => void) | null>(null);
   const [status, setStatus] = useState<SaveStatus>("saved");
   const [error, setError] = useState<string | null>(null);
   const [linkFor, setLinkFor] = useState<{ selection: Selection; href: string } | null>(null);
@@ -207,11 +218,16 @@ export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; 
       if (active !== menu.active) setSlash({ ...menu, active });
     };
 
-    const applySlash = (command: SlashCommand) => {
+    /** Applies a command, or for the "more" row shows every match with the first hidden one highlighted. */
+    const applySlash = (item: SlashItem) => {
       const menu = slashRef.current;
       if (!menu) return;
+      if (!item.command) {
+        setSlash({ ...menu, expanded: true, active: slashMatches(editor, { ...menu, expanded: true })?.commands[SLASH_VISIBLE]?.value ?? null });
+        return;
+      }
       setSlash(null);
-      editor.slash(menu.start, command);
+      editor.slash(menu.start, item.command);
       edited();
     };
 
@@ -245,7 +261,13 @@ export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; 
             (previous === undefined || /\s/.test(previous))
           ) {
             const start = Math.min(before.anchor, before.focus);
-            setSlash({ blockId: block.id, start, anchor: anchor ?? editableOf(root, block.id)!.getBoundingClientRect(), active: "text" });
+            setSlash({
+              blockId: block.id,
+              start,
+              anchor: anchor ?? editableOf(root, block.id)!.getBoundingClientRect(),
+              active: "text",
+              expanded: false,
+            });
           }
           break;
         }
@@ -519,15 +541,16 @@ export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; 
         open={slash !== null}
         anchorRect={slash?.anchor ?? null}
         ariaLabel="Turn into"
-        options={slashOptions.map((command) => ({ value: command.value, label: command.label, description: command.description }))}
+        options={slashOptions.map(({ value, label, description }) => ({ value, label, ...(description ? { description } : {}) }))}
         activeValue={slash?.active ?? null}
         onActiveValueChange={(value) => slash && setSlash({ ...slash, active: value })}
         onSelect={(value) => {
-          const command = slashOptions.find((c) => c.value === value);
-          if (command) applySlashRef.current?.(command);
+          const item = slashOptions.find((c) => c.value === value);
+          if (item) applySlashRef.current?.(item);
         }}
         onDismiss={() => setSlash(null)}
         emptyText="No matching blocks"
+        maxHeight={480}
       />
       {linkFor && (
         <LinkDialog
