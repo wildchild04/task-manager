@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { type AppServices, createInMemoryServices } from "~/composition";
 import type { NewBlock, Operation } from "~/domain/blocks/types";
+import { matchSlashCommands, SLASH_COMMANDS } from "~/editor/block-types";
 import { Editor } from "~/editor/editor";
 import { caret, documentOrder, type EditorState, stateFromTree } from "~/editor/editor-state";
 import { plain } from "~/editor/rich-text";
@@ -343,6 +344,57 @@ describe("editor", () => {
       at("q", 0);
       typeText("- ");
       expect(outline()).toEqual(["paragraph:x# ", "quote:- "]);
+    });
+  });
+
+  describe("slash commands", () => {
+    const command = (value: string) => SLASH_COMMANDS.find((c) => c.value === value)!;
+
+    it("filters by name and keyword", () => {
+      expect(matchSlashCommands("hea").map((c) => c.value)).toEqual(["heading-1", "heading-2", "heading-3"]);
+      expect(matchSlashCommands("check").map((c) => c.value)).toEqual(["todo"]);
+      expect(matchSlashCommands("list").map((c) => c.value)).toEqual(["bulleted", "numbered"]);
+      expect(matchSlashCommands("")).toHaveLength(SLASH_COMMANDS.length);
+      expect(matchSlashCommands("zzz")).toEqual([]);
+    });
+
+    it("removes the typed command and turns the block into the type, keeping its text", () => {
+      seed([p("a", "Intro")]);
+      at("a", 0);
+      typeText("/hea");
+      editor.slash(0, command("heading-1"));
+      expect(outline()).toEqual(["heading1:Intro"]);
+      expect(editor.selection).toEqual(caret("a", 0));
+      expectInSync();
+    });
+
+    it("replaces an empty block with a divider and a paragraph", () => {
+      seed([p("a", "")]);
+      at("a", 0);
+      typeText("/div");
+      editor.slash(0, command("divider"));
+      expect(outline()).toEqual(["divider:", "paragraph:"]);
+      expectInSync();
+    });
+
+    it("adds a divider after a block with text", () => {
+      seed([p("a", "Keep ")]);
+      at("a", 5);
+      typeText("/div");
+      editor.slash(5, command("divider"));
+      expect(outline()).toEqual(["paragraph:Keep ", "divider:"]);
+      expect(editor.selection).toEqual(caret("a", 5));
+    });
+
+    it("undoes a command in one step, back to the typed text", () => {
+      seed([p("a", "")]);
+      at("a", 0);
+      typeText("/todo");
+      clock = 5000;
+      editor.slash(0, command("todo"));
+      editor.undo();
+      expect(outline()).toEqual(["paragraph:/todo"]);
+      expectInSync();
     });
   });
 

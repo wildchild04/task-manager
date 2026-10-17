@@ -76,3 +76,38 @@ export const MARKDOWN_SHORTCUTS: Readonly<Record<string, TypeChange>> = {
 
 /** Typed as the whole content of a paragraph, this turns it into a divider. */
 export const DIVIDER_SHORTCUT = "---";
+
+/** A slash menu command: turn the block into a type, or add a divider. */
+export type SlashCommand = {
+  value: string;
+  label: string;
+  description: string;
+  /** Extra words the filter matches. */
+  keywords: readonly string[];
+  action: TypeChange | "divider";
+};
+
+export const SLASH_COMMANDS: readonly SlashCommand[] = [
+  { value: "text", label: "Text", description: "Plain paragraph", keywords: ["paragraph", "plain"], action: { type: "paragraph", props: {} } },
+  { value: "heading-1", label: "Heading 1", description: "Big section heading", keywords: ["h1", "title"], action: { type: "heading", props: { level: 1 } } },
+  { value: "heading-2", label: "Heading 2", description: "Medium section heading", keywords: ["h2", "subtitle"], action: { type: "heading", props: { level: 2 } } },
+  { value: "heading-3", label: "Heading 3", description: "Small section heading", keywords: ["h3"], action: { type: "heading", props: { level: 3 } } },
+  { value: "bulleted", label: "Bulleted list", description: "A simple bulleted list", keywords: ["bullet", "unordered", "ul"], action: { type: "bulleted_list_item", props: {} } },
+  { value: "numbered", label: "Numbered list", description: "A list with numbering", keywords: ["ordered", "ol", "number"], action: { type: "numbered_list_item", props: {} } },
+  { value: "todo", label: "To-do", description: "Track a task with a checkbox", keywords: ["checkbox", "task", "check"], action: { type: "todo", props: { checked: false } } },
+  { value: "toggle", label: "Toggle", description: "Hide content inside", keywords: ["collapse", "fold"], action: { type: "toggle", props: {} } },
+  { value: "quote", label: "Quote", description: "Capture a quote", keywords: ["blockquote", "citation"], action: { type: "quote", props: {} } },
+  { value: "divider", label: "Divider", description: "Separate sections", keywords: ["line", "separator", "hr"], action: "divider" },
+];
+
+/** The slash commands matching what was typed after `/`, by label or keyword prefix. */
+export function matchSlashCommands(query: string): SlashCommand[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [...SLASH_COMMANDS];
+  return SLASH_COMMANDS.filter(
+    (command) =>
+      command.label.toLowerCase().split(/\s+/).some((word) => word.startsWith(q)) ||
+      command.label.toLowerCase().startsWith(q) ||
+      command.keywords.some((keyword) => keyword.startsWith(q)),
+  );
+}

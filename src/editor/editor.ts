@@ -1,5 +1,6 @@
 import type { Operation, SimpleMark } from "~/domain/blocks/types";
 
+import type { SlashCommand } from "./block-types";
 import * as commands from "./commands";
 import type { CommandResult, DeleteUnit } from "./commands";
 import { applyOps, caret, type EditorState, getBlock, invert, isCollapsed, type Selection } from "./editor-state";
@@ -127,6 +128,12 @@ export class Editor {
 
   setLink(href: string | null): boolean {
     return this.run(commands.setLink(this.state, this.selection, href));
+  }
+
+  /** Applies a slash command typed as `/query` from `start` to the caret in the current block. */
+  slash(start: number, command: SlashCommand): void {
+    const { blockId, focus } = this.selection;
+    this.run(commands.slashCommand(this.state, blockId, start, focus, command, this.context));
   }
 
   toggleTodo(id: string): void {

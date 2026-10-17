@@ -1,8 +1,9 @@
-import { Alert, Dialog, Stack, TextField, Typography } from "@wildchild/design-system";
+import { Alert, Dialog, InlineCommandMenu, Stack, TextField, Typography } from "@wildchild/design-system";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useBlocker, useRevalidator } from "react-router";
 
 import type { Operation } from "~/domain/blocks/types";
+import { behaviorOf, matchSlashCommands, type SlashCommand } from "~/editor/block-types";
 import { Editor } from "~/editor/editor";
 import { caret, caretOrder, getBlock, isCollapsed, type Selection, stateFromTree } from "~/editor/editor-state";
 import { linkAt, plain } from "~/editor/rich-text";
@@ -20,6 +21,8 @@ import {
   writeSelection,
 } from "./dom-caret";
 import { EditableText, EditorBlocks } from "./editor-blocks";
+
+const SLASH_MENU_ID = "slash-menu";
 
 const STATUS_TEXT: Record<SaveStatus, string> = {
   saved: "Saved",
@@ -47,6 +50,21 @@ async function sendBatch(page: EditablePage, batch: Operation[]): Promise<SendRe
   } catch {
     return { ok: false, retry: true };
   }
+}
+
+type SlashMenu = { blockId: string; start: number; anchor: DOMRect; active: string | null };
+
+/** The slash menu's filter text and matching commands, or `null` when the menu should close. */
+function slashMatches(editor: Editor, menu: SlashMenu): { query: string; commands: SlashCommand[] } | null {
+  const block = editor.state.blocks[menu.blockId];
+  const { selection } = editor;
+  if (!block || selection.blockId !== menu.blockId || selection.focus <= menu.start) return null;
+  const value = plain(block.content);
+  if (value[menu.start] !== "/") return null;
+  const query = value.slice(menu.start + 1, selection.focus);
+  const commands = matchSlashCommands(query);
+  if (commands.length === 0 && query.endsWith(" ")) return null;
+  return { query, commands };
 }
 
 /** Asks for a link's URL; an empty URL removes the link. */
@@ -86,9 +104,17 @@ export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; 
   const restoreSelection = useRef(false);
   const composing = useRef(false);
   const goalX = useRef<number | null>(null);
+  const applySlashRef = useRef<((command: SlashCommand) => void) | null>(null);
   const [status, setStatus] = useState<SaveStatus>("saved");
   const [error, setError] = useState<string | null>(null);
   const [linkFor, setLinkFor] = useState<{ selection: Selection; href: string } | null>(null);
+  // The open slash menu: where its `/` is, where to show it, and the highlighted command.
+  const [slash, setSlashState] = useState<SlashMenu | null>(null);
+  const slashRef = useRef<SlashMenu | null>(null);
+  const setSlash = useCallback((next: SlashMenu | null) => {
+    slashRef.current = next;
+    setSlashState(next);
+  }, []);
 
   const { editor, queue } = useMemo(() => {
     let editor: Editor;
@@ -171,8 +197,28 @@ export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; 
       goalX.current = null;
     };
 
+    /** Keeps the slash menu in step with the text: closes it, or keeps its highlight on a match. */
+    const refreshSlash = () => {
+      const menu = slashRef.current;
+      if (!menu) return;
+      const matches = slashMatches(editor, menu);
+      if (!matches) return setSlash(null);
+      const active = matches.commands.some((c) => c.value === menu.active) ? menu.active : (matches.commands[0]?.value ?? null);
+      if (active !== menu.active) setSlash({ ...menu, active });
+    };
+
+    const applySlash = (command: SlashCommand) => {
+      const menu = slashRef.current;
+      if (!menu) return;
+      setSlash(null);
+      editor.slash(menu.start, command);
+      edited();
+    };
+
     const onSelectionChange = () => {
-      if (!composing.current) sync();
+      if (composing.current) return;
+      sync();
+      refreshSlash();
     };
 
     const onBeforeInput = (event: InputEvent) => {
@@ -183,9 +229,26 @@ export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; 
       switch (event.inputType) {
         case "insertText":
         case "insertReplacementText":
-        case "insertFromPaste":
-          if (data) editor.type(data.replace(/\r\n?/g, "\n"));
+        case "insertFromPaste": {
+          if (!data) break;
+          const before = editor.selection;
+          const anchor = caretRect();
+          editor.type(data.replace(/\r\n?/g, "\n"));
+          // `/` at the start of a text block, or after a space, opens the slash menu.
+          const block = editor.state.blocks[before.blockId];
+          const previous = block ? plain(block.content)[Math.min(before.anchor, before.focus) - 1] : undefined;
+          if (
+            data === "/" &&
+            block &&
+            block.id !== editor.state.rootId &&
+            behaviorOf(block.type).text &&
+            (previous === undefined || /\s/.test(previous))
+          ) {
+            const start = Math.min(before.anchor, before.focus);
+            setSlash({ blockId: block.id, start, anchor: anchor ?? editableOf(root, block.id)!.getBoundingClientRect(), active: "text" });
+          }
           break;
+        }
         case "insertParagraph":
           editor.enter();
           break;
@@ -229,6 +292,7 @@ export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; 
           return;
       }
       edited();
+      refreshSlash();
     };
 
     const onCompositionStart = () => {
@@ -274,6 +338,32 @@ export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; 
       const length = plain(getBlock(editor.state, selection.blockId).content).length;
       const mod = event.metaKey || event.ctrlKey;
       const key = event.key.toLowerCase();
+
+      // While the slash menu is open, it gets the navigation keys.
+      const menu = slashRef.current;
+      const matches = menu && slashMatches(editor, menu);
+      if (menu && matches && !mod) {
+        const index = matches.commands.findIndex((c) => c.value === menu.active);
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          event.preventDefault();
+          const count = matches.commands.length;
+          if (count > 0) {
+            const next = (index + (event.key === "ArrowDown" ? 1 : -1) + count) % count;
+            setSlash({ ...menu, active: matches.commands[next]!.value });
+          }
+          return;
+        }
+        if ((event.key === "Enter" || event.key === "Tab") && index >= 0) {
+          event.preventDefault();
+          applySlash(matches.commands[index]!);
+          return;
+        }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          setSlash(null);
+          return;
+        }
+      }
       let handled = true;
 
       if (event.key === "Enter" && !mod) {
@@ -343,8 +433,11 @@ export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; 
       if (handled) {
         event.preventDefault();
         edited();
+        refreshSlash();
       }
     };
+
+    applySlashRef.current = applySlash;
 
     document.addEventListener("selectionchange", onSelectionChange);
     root.addEventListener("beforeinput", onBeforeInput);
@@ -358,7 +451,22 @@ export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; 
       root.removeEventListener("compositionstart", onCompositionStart);
       root.removeEventListener("compositionend", onCompositionEnd);
     };
-  }, [editor]);
+  }, [editor, setSlash]);
+
+  // Screen readers follow the highlighted command while focus stays in the block.
+  useEffect(() => {
+    if (!slash || !rootRef.current) return;
+    const element = editableOf(rootRef.current, slash.blockId);
+    if (!element) return;
+    element.setAttribute("aria-controls", SLASH_MENU_ID);
+    if (slash.active) element.setAttribute("aria-activedescendant", `${SLASH_MENU_ID}-option-${encodeURIComponent(slash.active)}`);
+    return () => {
+      element.removeAttribute("aria-controls");
+      element.removeAttribute("aria-activedescendant");
+    };
+  }, [slash]);
+
+  const slashOptions = slash ? (slashMatches(editor, slash)?.commands ?? []) : [];
 
   const actions = useMemo(
     () => ({
@@ -406,6 +514,21 @@ export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; 
         )}
       </div>
 
+      <InlineCommandMenu
+        id={SLASH_MENU_ID}
+        open={slash !== null}
+        anchorRect={slash?.anchor ?? null}
+        ariaLabel="Turn into"
+        options={slashOptions.map((command) => ({ value: command.value, label: command.label, description: command.description }))}
+        activeValue={slash?.active ?? null}
+        onActiveValueChange={(value) => slash && setSlash({ ...slash, active: value })}
+        onSelect={(value) => {
+          const command = slashOptions.find((c) => c.value === value);
+          if (command) applySlashRef.current?.(command);
+        }}
+        onDismiss={() => setSlash(null)}
+        emptyText="No matching blocks"
+      />
       {linkFor && (
         <LinkDialog
           initial={linkFor.href}

@@ -115,6 +115,21 @@ Typing one of these at the start of a paragraph, followed by a space, SHALL remo
 - **WHEN** "- " turns a paragraph into a list item and Cmd/Ctrl+Z is pressed
 - **THEN** the paragraph is back, containing "- "
 
+### Requirement: Slash menu
+Typing `/` in a text block other than the title, at its start or after a space, SHALL open a menu at the caret listing: Text, Heading 1, Heading 2, Heading 3, Bulleted list, Numbered list, To-do, Toggle, Quote and Divider. The text typed after `/` SHALL filter the list by name; ↑ and ↓ SHALL move the highlight, Enter or Tab SHALL apply the highlighted command, and Escape SHALL close the menu leaving the text. Focus SHALL stay in the block while the menu is open, and clicking a command SHALL apply it. Applying a command SHALL remove the `/` and the filter text, then turn the block into that type, keeping its other text; Divider SHALL replace an empty block with a divider followed by an empty paragraph, or insert a divider after a non-empty one. The menu SHALL close when the caret leaves the `/` text, when the `/` is deleted, or when nothing matches and a space is typed. Applying a command SHALL be one undo step.
+
+#### Scenario: Turn a paragraph into a heading
+- **WHEN** "/hea" is typed at the start of a paragraph "Intro" and Enter is pressed with "Heading 1" highlighted
+- **THEN** the block is a heading 1 containing "Intro"
+
+#### Scenario: Escape keeps the text
+- **WHEN** "/qu" is typed and Escape is pressed
+- **THEN** the menu closes and the block contains "/qu"
+
+#### Scenario: Divider from an empty block
+- **WHEN** "/div" is typed in an empty paragraph and Enter is pressed
+- **THEN** the block is replaced by a divider followed by an empty paragraph holding the caret
+
 ### Requirement: Undo and redo
 Cmd/Ctrl+Z SHALL undo the last edit and Shift+Cmd/Ctrl+Z (or Ctrl+Y) SHALL redo it, restoring the caret. Consecutive typing in one block without pausing SHALL undo as one step; every structural edit (split, merge, nesting, type change, todo check) SHALL be one step. Undo and redo SHALL be saved like any other edit. The history SHALL last while the page stays open.
 

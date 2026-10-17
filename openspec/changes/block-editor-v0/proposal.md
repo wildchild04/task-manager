@@ -12,6 +12,7 @@ This is **v0**: the minimum that makes a block a block (its content and its type
 - **Layer 2, type function:** todos check and uncheck; toggles open and close; sub-pages and page references open their page; dividers and references can't hold the caret.
 - **Layer 3, structure:** Enter splits a block, with each type's rules (a heading continues as a paragraph, an empty list item leaves the list); Shift+Enter breaks a line inside a block; Backspace at the start turns a list item, todo, heading or quote back into a paragraph, then merges into the previous block; Tab and Shift+Tab nest and un-nest; ↑ ↓ move between blocks at their first and last lines.
 - **Changing a block's type with markdown shortcuts** at the start of a block: `# `, `## `, `### `, `- `, `* `, `1. `, `[] `, `> `, and `---` for a divider.
+- **Slash menu:** typing `/` at the start of a block or after a space opens a menu at the caret (the design system's `InlineCommandMenu`, v0.5.0) that filters as you type; ↑ ↓ choose, Enter applies, Escape closes. It turns the block into any text type or inserts a divider.
 - **Backspace never deletes a sub-page.** It steps over it to the previous block. References are removed by Backspace like text.
 - **Undo and redo** (Cmd/Ctrl+Z, Shift+Cmd/Ctrl+Z), grouping a burst of typing into one step.
 - **Saving:** typing is saved shortly after it pauses, structural edits at once; a "Saving…/Saved/Couldn't save" indicator, and a warning before leaving with unsaved edits.
@@ -30,8 +31,8 @@ This is **v0**: the minimum that makes a block a block (its content and its type
 ## Non-goals
 
 - **Block selection** (Esc to select blocks, moving, duplicating and deleting blocks as units, drag handles): layer 4, a later change.
-- **Slash menu and `@` references:** they wait for the design system's `InlineCommandMenu` (see External dependencies).
-- **A "turn into" control** on each block. Markdown shortcuts are the only way to change a type in v0. Deferred, but to revisit if shortcuts feel bad in use.
+- **`@` references:** inserting references from the editor (the same `InlineCommandMenu`, listing pages and blocks) comes later.
+- **A "turn into" control** on each block (a handle with a menu). Markdown shortcuts and the slash menu change a block's type in v0. Deferred, but to revisit if those feel bad in use.
 - **Inserting sub-pages or references from the editor:** documents are created from the library page; references come with the `@` menu.
 - **Comments in the editor:** comment bodies save through the comment service and new comments are drafts; that's the `comment-editor` change.
 - **Clipboard beyond the browser's plain-text behavior** (copying blocks, pasting HTML or markdown as blocks), inline markdown (`**bold**`), Home/End across blocks, IME beyond common accented input, renaming from the navigation, moving documents, a trash.
@@ -39,9 +40,9 @@ This is **v0**: the minimum that makes a block a block (its content and its type
 
 ## External dependencies
 
-- **`InlineCommandMenu`** (`~/dev/design-system/feature-requests/inline-command-menu.md`, filed, open): a caret-anchored, non-modal menu that never takes focus, for the slash menu and `@` references. **Not required by v0**; the slash menu is deferred until it exists.
+- **`InlineCommandMenu`** (`~/dev/design-system/feature-requests/inline-command-menu.md`): a caret-anchored, non-modal menu that never takes focus. Delivered in `@wildchild/design-system` v0.5.0 and used for the slash menu.
 
-Everything in v0 uses existing components (`IconButton` with the `delete` icon, `Dialog`, `Checkbox`, `Typography`, `Link`, `Alert`) and the action slots of `TreeNavigation` and `PageNavigation`. The editable text itself is a native `contenteditable` element inside the app's block composites, as the composites already live in this repo.
+Everything else uses existing components (`IconButton` with the `delete` icon, `Dialog`, `Checkbox`, `Typography`, `Link`, `Alert`) and the action slots of `TreeNavigation` and `PageNavigation`. The editable text itself is a native `contenteditable` element inside the app's block composites, as the composites already live in this repo.
 
 ## Prerequisites
 

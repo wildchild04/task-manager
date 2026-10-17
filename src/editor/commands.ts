@@ -1,6 +1,6 @@
 import type { NewBlock, Operation, RichText, SimpleMark } from "~/domain/blocks/types";
 
-import { behaviorOf, DIVIDER_SHORTCUT, MARKDOWN_SHORTCUTS, type TypeChange } from "./block-types";
+import { behaviorOf, DIVIDER_SHORTCUT, MARKDOWN_SHORTCUTS, type SlashCommand, type TypeChange } from "./block-types";
 import {
   applyOps,
   caret,
@@ -311,4 +311,46 @@ export function toggleTodo(state: EditorState, id: string, selection: Selection)
   const block = getBlock(state, id);
   if (block.type !== "todo") return null;
   return { ops: [{ op: "update", id, props: { checked: block.props.checked !== true } }], selection };
+}
+
+// ----- Slash commands -----
+
+/**
+ * Applies a slash command typed in `blockId` as `/query` from offset `start`
+ * to `end`: removes that text, then turns the block into the command's type,
+ * or adds a divider (replacing the block when it is left empty).
+ */
+export function slashCommand(
+  state: EditorState,
+  blockId: string,
+  start: number,
+  end: number,
+  command: SlashCommand,
+  context: CommandContext,
+): CommandResult {
+  const block = getBlock(state, blockId);
+  const content = text.remove(block.content, start, end);
+  if (command.action !== "divider") {
+    const { type, props } = command.action;
+    return { ops: [{ op: "update", id: blockId, type, props, content }], selection: caret(blockId, start) };
+  }
+  const divider = context.newId();
+  if (text.length(content) === 0 && block.children.length === 0 && behaviorOf(block.type).text) {
+    const paragraph = context.newId();
+    return {
+      ops: [
+        { op: "insert", block: { id: divider, type: "divider" }, parentId: block.parentId!, afterId: blockId },
+        { op: "insert", block: { id: paragraph, type: "paragraph" }, parentId: block.parentId!, afterId: divider },
+        { op: "delete", id: blockId },
+      ],
+      selection: caret(paragraph, 0),
+    };
+  }
+  return {
+    ops: [
+      updateContent(blockId, content),
+      { op: "insert", block: { id: divider, type: "divider" }, parentId: block.parentId!, afterId: blockId },
+    ],
+    selection: caret(blockId, start),
+  };
 }

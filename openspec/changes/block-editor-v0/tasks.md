@@ -28,6 +28,12 @@
 - [x] 4.3 Mark shortcuts and the link prompt; markdown shortcuts
 - [x] 4.4 Undo/redo keys and `historyUndo`/`historyRedo` input events
 
+## 4b. Slash menu (design system v0.5.0)
+
+- [x] 4b.1 Upgrade to `@wildchild/design-system` v0.5.0 (clean reinstall)
+- [x] 4b.2 Slash commands in the block type declarations and a `slashCommand` command (remove the filter text, turn into a type, divider rules), with tests
+- [x] 4b.3 Slash menu in the page editor with `InlineCommandMenu`: open on `/`, filter, ↑ ↓ Enter Tab Escape, click, close rules, `aria-activedescendant`
+
 ## 5. Saving in the browser
 
 - [x] 5.1 Wire the save queue to a fetcher per surface; saving indicator; error and reload on rejection
