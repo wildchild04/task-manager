@@ -1,0 +1,36 @@
+schema: spec-driven
+
+context: |
+  Product: a Notion-style task manager. Content is a tree of typed blocks; a page is a block
+  whose children are its content. Scope grows gradually; database properties and views are
+  out of scope until specified.
+
+  Single user. There is no collaborative editing, no multi-user access and no sync between
+  devices; one SQLite database is the single source of truth. Do not design for concurrency
+  conflicts beyond what SQLite transactions already serialize.
+
+  Tech stack: TypeScript (strict), React, SQLite via better-sqlite3, Vitest.
+  App framework: React Router 7 in framework mode (the successor of Remix v2), with Vite,
+  as in ~/dev/typescript/kikimora. Routes, loaders and actions live in app/ and call domain
+  services from src/composition.ts; loaders and actions are the only code that runs domain
+  services for the UI. Domain code in src/ must not import from app/ or from react-router.
+
+  Layering (dependencies point downward only):
+    UI (block composites, views)  -> dispatches operations, never touches persistence
+    Editor state (tree, selection, undo)
+    Domain (types, services, repository interfaces)
+    Infrastructure (SQLite and in-memory repository implementations)
+  Domain code depends on repository interfaces (ports), never on a concrete implementation.
+  Concrete implementations are chosen in one composition module.
+  Every repository has an in-memory implementation used by tests and spikes.
+
+  UI components come from @wildchild/design-system, consumed from GitHub at a release tag
+  (git+ssh://git@github.com/wildchild04/Wildchild-Design-System.git#vX.Y.Z), as in
+  ~/dev/typescript/kikimora. Never import @mui/material directly in product code.
+  Missing primitives are requested as design-system feature requests and listed as
+  external dependencies in the change; they are not built inside this repo.
+
+rules:
+  proposal:
+    - List required design-system components that do not exist yet under an "External dependencies" heading
+    - Include a "Non-goals" section
