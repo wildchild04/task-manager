@@ -1,6 +1,6 @@
 ## 1. Foundations
 
-- [ ] 1.1 File the design-system feature requests (time picker, tree view) and note their issue links in the proposal
+- [x] 1.1 File the design-system feature requests (time picker, tree view) and note their issue links in the proposal
 - [ ] 1.2 Add shared view helpers: due-time formatting in the workspace time zone, `describeSchedule`, state labels and chip colours per kind
 - [ ] 1.3 Add form helpers: reading form data, mapping domain errors to field errors, the `{ fieldErrors, values }` action result
 - [ ] 1.4 Extend `buildPageView` to project home pages and library documents (with the owning project), keeping task and comment roots excluded
