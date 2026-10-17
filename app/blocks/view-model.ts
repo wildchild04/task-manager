@@ -3,8 +3,8 @@ import type { PropsByType, RichText } from "~/domain/blocks/types";
 /** Content block types the viewer renders directly. */
 export type ContentBlockType = Exclude<keyof PropsByType, "page" | "reference" | "comment">;
 
-/** What a page's loader sends to the browser: plain, serializable data. */
-export type PageView = { id: string; title: RichText; blocks: ViewBlock[] };
+/** What a page's loader sends to the browser: plain, serializable data. `projectId` is set for project pages. */
+export type PageView = { id: string; title: RichText; blocks: ViewBlock[]; projectId?: string };
 
 export type ViewBlock =
   | {

@@ -1,44 +1,89 @@
-import { Container, PageNavigation, PageShell, ThemeToggle } from "@wildchild/design-system";
-import { Outlet, useNavigate, useParams } from "react-router";
+import { Container, PageNavigation, PageShell, Stack, ThemeToggle, Typography } from "@wildchild/design-system";
+import type { MouseEvent } from "react";
+import { Outlet, type ShouldRevalidateFunctionArgs, useNavigate } from "react-router";
 
-import { plainText } from "../blocks/view-model";
 import { services } from "../lib/services.server";
+import { type ProjectSection, shellView } from "../lib/shell.server";
 import { useThemeMode } from "../theme-mode";
 import type { Route } from "./+types/shell";
 
-export function loader() {
-  const pages = services.blocks.listRootPages();
-  return { pages: pages.map((page) => ({ id: page.id, title: plainText(page.content) || "Untitled" })) };
+export function loader({ request }: Route.LoaderArgs) {
+  return shellView(services, new URL(request.url).pathname);
+}
+
+/** The current project and section come from the URL, so recompute on every navigation. */
+export function shouldRevalidate({ currentUrl, nextUrl, defaultShouldRevalidate }: ShouldRevalidateFunctionArgs) {
+  return currentUrl.pathname !== nextUrl.pathname || defaultShouldRevalidate;
+}
+
+const SECTIONS: { section: ProjectSection; label: string; path: string }[] = [
+  { section: "home", label: "Home", path: "" },
+  { section: "explorations", label: "Explorations", path: "/explorations" },
+  { section: "updates", label: "Updates", path: "/updates" },
+  { section: "work", label: "Work", path: "/work" },
+  { section: "chores", label: "Chores", path: "/chores" },
+  { section: "library", label: "Knowledge library", path: "/library" },
+];
+
+function Group({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <Stack spacing={0.5}>
+      <Typography variant="overline" color="text.secondary">
+        {label}
+      </Typography>
+      {children}
+    </Stack>
+  );
 }
 
 export default function Shell({ loaderData }: Route.ComponentProps) {
+  const { projects, current, pages } = loaderData;
   const { mode, setMode } = useThemeMode();
   const navigate = useNavigate();
-  const { pageId } = useParams();
+  const go = (href: string) => (event: MouseEvent) => {
+    event.preventDefault();
+    void navigate(href);
+  };
+  const item = (label: string, href: string, active: boolean) => ({ label, href, active, onClick: go(href) });
 
   const navigation = (
-    <PageNavigation
-      ariaLabel="Workspace pages"
-      items={loaderData.pages.map((page) => ({
-        label: page.title,
-        href: `/pages/${page.id}`,
-        active: page.id === pageId,
-        onClick: (event) => {
-          event.preventDefault();
-          void navigate(`/pages/${page.id}`);
-        },
-      }))}
-    />
+    <Stack spacing={2}>
+      <Group label="Projects">
+        {projects.length > 0 ? (
+          <PageNavigation
+            ariaLabel="Projects"
+            items={projects.map((p) => item(p.title, `/projects/${p.id}`, p.id === current?.id))}
+          />
+        ) : (
+          <Typography variant="body2" color="text.secondary">
+            No projects yet
+          </Typography>
+        )}
+      </Group>
+      {current && (
+        <Group label={current.title}>
+          <PageNavigation
+            ariaLabel={`${current.title} sections`}
+            items={SECTIONS.map((s) => item(s.label, `/projects/${current.id}${s.path}`, s.section === current.section))}
+          />
+        </Group>
+      )}
+      {pages.length > 0 && (
+        <Group label="Pages">
+          <PageNavigation ariaLabel="Workspace pages" items={pages.map((p) => item(p.title, `/pages/${p.id}`, false))} />
+        </Group>
+      )}
+    </Stack>
   );
 
   return (
     <PageShell
       title="Workspace"
       navigation={navigation}
-      navigationLabel="Workspace pages"
+      navigationLabel="Workspace navigation"
       actions={<ThemeToggle mode={mode} onModeChange={setMode} ariaLabel="Toggle dark mode" />}
     >
-      <Container maxWidth="md">
+      <Container maxWidth="lg">
         <Outlet />
       </Container>
     </PageShell>

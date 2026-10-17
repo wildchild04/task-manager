@@ -1,32 +1,67 @@
-import { Alert, InlineCode, Link, Stack, Typography } from "@wildchild/design-system";
-import { Link as RouterLink, useRouteLoaderData } from "react-router";
+import { Alert, Button, Card, InlineCode, ResponsivePanelGrid, Stack, TextField, Typography } from "@wildchild/design-system";
+import { useState } from "react";
+import { redirect, useFetcher, useNavigate } from "react-router";
 
-import type { PageLink } from "../blocks/view-model";
+import { fieldError, FormDialog, lastValue } from "../components/form-dialog";
+import type { ActionResult } from "../lib/forms.server";
+import { createProjectAction, projectsHomeView } from "../lib/projects.server";
+import { services } from "../lib/services.server";
+import type { Route } from "./+types/home";
 
 export function meta() {
-  return [{ title: "Workspace" }];
+  return [{ title: "Projects" }];
 }
 
-export default function Home() {
-  const shell = useRouteLoaderData<{ pages: PageLink[] }>("routes/shell");
-  const pages = shell?.pages ?? [];
+export function loader() {
+  return projectsHomeView(services);
+}
+
+export async function action({ request }: Route.ActionArgs) {
+  const result = createProjectAction(services, await request.formData());
+  return result.ok ? redirect(`/projects/${result.id}`) : result;
+}
+
+export default function Home({ loaderData }: Route.ComponentProps) {
+  const [creating, setCreating] = useState(false);
+  const fetcher = useFetcher<ActionResult>();
+  const navigate = useNavigate();
 
   return (
-    <Stack spacing={2}>
-      <Typography variant="h1">Workspace</Typography>
-      {pages.length === 0 ? (
-        <Alert severity="info" role="status" title="No pages yet">
-          Run <InlineCode>npm run db:seed</InlineCode> to create sample pages, then reload.
+    <Stack spacing={3}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center">
+        <Typography variant="h1">Projects</Typography>
+        <Button onClick={() => setCreating(true)}>New project</Button>
+      </Stack>
+
+      {loaderData.projects.length === 0 ? (
+        <Alert severity="info" role="status" title="No projects yet">
+          Create a project to start, or run <InlineCode>npm run db:seed</InlineCode> for a sample project.
         </Alert>
       ) : (
-        <Stack spacing={1}>
-          {pages.map((page) => (
-            <Link key={page.id} component={RouterLink} to={`/pages/${page.id}`} variant="standalone">
-              {page.title}
-            </Link>
+        <ResponsivePanelGrid columns={{ xs: 1, sm: 2, lg: 3 }}>
+          {loaderData.projects.map((project) => (
+            <Card
+              key={project.id}
+              title={project.title}
+              variant="outlined"
+              interactive
+              hoverFeedback="tint"
+              onClick={() => void navigate(`/projects/${project.id}`)}
+            />
           ))}
-        </Stack>
+        </ResponsivePanelGrid>
       )}
+
+      <FormDialog open={creating} title="New project" confirmLabel="Create" fetcher={fetcher} onClose={() => setCreating(false)}>
+        <TextField
+          name="title"
+          label="Title"
+          required
+          fullWidth
+          defaultValue={lastValue(fetcher.data, "title")}
+          {...fieldError(fetcher.data, "title")}
+        />
+      </FormDialog>
     </Stack>
   );
 }

@@ -47,6 +47,14 @@ Task list filters are a `?state=` search parameter (`open`, `tombstoned`, `promo
 ### 9. Seed by part
 `scripts/seed.ts` checks the workspace pages and the sample project separately, so databases seeded before this change get the project added. The sample project is built through the services (projects, tasks, transitions, chores, comments), so it is valid by construction. It uses a fixed project ID (`seed-project`) and generated IDs for the rest.
 
+### 10. Details settled during implementation
+- **`DatePicker` posts its displayed text under `name`** (e.g. `11/03/2026`), not ISO. The chore form keeps the date in state and posts it through a hidden `date` input as `YYYY-MM-DD`. `Select` posts its real value, so it uses `name` directly.
+- **Dialogs submit with `requestSubmit()`.** `Dialog`'s confirm action is a plain button, so `FormDialog` wraps its content in a `fetcher.Form` and submits that, keeping the post a normal form submission.
+- **Cards don't set `headingLevel`.** `Card` maps `headingLevel={2}` to the `h2` typography variant (45px), too large for dashboard cards; the default title style is used.
+- **Index-route posts go to `/?index`.** React Router's forms add it automatically; plain posts to `/` reach the layout route, which has no action (405).
+- **The seed is a module** (`scripts/seed-data.ts`, `seed(services)`), so its idempotency is tested against the in-memory store; `scripts/seed.ts` only runs it.
+- **The design system is one ~550 KB client chunk** (MUI, MUI X pickers, react-markdown). Acceptable for a local single-user app; code-splitting can come later.
+
 ## Risks / Trade-offs
 
 - [The HH:MM text field is a weaker input than a time picker] → Server validation with a clear message; replaced when the design system ships a time picker (feature request).

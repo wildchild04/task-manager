@@ -106,22 +106,32 @@ export class DashboardService {
   }
 }
 
+export type OrderedChore = { task: TaskSummary; urgent: boolean; dueAt?: string };
+
 /**
- * The chores section from `task-chore`: urgent (including overdue) first,
- * then soonest due (no due time last), then most recently updated.
+ * The chore order from `task-chore`: urgent (including overdue) first, then
+ * soonest due (no due time last), then most recently updated.
  */
+export function orderChores(list: readonly TaskSummary[], chores: ChoreService): OrderedChore[] {
+  const rows = byRecency(list).map((task) => {
+    const { dueAt } = choreAttributes(task);
+    return { task, urgent: chores.isUrgent(task), dueAt, due: dueAt ? Date.parse(dueAt) : Number.POSITIVE_INFINITY };
+  });
+  // Array.prototype.sort is stable, so recency breaks the remaining ties.
+  rows.sort((a, b) => Number(b.urgent) - Number(a.urgent) || a.due - b.due);
+  return rows.map(({ task, urgent, dueAt }) => ({ task, urgent, ...(dueAt ? { dueAt } : {}) }));
+}
+
+/** The chores section from `task-chore`, in the chore order, with urgency and due time on each item. */
 export function choresSection(tasks: TaskService, chores: ChoreService): DashboardSection {
   return {
     id: "chores",
     title: "Chores",
-    query: (projectId) => {
-      const rows = byRecency(tasks.list(projectId, { kind: "chore", state: "todo" })).map((task) => {
-        const { dueAt } = choreAttributes(task);
-        return { task, urgent: chores.isUrgent(task), due: dueAt ? Date.parse(dueAt) : Number.POSITIVE_INFINITY, dueAt };
-      });
-      // Array.prototype.sort is stable, so recency breaks the remaining ties.
-      rows.sort((a, b) => Number(b.urgent) - Number(a.urgent) || a.due - b.due);
-      return rows.map(({ task, urgent, dueAt }) => ({ ...taskItem(task), urgent, ...(dueAt ? { dueAt } : {}) }));
-    },
+    query: (projectId) =>
+      orderChores(tasks.list(projectId, { kind: "chore", state: "todo" }), chores).map(({ task, urgent, dueAt }) => ({
+        ...taskItem(task),
+        urgent,
+        ...(dueAt ? { dueAt } : {}),
+      })),
   };
 }

@@ -1,22 +1,45 @@
 import type { BlockService } from "~/domain/blocks/block.service";
 import type { Block, TreeNode } from "~/domain/blocks/types";
+import { PROJECT_OWNER_KIND } from "~/domain/projects/types";
 
 import type { ContentBlockType, PageView, ReferenceView, ViewBlock } from "../blocks/view-model";
 
 /** How deep references to blocks are expanded inside other references. */
 const MAX_REFERENCE_DEPTH = 5;
 
-function isInWorkspace(blocks: BlockService, block: Block): boolean {
-  return blocks.rootOf(block.id)?.owner === null;
+/**
+ * Which pages `/pages/:pageId` may open: workspace pages, and a project's home
+ * page and library documents. Task bodies and comments are shown elsewhere.
+ */
+function browsableScope(blocks: BlockService, block: Block): { projectId?: string } | undefined {
+  const owner = blocks.rootOf(block.id)?.owner;
+  if (owner === null) return {};
+  if (owner?.kind === PROJECT_OWNER_KIND) return { projectId: owner.id };
+  return undefined;
 }
 
 /**
- * Builds the read-only view of a workspace page, resolving every reference.
- * Returns `undefined` for unknown IDs, non-page blocks and owned roots.
+ * Builds the read-only view of a browsable page, resolving every reference.
+ * Returns `undefined` for unknown IDs, non-page blocks, and pages owned by
+ * anything but a project (task bodies, comments).
  */
 export function buildPageView(blocks: BlockService, pageId: string): PageView | undefined {
   const page = blocks.getBlock(pageId);
-  if (!page || page.type !== "page" || !(isInWorkspace(blocks, page))) return undefined;
+  if (!page || page.type !== "page") return undefined;
+  const scope = browsableScope(blocks, page);
+  if (!scope) return undefined;
+  const view = buildTreeView(blocks, page);
+  return view && { ...view, ...scope };
+}
+
+/** Builds the view of any page, without checking who owns it (for a task's body on its overview). */
+export function buildBodyView(blocks: BlockService, pageId: string): PageView | undefined {
+  const page = blocks.getBlock(pageId);
+  return page?.type === "page" ? buildTreeView(blocks, page) : undefined;
+}
+
+function buildTreeView(blocks: BlockService, page: Block): PageView | undefined {
+  const pageId = page.id;
   const tree = blocks.loadTree(pageId);
   if (!tree) return undefined;
 

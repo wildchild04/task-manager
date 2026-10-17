@@ -1,5 +1,5 @@
-import { Typography } from "@wildchild/design-system";
-import { data } from "react-router";
+import { Link, Typography } from "@wildchild/design-system";
+import { data, Link as RouterLink } from "react-router";
 
 import { Blocks } from "../blocks/block-view";
 import { RichText } from "../blocks/rich-text";
@@ -11,7 +11,9 @@ import type { Route } from "./+types/page";
 
 export function loader({ params }: Route.LoaderArgs) {
   const page = buildPageView(services.blocks, params.pageId);
-  return page ? { page } : data({ page: null }, { status: 404 });
+  if (!page) return data({ page: null, project: null }, { status: 404 });
+  const project = page.projectId ? services.projects.get(page.projectId) : undefined;
+  return { page, project: project ? { id: project.id, title: project.title || "Untitled" } : null };
 }
 
 export function meta({ data }: Route.MetaArgs) {
@@ -19,11 +21,16 @@ export function meta({ data }: Route.MetaArgs) {
 }
 
 export default function Page({ loaderData }: Route.ComponentProps) {
-  const { page } = loaderData;
+  const { page, project } = loaderData;
   if (!page) return <NotFound />;
 
   return (
     <article>
+      {project && (
+        <Link component={RouterLink} to={`/projects/${project.id}`} variant="standalone">
+          ← {project.title}
+        </Link>
+      )}
       <Typography variant="h1" gutterBottom>
         {page.title.length > 0 ? <RichText value={page.title} /> : "Untitled"}
       </Typography>

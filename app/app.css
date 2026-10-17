@@ -11,3 +11,8 @@ body {
   margin: 0;
   padding-inline-start: 1.5em;
 }
+
+/* The library tree's nested lists, until the design system has a tree component. */
+.library-tree {
+  list-style: none;
+}
