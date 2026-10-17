@@ -1,10 +1,19 @@
 import type { BlockService } from "../blocks/block.service";
+import type { ChoreService } from "../chores/chore.service";
+import { choreAttributes } from "../chores/schedule";
 import type { TaskService } from "../tasks/task.service";
 import type { TaskKind, TaskSummary } from "../tasks/types";
 import type { ProjectService } from "./project.service";
 
-/** A dashboard row: a task (with kind and state) or, for the library, a page. */
-export type DashboardItem = { id: string; title: string; kind?: TaskKind; state?: string };
+/** A dashboard row: a task (with kind and state) or, for the library, a page. Chores add urgency and due time. */
+export type DashboardItem = {
+  id: string;
+  title: string;
+  kind?: TaskKind;
+  state?: string;
+  urgent?: boolean;
+  dueAt?: string;
+};
 
 export type DashboardSectionResult = { id: string; title: string; count: number; items: DashboardItem[] };
 
@@ -42,11 +51,11 @@ export class DashboardRegistry {
 }
 
 /** Most recently updated first; ties go to the later-created item. */
-function byRecency<T extends { updatedAt: string }>(items: readonly T[]): T[] {
+export function byRecency<T extends { updatedAt: string }>(items: readonly T[]): T[] {
   return [...items].reverse().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
-const taskItem = (task: TaskSummary): DashboardItem => ({ id: task.id, title: task.title, kind: task.kind, state: task.state });
+export const taskItem = (task: TaskSummary): DashboardItem => ({ id: task.id, title: task.title, kind: task.kind, state: task.state });
 
 /** Registers the six sections defined by `project-structure`. */
 export function registerCoreSections(
@@ -95,4 +104,24 @@ export class DashboardService {
       return { id: section.id, title: section.title, count: items.length, items: items.slice(0, limit) };
     });
   }
+}
+
+/**
+ * The chores section from `task-chore`: urgent (including overdue) first,
+ * then soonest due (no due time last), then most recently updated.
+ */
+export function choresSection(tasks: TaskService, chores: ChoreService): DashboardSection {
+  return {
+    id: "chores",
+    title: "Chores",
+    query: (projectId) => {
+      const rows = byRecency(tasks.list(projectId, { kind: "chore", state: "todo" })).map((task) => {
+        const { dueAt } = choreAttributes(task);
+        return { task, urgent: chores.isUrgent(task), due: dueAt ? Date.parse(dueAt) : Number.POSITIVE_INFINITY, dueAt };
+      });
+      // Array.prototype.sort is stable, so recency breaks the remaining ties.
+      rows.sort((a, b) => Number(b.urgent) - Number(a.urgent) || a.due - b.due);
+      return rows.map(({ task, urgent, dueAt }) => ({ ...taskItem(task), urgent, ...(dueAt ? { dueAt } : {}) }));
+    },
+  };
 }

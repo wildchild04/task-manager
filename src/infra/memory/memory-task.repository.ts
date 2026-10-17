@@ -36,6 +36,11 @@ export class MemoryTaskRepository implements TaskRepository {
     if (task) this.insert({ ...task, state, updatedAt });
   }
 
+  updateAttributes(id: string, attributes: Record<string, unknown>, updatedAt: string): void {
+    const task = this.state.tasks.get(id);
+    if (task) this.insert({ ...task, attributes, updatedAt });
+  }
+
   appendTransition(record: TransitionRecord): void {
     this.state = { ...this.state, transitions: [...this.state.transitions, record] };
   }

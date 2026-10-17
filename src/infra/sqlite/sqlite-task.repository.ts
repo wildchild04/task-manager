@@ -81,6 +81,7 @@ export class SqliteTaskRepository implements TaskRepository {
          ORDER BY created_at, rowid`,
       ),
       updateState: db.prepare("UPDATE tasks SET state = ?, updated_at = ? WHERE id = ?"),
+      updateAttributes: db.prepare("UPDATE tasks SET attributes = ?, updated_at = ? WHERE id = ?"),
       appendTransition: db.prepare(
         `INSERT INTO task_transitions (id, task_id, name, from_state, to_state, actor_kind, actor_name, note, at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -128,6 +129,10 @@ export class SqliteTaskRepository implements TaskRepository {
 
   updateState(id: string, state: string, updatedAt: string): void {
     this.s.updateState.run(state, updatedAt, id);
+  }
+
+  updateAttributes(id: string, attributes: Record<string, unknown>, updatedAt: string): void {
+    this.s.updateAttributes.run(JSON.stringify(attributes), updatedAt, id);
   }
 
   appendTransition(r: TransitionRecord): void {

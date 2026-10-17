@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { createNextOccurrence, initializeChore } from "../../chores/occurrence";
+import { choreAttributes, choreAttributesSchema, isRecurring } from "../../chores/schedule";
 import { TaskError } from "../errors";
 import type { TaskKind } from "../types";
 import type { EffectContext, KindDefinition } from "./kind-definition";
@@ -68,6 +70,13 @@ export const work = defineKind({
   attributes: noAttributes,
 });
 
+const completeChoreInput = z
+  .object({
+    /** The answer to "create a following chore with the same configuration?"; defaults to yes when recurring. */
+    next: z.boolean().optional(),
+  })
+  .strict();
+
 const cancelChoreInput = z.object({ scope: z.enum(["occurrence", "series"]) }).strict();
 
 export const chore = defineKind({
@@ -76,20 +85,31 @@ export const chore = defineKind({
   initial: "todo",
   terminal: ["done", "cancelled"],
   transitions: {
-    complete: { from: ["todo"], to: "done" },
+    complete: {
+      from: ["todo"],
+      to: "done",
+      input: completeChoreInput,
+      effect: (context: EffectContext<z.infer<typeof completeChoreInput>>) => {
+        const recurring = isRecurring(choreAttributes(context.task).schedule);
+        if (context.input.next ?? recurring) createNextOccurrence(context);
+      },
+    },
     cancel: {
       from: ["todo"],
       to: "cancelled",
       input: cancelChoreInput,
-      // Schedules come with the chore change; until then no chore has one.
-      effect: ({ task, input }: EffectContext<z.infer<typeof cancelChoreInput>>) => {
-        if (input.scope === "series" && !task.attributes.schedule) {
-          throw new TaskError("validation", "Only a scheduled chore can cancel its series");
+      effect: (context: EffectContext<z.infer<typeof cancelChoreInput>>) => {
+        const recurring = isRecurring(choreAttributes(context.task).schedule);
+        if (context.input.scope === "series" && !recurring) {
+          throw new TaskError("validation", "Only a recurring chore can cancel its series");
         }
+        // Cancelling one occurrence skips to the next, as completing it would.
+        if (context.input.scope === "occurrence" && recurring) createNextOccurrence(context);
       },
     },
   },
-  attributes: noAttributes,
+  attributes: choreAttributesSchema,
+  initialize: initializeChore,
 });
 
 export const kinds: Readonly<Record<TaskKind, KindDefinition>> = { exploration, update, work, chore };

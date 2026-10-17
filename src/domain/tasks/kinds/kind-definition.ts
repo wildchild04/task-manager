@@ -10,9 +10,27 @@ export type EffectContext<Input> = {
   actor: Actor;
   at: string;
   repositories: Repositories;
-  /** Creates a task (with its body page) in the same unit of work. */
-  createTask(input: { id: string; projectId: string; kind: TaskKind; title: string }): Task;
+  /** The workspace time zone, for wall-clock schedules. */
+  timeZone: string;
+  newId(): string;
+  /**
+   * Creates a task (with its body page) in the same unit of work. With
+   * `attributes`, they are validated but the kind's `initialize` is skipped,
+   * so derived fields can be carried over as given.
+   */
+  createTask(input: {
+    id: string;
+    projectId: string;
+    kind: TaskKind;
+    title: string;
+    attributes?: Record<string, unknown>;
+  }): Task;
+  /** Copies the content of one task's body page into another's, with fresh block IDs. */
+  copyBody(fromTaskId: string, toTaskId: string): void;
 };
+
+/** What a kind's `initialize` hook knows about the task being created. */
+export type InitializeContext = { id: string; now: Date; timeZone: string };
 
 export type TransitionDefinition<State extends string, Input = undefined> = {
   from: readonly State[];
@@ -33,6 +51,8 @@ export type KindDefinition<State extends string = string> = {
   // Inputs differ per transition; each definition's schema checks its own.
   transitions: Readonly<Record<string, TransitionDefinition<State, any>>>;
   attributes: z.ZodType<Record<string, unknown>>;
+  /** Fills in derived attributes when a task is created (e.g. a chore's due time). */
+  initialize?: (attributes: Record<string, unknown>, context: InitializeContext) => Record<string, unknown>;
 };
 
 /** Helper that keeps state names checked while defining a kind. */

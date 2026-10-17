@@ -1,6 +1,6 @@
 import { batchStaysWithin } from "../blocks/batch-scope";
 import { plainText } from "../blocks/text";
-import type { Batch, NewBlock } from "../blocks/types";
+import type { Batch, NewBlock, TreeNode } from "../blocks/types";
 import type { ProtectionHook } from "../blocks/validate";
 import type { Repositories, UnitOfWork } from "../unit-of-work";
 import { TaskError } from "./errors";
@@ -53,6 +53,8 @@ export type ReturnedWork = {
 export type TaskServiceOptions = {
   newId?: () => string;
   now?: () => string;
+  /** The workspace time zone for wall-clock schedules; defaults to the server's. */
+  timeZone?: string;
   /** Called when work is returned, to post the return comment. Throwing rolls the return back. */
   onReturn?: (repositories: Repositories, returned: ReturnedWork) => void;
 };
@@ -66,6 +68,7 @@ const fail = (code: TaskError["code"], message: string): never => {
 export class TaskService {
   private readonly newId: () => string;
   private readonly now: () => string;
+  readonly timeZone: string;
 
   constructor(
     private readonly uow: UnitOfWork,
@@ -74,6 +77,7 @@ export class TaskService {
   ) {
     this.newId = options.newId ?? (() => crypto.randomUUID());
     this.now = options.now ?? (() => new Date().toISOString());
+    this.timeZone = options.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   }
 
   private get repos(): Repositories {
@@ -107,8 +111,11 @@ export class TaskService {
     return this.repos.tasks.list(projectId, filter).map((task) => this.summarize(task));
   }
 
-  /** Inserts a task and its body page. Must run inside a unit of work. */
-  private insertTask(repos: Repositories, input: CreateTaskInput, at: string): Task {
+  /**
+   * Inserts a task and its body page. Must run inside a unit of work.
+   * `initialize: false` keeps derived attributes as given (for chore occurrences).
+   */
+  private insertTask(repos: Repositories, input: CreateTaskInput, at: string, initialize = true): Task {
     if (!input.id) fail("validation", "A task needs an ID");
     if (!(TASK_KINDS as readonly string[]).includes(input.kind)) fail("validation", `Unknown task kind: ${input.kind}`);
     if (repos.tasks.get(input.id)) fail("duplicate_id", `Task ${input.id} already exists`);
@@ -120,13 +127,17 @@ export class TaskService {
       fail("validation", `Invalid attributes for ${input.kind}: ${attributes.error.issues[0]?.message ?? "invalid"}`);
     }
 
+    const initialized =
+      initialize && definition.initialize
+        ? definition.initialize(attributes.data!, { id: input.id, now: new Date(at), timeZone: this.timeZone })
+        : attributes.data!;
     const task: Task = {
       id: input.id,
       projectId: input.projectId,
       kind: input.kind,
       state: definition.initial,
       bodyPageId: this.newId(),
-      attributes: attributes.data!,
+      attributes: initialized,
       createdAt: at,
       updatedAt: at,
     };
@@ -176,7 +187,11 @@ export class TaskService {
         actor,
         at,
         repositories: repos,
-        createTask: ({ id, projectId, kind, title }) => this.insertTask(repos, { id, projectId, kind, title }, at),
+        timeZone: this.timeZone,
+        newId: this.newId,
+        createTask: ({ id, projectId, kind, title, attributes }) =>
+          this.insertTask(repos, { id, projectId, kind, title, attributes }, at, attributes === undefined),
+        copyBody: (fromTaskId, toTaskId) => this.copyBody(repos, fromTaskId, toTaskId),
       });
       if (task.kind === "work" && name === "return") {
         const { reason, bodyBatch, commentBlocks, commentId } = input as ReturnInput;
@@ -199,6 +214,29 @@ export class TaskService {
       return { ...task, state: transition!.to, updatedAt: at };
     });
     return this.summarize(task);
+  }
+
+  /**
+   * Copies the content of one task's body page into another's, with fresh
+   * block IDs, keeping order and nesting. Nested pages are copied without
+   * their own content; references keep pointing at the same targets.
+   */
+  private copyBody(repos: Repositories, fromTaskId: string, toTaskId: string) {
+    const from = repos.tasks.get(fromTaskId) ?? fail("not_found", `Task ${fromTaskId} does not exist`);
+    const to = repos.tasks.get(toTaskId) ?? fail("not_found", `Task ${toTaskId} does not exist`);
+    const ops: Batch[number][] = [];
+    const copy = (nodes: readonly TreeNode[], parentId: string) => {
+      let afterId: string | null = null;
+      for (const node of nodes) {
+        const id = this.newId();
+        const { type, props, content } = node.block;
+        ops.push({ op: "insert", block: { id, type, props, content }, parentId, afterId });
+        copy(node.children ?? [], id);
+        afterId = id;
+      }
+    };
+    copy(repos.blocks.loadTree(from.bodyPageId)?.children ?? [], to.bodyPageId);
+    if (ops.length > 0) repos.blocks.apply(ops);
   }
 
   /** Applies a batch that must stay inside the task's body page. */

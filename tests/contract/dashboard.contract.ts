@@ -90,6 +90,26 @@ export function dashboardContract(name: string, factory: ServicesFactory) {
       expect(services.dashboard.getDashboard("nope")).toBeUndefined();
     });
 
+    it("lists urgent and overdue chores first, then by due time", () => {
+      const at = (iso: string) => ({ type: "date", date: iso.slice(0, 10), time: iso.slice(11, 16) });
+      services = factory({ now: () => "2026-10-14T12:00:00.000Z", timeZone: "UTC" });
+      services.projects.create({ id: "P", title: "Project" });
+      const chore = (id: string, attributes: Record<string, unknown>) =>
+        services.tasks.create({ id, projectId: "P", kind: "chore", title: id, attributes });
+      chore("plain", {});
+      chore("tomorrow", { schedule: at("2026-10-15T09:00") });
+      chore("overdue", { schedule: at("2026-10-13T09:00") });
+      chore("marked", { urgency: "urgent" });
+      const items = section("chores").items;
+      expect(items.map((item) => [item.id, item.urgent])).toEqual([
+        ["overdue", true],
+        ["marked", true],
+        ["tomorrow", false],
+        ["plain", false],
+      ]);
+      expect(items[0]).toMatchObject({ dueAt: "2026-10-13T09:00:00.000Z", kind: "chore", state: "todo" });
+    });
+
     it("lets later changes register a section in position", () => {
       services.dashboardSections.register(
         { id: "recent-logs", title: "Recent logs", query: () => [{ id: "L1", title: "Log" }] },

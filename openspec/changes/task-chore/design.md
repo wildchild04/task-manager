@@ -59,6 +59,14 @@ A chore's **configuration** is `baseUrgency` plus `schedule`; its occurrence sta
 ### 9. The dashboard section is replaced, not edited
 `composition.ts` calls `dashboardSections.replace` with a chores section that sorts by effective urgency, then `dueAt` (with no due time last), then recency, and adds `urgent` and `dueAt` to its items. `DashboardItem` gains those two optional fields.
 
+### 10. Details settled during implementation
+- **Derived attributes come from a kind hook, not a separate create path.** `KindDefinition` gained an optional `initialize(attributes, { id, now, timeZone })`, which `TaskService.create` runs after validation. The chore kind uses it to set `baseUrgency`, `seriesId` and `dueAt`, so a chore created through any path is consistent; given values for those fields are ignored. Following occurrences are created with explicit attributes and skip the hook.
+- **`ChoreService` has no `create`.** Chores are created with `TaskService.create`; `ChoreService` covers urgency, schedule, effective urgency and series.
+- **The effect context grew** `timeZone`, `newId` and `copyBody`, and `createTask` accepts attributes.
+- **Due times are stored as UTC ISO strings** (`TZDate` values are converted at the boundary).
+- **Body copies are one level deep for nested pages:** a nested page is copied as a page block without its own content; everything else is copied with its children.
+- **Fixed-length intervals skip missed slots arithmetically**; calendar steps (days, weeks, months, frequencies) step one slot at a time.
+
 ## Risks / Trade-offs
 
 - [Daylight-saving gaps: a 02:30 slot on a spring-forward day doesn't exist] → `TZDate` moves it forward to the first valid time; covered by a test.

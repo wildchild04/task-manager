@@ -8,6 +8,7 @@ export interface TaskRepository {
   /** A project's tasks, oldest first, optionally filtered. */
   list(projectId: string, filter?: TaskFilter): Task[];
   updateState(id: string, state: string, updatedAt: string): void;
+  updateAttributes(id: string, attributes: Record<string, unknown>, updatedAt: string): void;
 
   appendTransition(record: TransitionRecord): void;
   /** A task's transitions, oldest first. */

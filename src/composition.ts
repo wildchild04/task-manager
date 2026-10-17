@@ -7,7 +7,8 @@ import { BlockService } from "~/domain/blocks/block.service";
 import type { ProtectionHooks } from "~/domain/blocks/validate";
 import type { ProjectResolvers } from "~/domain/library/library.service";
 import { LibraryService } from "~/domain/library/library.service";
-import { DashboardRegistry, DashboardService, registerCoreSections } from "~/domain/projects/dashboard";
+import { ChoreService } from "~/domain/chores/chore.service";
+import { choresSection, DashboardRegistry, DashboardService, registerCoreSections } from "~/domain/projects/dashboard";
 import { ProjectService, projectProtection } from "~/domain/projects/project.service";
 import { PROJECT_OWNER_KIND } from "~/domain/projects/types";
 import { plainText } from "~/domain/blocks/text";
@@ -42,14 +43,15 @@ export type AppServices = {
   library: LibraryService;
   tasks: TaskService;
   comments: CommentService;
+  chores: ChoreService;
   dashboard: DashboardService;
   /** Where later changes add dashboard sections. */
   dashboardSections: DashboardRegistry;
   close(): void;
 };
 
-/** Overrides for tests: deterministic IDs and clock. */
-export type ServiceOptions = { newId?: () => string; now?: () => string };
+/** Overrides for tests (deterministic IDs and clock) and the workspace time zone. */
+export type ServiceOptions = { newId?: () => string; now?: () => string; timeZone?: string };
 
 function buildServices(uow: UnitOfWork, close: () => void, options: ServiceOptions): AppServices {
   const blocks = new BlockService(uow.repositories.blocks);
@@ -63,6 +65,7 @@ function buildServices(uow: UnitOfWork, close: () => void, options: ServiceOptio
   const tasks: TaskService = new TaskService(uow, referenceable(), {
     newId: options.newId,
     now: options.now,
+    timeZone: options.timeZone,
     // Returning work posts the reason, plus any extra blocks, as a comment by the same actor.
     onReturn: (repos, { task, actor, reason, commentId, commentBlocks, at }) => {
       const id = commentId ?? crypto.randomUUID();
@@ -72,9 +75,11 @@ function buildServices(uow: UnitOfWork, close: () => void, options: ServiceOptio
   });
   const library = new LibraryService(blocks, projects, resolvers);
   const dashboardSections = new DashboardRegistry();
+  const chores = new ChoreService(uow, tasks, options.now);
   registerCoreSections(dashboardSections, { tasks, blocks, projects });
+  dashboardSections.replace(choresSection(tasks, chores));
   const dashboard = new DashboardService(dashboardSections, projects);
-  return { blocks, projects, library, tasks, comments, dashboard, dashboardSections, close };
+  return { blocks, projects, library, tasks, comments, chores, dashboard, dashboardSections, close };
 
   /** Entity kinds a task can reference. Later domains (comments, subtasks) add theirs. */
   function referenceable(): ReferenceableKinds {
@@ -95,7 +100,7 @@ function buildServices(uow: UnitOfWork, close: () => void, options: ServiceOptio
 /** The application's services, backed by SQLite. The only place concrete repositories are chosen. */
 export function createServices(
   dbPath = process.env.DATABASE_PATH ?? "data/app.sqlite",
-  options: ServiceOptions = {},
+  options: ServiceOptions = { timeZone: process.env.TIME_ZONE || undefined },
 ): AppServices {
   if (dbPath !== ":memory:") mkdirSync(dirname(dbPath), { recursive: true });
   const db = new Database(dbPath);
