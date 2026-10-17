@@ -1,0 +1,13 @@
+body {
+  margin: 0;
+}
+
+/* Nested blocks are indented under their parent block. */
+.block-children {
+  padding-inline-start: 1.5em;
+}
+
+.block-list {
+  margin: 0;
+  padding-inline-start: 1.5em;
+}

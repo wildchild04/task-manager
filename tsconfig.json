@@ -1,10 +1,12 @@
 {
   "compilerOptions": {
     "target": "ES2023",
-    "lib": ["ES2023"],
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "types": ["node"],
+    "jsx": "react-jsx",
+    "types": ["node", "vite/client"],
+    "rootDirs": [".", "./.react-router/types"],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
@@ -15,5 +17,5 @@
     "noEmit": true,
     "paths": { "~/*": ["./src/*"] }
   },
-  "include": ["src", "tests", "vitest.config.ts"]
+  "include": ["src", "tests", "app", "scripts", ".react-router/types/**/*", "vite.config.ts", "vitest.config.ts", "react-router.config.ts"]
 }
