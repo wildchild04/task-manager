@@ -20,8 +20,8 @@
 
 ## 4. Task page UI
 
-- [ ] 4.1 Route action wiring (`redirectTo` → `redirect`, unknown intent → 400)
-- [ ] 4.2 Transition bar and dialogs (promote, return, complete chore, cancel chore, start exploration, start update), urgency button
-- [ ] 4.3 Comments section: list, add form, edit and delete dialogs, start exploration from a comment
-- [ ] 4.4 Lineage, references (with add and remove) and history sections
-- [ ] 4.5 Component rendering tests; typecheck, full test run, and a manual check over HTTP against the dev database
+- [x] 4.1 Route action wiring (`redirectTo` → `redirect`, unknown intent → 400)
+- [x] 4.2 Transition bar and dialogs (promote, return, complete chore, cancel chore, start exploration, start update), urgency button
+- [x] 4.3 Comments section: list, add form, edit and delete dialogs, start exploration from a comment
+- [x] 4.4 Lineage, references (with add and remove) and history sections
+- [x] 4.5 Component rendering tests; typecheck, full test run, and a manual check over HTTP against the dev database
