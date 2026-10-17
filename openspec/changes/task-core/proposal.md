@@ -25,7 +25,7 @@ The project-management half of the app depends on tasks with strict kinds and li
 - `task-relations`: relation types and their rules, lineage, incoming relations.
 
 ### Modified Capabilities
-<!-- None: block-data-model is not archived yet, so there are no main specs to modify. -->
+<!-- None: the block requirements this change relies on (owned roots, protection hooks) are already in the archived block-tree spec. -->
 
 ## Non-goals
 

@@ -16,7 +16,7 @@ Work and chores are things to act on, and acting on them surfaces unknowns. Comm
 - `task-comments`: comment entity, which kinds allow comments, block bodies, ordering, editing and deleting, referencing comments, and the comment posted by `return`.
 
 ### Modified Capabilities
-<!-- None: block-data-model and task-core are not archived yet. Their in-flight specs were updated directly (the `comment` root block type in block-data-model). -->
+<!-- None: the `comment` block type and owned roots are already in the archived block-tree spec; task-core is not archived yet. -->
 
 ## Non-goals
 
