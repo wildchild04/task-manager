@@ -10,16 +10,20 @@ import { LibraryService } from "~/domain/library/library.service";
 import { ProjectService, projectProtection } from "~/domain/projects/project.service";
 import { PROJECT_OWNER_KIND } from "~/domain/projects/types";
 import { plainText } from "~/domain/blocks/text";
+import { CommentService, commentProtection } from "~/domain/comments/comment.service";
+import { COMMENT_OWNER_KIND } from "~/domain/comments/types";
 import type { ReferenceableKinds } from "~/domain/tasks/referenceable";
 import { TaskService, taskProtection } from "~/domain/tasks/task.service";
 import { TASK_OWNER_KIND } from "~/domain/tasks/types";
 import type { UnitOfWork } from "~/domain/unit-of-work";
 import { MemoryBlockRepository } from "~/infra/memory/memory-block.repository";
+import { MemoryCommentRepository } from "~/infra/memory/memory-comment.repository";
 import { MemoryProjectRepository } from "~/infra/memory/memory-project.repository";
 import { MemoryTaskRepository } from "~/infra/memory/memory-task.repository";
 import { MemoryUnitOfWork } from "~/infra/memory/memory-unit-of-work";
 import { migrate } from "~/infra/sqlite/migrate";
 import { SqliteBlockRepository } from "~/infra/sqlite/sqlite-block.repository";
+import { SqliteCommentRepository } from "~/infra/sqlite/sqlite-comment.repository";
 import { SqliteProjectRepository } from "~/infra/sqlite/sqlite-project.repository";
 import { SqliteTaskRepository } from "~/infra/sqlite/sqlite-task.repository";
 import { SqliteUnitOfWork } from "~/infra/sqlite/sqlite-unit-of-work";
@@ -28,6 +32,7 @@ import { SqliteUnitOfWork } from "~/infra/sqlite/sqlite-unit-of-work";
 const hooks: ProtectionHooks = {
   [PROJECT_OWNER_KIND]: projectProtection,
   [TASK_OWNER_KIND]: taskProtection,
+  [COMMENT_OWNER_KIND]: commentProtection,
 };
 
 export type AppServices = {
@@ -35,6 +40,7 @@ export type AppServices = {
   projects: ProjectService;
   library: LibraryService;
   tasks: TaskService;
+  comments: CommentService;
   close(): void;
 };
 
@@ -49,8 +55,18 @@ function buildServices(uow: UnitOfWork, close: () => void, options: ServiceOptio
     [PROJECT_OWNER_KIND]: (ownerId) => (repositories.projects.get(ownerId) ? ownerId : undefined),
     [TASK_OWNER_KIND]: (ownerId) => repositories.tasks.get(ownerId)?.projectId,
   };
-  const tasks: TaskService = new TaskService(uow, referenceable(), options.newId);
-  return { blocks, projects, library: new LibraryService(blocks, projects, resolvers), tasks, close };
+  const comments = new CommentService(uow, options.newId);
+  const tasks: TaskService = new TaskService(uow, referenceable(), {
+    newId: options.newId,
+    // Returning work posts the reason, plus any extra blocks, as a comment by the same actor.
+    onReturn: (repos, { task, actor, reason, commentId, commentBlocks, at }) => {
+      const id = commentId ?? crypto.randomUUID();
+      const reasonBlock = { id: `${id}-reason`, type: "paragraph" as const, content: [{ text: reason }] };
+      comments.addWithin(repos, { id, taskId: task.id, author: actor, blocks: [reasonBlock, ...commentBlocks] }, at);
+    },
+  });
+  const library = new LibraryService(blocks, projects, resolvers);
+  return { blocks, projects, library, tasks, comments, close };
 
   /** Entity kinds a task can reference. Later domains (comments, subtasks) add theirs. */
   function referenceable(): ReferenceableKinds {
@@ -63,6 +79,7 @@ function buildServices(uow: UnitOfWork, close: () => void, options: ServiceOptio
         const block = repositories.blocks.getBlock(id);
         return block && { title: plainText(block.content) };
       },
+      comment: (id) => comments.summary(id),
     };
   }
 }
@@ -80,6 +97,7 @@ export function createServices(
     blocks: new SqliteBlockRepository(db, hooks),
     projects: new SqliteProjectRepository(db),
     tasks: new SqliteTaskRepository(db),
+    comments: new SqliteCommentRepository(db),
   });
   return buildServices(uow, () => db.close(), options);
 }
@@ -89,5 +107,7 @@ export function createInMemoryServices(options: ServiceOptions = {}): AppService
   const blocks = new MemoryBlockRepository(hooks);
   const projects = new MemoryProjectRepository();
   const tasks = new MemoryTaskRepository();
-  return buildServices(new MemoryUnitOfWork({ blocks, projects, tasks }, [blocks, projects, tasks]), () => {}, options);
+  const comments = new MemoryCommentRepository();
+  const uow = new MemoryUnitOfWork({ blocks, projects, tasks, comments }, [blocks, projects, tasks, comments]);
+  return buildServices(uow, () => {}, options);
 }

@@ -36,6 +36,13 @@ The `return` effect in `task-core` gains one step: create the comment (row plus 
 ### 6. The `comment` resolver
 The referenceable registry gets a `comment` resolver returning `ok` with a summary (task ID, author, first paragraph's text) or `missing`.
 
+### 7. Details settled during implementation
+- **Bodies are given as block trees.** `add` takes `CommentBlockInput[]` (a `NewBlock` with optional `children`), turned into one insert batch, so comments can hold nested content such as toggles.
+- **`page` and `comment` blocks are rejected anywhere in a body**, on add and on edit, including turning a paragraph into a page (which the block rules alone would allow).
+- **Edits use the same `batchStaysWithin` check as `return`.** New blocks may go under the comment root, but the root itself can't be updated, moved or deleted through an edit.
+- **`return` reaches comments through a hook.** `TaskService` takes an `onReturn` option and doesn't import the comments domain; `composition.ts` wires it to `CommentService.addWithin`, which runs inside the return's unit of work. The return input gains optional `commentBlocks` (after the reason) and `commentId` (generated when omitted).
+- **Comment errors reuse `TaskError`** and its codes (`not_found`, `duplicate_id`, `validation`), since comments live inside the task domain.
+
 ## Risks / Trade-offs
 
 - [Walking up to the root on every validated block operation adds reads] → Only needed for operations on blocks with a parent chain; page trees are rarely deep, and the check can stop at the first `page` or `comment` it reaches.

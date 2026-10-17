@@ -1,6 +1,6 @@
 import { batchStaysWithin } from "../blocks/batch-scope";
 import { plainText } from "../blocks/text";
-import type { Batch } from "../blocks/types";
+import type { Batch, NewBlock } from "../blocks/types";
 import type { ProtectionHook } from "../blocks/validate";
 import type { Repositories, UnitOfWork } from "../unit-of-work";
 import { TaskError } from "./errors";
@@ -40,17 +40,41 @@ export type CreateTaskInput = {
 
 export type TransitionOptions = { actor?: Actor; note?: string; input?: unknown };
 
+/** What `return` hands to the comments domain, inside the transition's unit of work. */
+export type ReturnedWork = {
+  task: Task;
+  actor: Actor;
+  reason: string;
+  commentId?: string;
+  commentBlocks: NewBlock[];
+  at: string;
+};
+
+export type TaskServiceOptions = {
+  newId?: () => string;
+  now?: () => string;
+  /** Called when work is returned, to post the return comment. Throwing rolls the return back. */
+  onReturn?: (repositories: Repositories, returned: ReturnedWork) => void;
+};
+
+type ReturnInput = { reason: string; bodyBatch?: Batch; commentBlocks?: NewBlock[]; commentId?: string };
+
 const fail = (code: TaskError["code"], message: string): never => {
   throw new TaskError(code, message);
 };
 
 export class TaskService {
+  private readonly newId: () => string;
+  private readonly now: () => string;
+
   constructor(
     private readonly uow: UnitOfWork,
     private readonly referenceable: ReferenceableKinds,
-    private readonly newId: () => string = () => crypto.randomUUID(),
-    private readonly now: () => string = () => new Date().toISOString(),
-  ) {}
+    private readonly options: TaskServiceOptions = {},
+  ) {
+    this.newId = options.newId ?? (() => crypto.randomUUID());
+    this.now = options.now ?? (() => new Date().toISOString());
+  }
 
   private get repos(): Repositories {
     return this.uow.repositories;
@@ -154,7 +178,11 @@ export class TaskService {
         repositories: repos,
         createTask: ({ id, projectId, kind, title }) => this.insertTask(repos, { id, projectId, kind, title }, at),
       });
-      if (task.kind === "work" && name === "return") this.applyBodyBatch(repos, task, (input as { bodyBatch?: Batch }).bodyBatch);
+      if (task.kind === "work" && name === "return") {
+        const { reason, bodyBatch, commentBlocks, commentId } = input as ReturnInput;
+        this.applyBodyBatch(repos, task, bodyBatch);
+        this.options.onReturn?.(repos, { task, actor, reason, commentId, commentBlocks: commentBlocks ?? [], at });
+      }
 
       repos.tasks.updateState(task.id, transition!.to, at);
       const record: TransitionRecord = {

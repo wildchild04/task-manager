@@ -44,6 +44,10 @@ const returnInput = z
     reason: z.string().trim().min(1, "A return needs a reason"),
     /** Block operations on the task's body page, applied with the return. */
     bodyBatch: z.array(z.any()).optional(),
+    /** Extra blocks for the return comment, after the reason. */
+    commentBlocks: z.array(z.any()).optional(),
+    /** ID for the return comment; generated when omitted. */
+    commentId: z.string().min(1).optional(),
   })
   .strict();
 

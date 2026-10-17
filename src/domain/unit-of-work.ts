@@ -1,4 +1,5 @@
 import type { BlockRepository } from "./blocks/block.repository";
+import type { CommentRepository } from "./comments/comment.repository";
 import type { ProjectRepository } from "./projects/project.repository";
 import type { TaskRepository } from "./tasks/task.repository";
 
@@ -7,6 +8,7 @@ export type Repositories = {
   blocks: BlockRepository;
   projects: ProjectRepository;
   tasks: TaskRepository;
+  comments: CommentRepository;
 };
 
 /**
