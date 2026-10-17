@@ -9,8 +9,8 @@ import { buildPageView } from "../lib/page-view.server";
 import { services } from "../lib/services.server";
 import type { Route } from "./+types/page";
 
-export async function loader({ params }: Route.LoaderArgs) {
-  const page = await buildPageView(services.blocks, params.pageId);
+export function loader({ params }: Route.LoaderArgs) {
+  const page = buildPageView(services.blocks, params.pageId);
   return page ? { page } : data({ page: null }, { status: 404 });
 }
 

@@ -5,14 +5,14 @@ export type ReferenceResolution =
   | { status: "missing"; targetId: string }
   | { status: "cycle"; targetId: string };
 
-type GetBlock = (id: string) => Promise<Block | undefined>;
+type GetBlock = (id: string) => Block | undefined;
 
-async function ancestorIds(block: Block, getBlock: GetBlock): Promise<Set<string>> {
+function ancestorIds(block: Block, getBlock: GetBlock): Set<string> {
   const ids = new Set<string>();
   let parentId = block.parentId;
   while (parentId !== null && !ids.has(parentId)) {
     ids.add(parentId);
-    parentId = (await getBlock(parentId))?.parentId ?? null;
+    parentId = getBlock(parentId)?.parentId ?? null;
   }
   return ids;
 }
@@ -23,17 +23,17 @@ async function ancestorIds(block: Block, getBlock: GetBlock): Promise<Set<string
  * Expanding a target that is on that path, or that contains the reference,
  * would recurse forever, so it resolves as a cycle.
  */
-export async function resolveReference(
+export function resolveReference(
   reference: Block,
   expansionPath: readonly string[],
   getBlock: GetBlock,
-): Promise<ReferenceResolution> {
+): ReferenceResolution {
   if (reference.type !== "reference") throw new Error(`Block ${reference.id} is not a reference`);
   const { targetId } = reference.props;
 
   if (targetId === reference.id || expansionPath.includes(targetId)) return { status: "cycle", targetId };
-  if ((await ancestorIds(reference, getBlock)).has(targetId)) return { status: "cycle", targetId };
+  if (ancestorIds(reference, getBlock).has(targetId)) return { status: "cycle", targetId };
 
-  const target = await getBlock(targetId);
+  const target = getBlock(targetId);
   return target ? { status: "ok", target } : { status: "missing", targetId };
 }

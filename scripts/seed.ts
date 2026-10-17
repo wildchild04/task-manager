@@ -107,10 +107,10 @@ const showcase: Operation[] = [
 
 const services = createServices();
 try {
-  if (await services.blocks.getBlock(id("welcome"))) {
+  if (services.blocks.getBlock(id("welcome"))) {
     console.log("Sample pages already exist; nothing to seed.");
   } else {
-    await services.blocks.apply([...welcome, ...showcase]);
+    services.blocks.apply([...welcome, ...showcase]);
     console.log("Seeded the Welcome and Block showcase pages.");
   }
 } finally {

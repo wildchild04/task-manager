@@ -41,41 +41,41 @@ blockRepositoryContract("sqlite", (hooks) => {
 });
 
 describe("sqlite: durable persistence", () => {
-  it("survives closing and reopening the database", async () => {
+  it("survives closing and reopening the database", () => {
     const path = tempDbPath();
     const first = open(path);
     const before = new BlockService(new SqliteBlockRepository(first));
-    await before.apply([
+    before.apply([
       { op: "insert", block: { id: "P", type: "page", content: [{ text: "Page" }] }, parentId: null },
       { op: "insert", block: { id: "T", type: "toggle" }, parentId: "P" },
       { op: "insert", block: { id: "T1", type: "todo", props: { checked: true } }, parentId: "T" },
       { op: "insert", block: { id: "R", type: "reference", props: { targetId: "T1" } }, parentId: "P", afterId: "T" },
     ]);
-    const tree = await before.loadTree("P");
+    const tree = before.loadTree("P");
     first.close();
 
     const after = new BlockService(new SqliteBlockRepository(open(path)));
-    expect(await after.loadTree("P")).toEqual(tree);
-    expect((await after.listIncomingReferences("T1")).map((b) => b.id)).toEqual(["R"]);
+    expect(after.loadTree("P")).toEqual(tree);
+    expect(after.listIncomingReferences("T1").map((b) => b.id)).toEqual(["R"]);
   });
 
-  it("migrates a fresh database and starts with no root pages", async () => {
+  it("migrates a fresh database and starts with no root pages", () => {
     const db = new Database(tempDbPath());
     openDbs.push(db);
-    expect(migrate(db)).toEqual(["001_blocks.sql"]);
+    expect(migrate(db)[0]).toBe("001_blocks.sql");
     expect(migrate(db)).toEqual([]);
-    expect(await new BlockService(new SqliteBlockRepository(db)).listRootPages()).toEqual([]);
+    expect(new BlockService(new SqliteBlockRepository(db)).listRootPages()).toEqual([]);
   });
 
-  it("nests apply inside an outer transaction as a savepoint", async () => {
+  it("nests apply inside an outer transaction as a savepoint", () => {
     const db = open(tempDbPath());
     const blocks = new SqliteBlockRepository(db);
     const outer = db.transaction(() => {
-      void blocks.apply([{ op: "insert", block: { id: "P", type: "page" }, parentId: null }]);
+      blocks.apply([{ op: "insert", block: { id: "P", type: "page" }, parentId: null }]);
       throw new Error("abort the unit of work");
     });
     expect(() => outer()).toThrow("abort the unit of work");
-    expect(await blocks.getBlock("P")).toBeUndefined();
+    expect(blocks.getBlock("P")).toBeUndefined();
   });
 
   it("enforces sibling order in the database itself", () => {

@@ -163,28 +163,28 @@ export class SqliteBlockRepository implements BlockRepository {
     );
   }
 
-  async getBlock(id: string): Promise<Block | undefined> {
+  getBlock(id: string): Block | undefined {
     const row = this.store.get(id);
     return row ? rowToBlock(row) : undefined;
   }
 
-  async getChildren(parentId: string | null): Promise<Block[]> {
+  getChildren(parentId: string | null): Block[] {
     return orderedChildren(this.store, parentId);
   }
 
-  async loadTree(rootId: string): Promise<TreeNode | undefined> {
+  loadTree(rootId: string): TreeNode | undefined {
     return buildTree(this.store, rootId);
   }
 
-  async getOwnedRoots(owner: Owner): Promise<Block[]> {
+  getOwnedRoots(owner: Owner): Block[] {
     return this.store.ownedRoots(owner.kind, owner.id).map(rowToBlock);
   }
 
-  async listIncomingReferences(targetId: string): Promise<Block[]> {
+  listIncomingReferences(targetId: string): Block[] {
     return this.store.referencesTo(targetId).map(rowToBlock);
   }
 
-  async apply(batch: Batch, options?: ApplyOptions): Promise<void> {
+  apply(batch: Batch, options?: ApplyOptions): void {
     this.applyInTransaction(batch, options);
   }
 }

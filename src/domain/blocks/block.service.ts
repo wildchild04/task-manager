@@ -6,36 +6,43 @@ import type { Batch, Block, Owner, TreeNode } from "./types";
 export class BlockService {
   constructor(private readonly blocks: BlockRepository) {}
 
-  apply(batch: Batch, options?: ApplyOptions): Promise<void> {
-    return this.blocks.apply(batch, options);
+  apply(batch: Batch, options?: ApplyOptions): void {
+    this.blocks.apply(batch, options);
   }
 
-  getBlock(id: string): Promise<Block | undefined> {
+  getBlock(id: string): Block | undefined {
     return this.blocks.getBlock(id);
   }
 
-  getChildren(parentId: string): Promise<Block[]> {
+  getChildren(parentId: string): Block[] {
     return this.blocks.getChildren(parentId);
   }
 
-  listRootPages(): Promise<Block[]> {
+  listRootPages(): Block[] {
     return this.blocks.getChildren(null);
   }
 
-  loadTree(rootId: string): Promise<TreeNode | undefined> {
+  loadTree(rootId: string): TreeNode | undefined {
     return this.blocks.loadTree(rootId);
   }
 
-  getOwnedRoots(owner: Owner): Promise<Block[]> {
+  getOwnedRoots(owner: Owner): Block[] {
     return this.blocks.getOwnedRoots(owner);
   }
 
-  listIncomingReferences(targetId: string): Promise<Block[]> {
+  listIncomingReferences(targetId: string): Block[] {
     return this.blocks.listIncomingReferences(targetId);
   }
 
-  async resolveReference(referenceId: string, expansionPath: readonly string[]): Promise<ReferenceResolution> {
-    const reference = await this.blocks.getBlock(referenceId);
+  /** The root of a block's tree: a workspace root page or an owned root. */
+  rootOf(id: string): Block | undefined {
+    let current = this.blocks.getBlock(id);
+    while (current && current.parentId !== null) current = this.blocks.getBlock(current.parentId);
+    return current;
+  }
+
+  resolveReference(referenceId: string, expansionPath: readonly string[]): ReferenceResolution {
+    const reference = this.blocks.getBlock(referenceId);
     if (!reference) throw new Error(`Block ${referenceId} does not exist`);
     return resolveReference(reference, expansionPath, (id) => this.blocks.getBlock(id));
   }

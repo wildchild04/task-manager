@@ -24,7 +24,7 @@ Each kind is a `KindDefinition` object in `src/domain/tasks/kinds/`: its states,
 `TaskService.transition(taskId, name, { actor, note, input })` loads the task, finds the transition for the current state, validates `input` against the transition's schema, runs its effect, writes the new state and appends a history row, all in one unit of work. `promote` is a transition whose effect creates the work task, its body page and the `born_from` relation. Chore recurrence (in the chore change) will be an effect on `complete`.
 
 ### 3. A unit of work spans tasks and blocks
-A `UnitOfWork` port exposes `run(fn)`, where `fn` receives the block and task repositories bound to one transaction. In SQLite this is an outer better-sqlite3 transaction; repository `apply` calls inside it use better-sqlite3's nested transactions, which become savepoints. The in-memory implementation snapshots both stores and restores them if `fn` throws.
+The `UnitOfWork` port (introduced by `project-structure`, synchronous like every repository) exposes `run(fn)`, where `fn` receives the block and task repositories bound to one transaction. In SQLite this is an outer better-sqlite3 transaction; repository `apply` calls inside it use better-sqlite3's nested transactions, which become savepoints. The in-memory implementation snapshots both stores and restores them if `fn` throws.
 
 This requires the `block-data-model` repositories to accept being run inside an outer transaction. That doesn't change their spec, only how they're constructed, and is noted in that change's design.
 
@@ -45,8 +45,10 @@ There are only two structural types (`born_from`, `iterates_on`), which form the
 - *Modelling relations as `reference` blocks inside the body page:* rejected, because rules like "update must target done work" and "born_from only via promote" belong to the task domain, and lineage queries would have to parse page content.
 - *Specific types such as `inspired_by` (tombstoned targets only) and `supported_by` (pages only):* rejected in favour of one general type, since a tombstoned idea is just one of many things a new exploration or update can draw on. If a distinction is needed later, an optional label on `references` can add it without a new type.
 
-### 7. Lineage is computed on read
-A recursive CTE walks `born_from` and `iterates_on` backwards to the root exploration, then forwards to collect the tree. Lineages stay small (tens of tasks), so no materialized table is needed.
+### 7. Lineage is computed on read, in the service
+`TaskService.lineage` walks `born_from` and `iterates_on` backwards to the root, then forwards with indexed incoming-relation queries to collect the tree. Lineages stay small (tens of tasks), so no materialized table is needed.
+
+**Alternative considered:** a recursive CTE in the SQLite repository. Rejected during implementation: the in-memory repository would need a second implementation of the same walk, and with small lineages the service version costs a handful of indexed lookups.
 
 ### 8. Tables
 ```
@@ -56,6 +58,13 @@ task_relations(id, type, from_task_id, to_kind, to_id, created_at)
   indexes: tasks(project_id, kind, state), task_relations(from_task_id, type),
            task_relations(to_id, type)
 ```
+
+### 9. Details settled during implementation
+- **Caller-generated IDs everywhere.** `promote` takes `{ workId, title }`, like task creation takes `id`.
+- **`return`'s body update is scoped.** The batch may only touch blocks of that task's body page (blocks it inserts there count as inside). It's checked before applying; a batch reaching another page is rejected. The same check (`batchStaysWithin`) is reused by the comments change.
+- **Reference targets must exist when added.** A target deleted afterwards resolves as missing. Unknown entity kinds are rejected.
+- **Relations can be added only as `references`.** `addRelation("born_from" | "iterates_on", …)` is rejected; those come from `promote` and update creation. `removeRelation` rejects lineage relations.
+- **Referenceable kinds are wired in `composition.ts`** (`task`, `block`), next to the protection hooks and project resolvers, so later domains register in one place.
 
 ## Decisions captured for the kind-specific changes
 

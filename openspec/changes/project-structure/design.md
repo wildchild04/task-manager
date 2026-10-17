@@ -29,7 +29,15 @@ Task body pages are owned by their task (`task-core`), so the library contains o
 
 **Alternative considered:** storing the dashboard as blocks on the home page (Notion-style linked views). Rejected for now: you asked for a dashboard, not a configurable page, and stored views would need a view-definition model first. Placeable view blocks can come later as a new reference kind.
 
-### 4. Implementation order across changes
+### 4. Synchronous repositories and the unit of work arrive here
+Creating a project writes a project row and two owned root pages, which must commit together, so this change introduces the `UnitOfWork` port that `task-core` had planned (`src/domain/unit-of-work.ts`). better-sqlite3 transactions are synchronous and reject async callbacks, so all repository ports and domain services are synchronous: the block repository and `BlockService` were changed from `Promise`-returning to plain return values, with no behaviour change. The SQLite unit of work is one better-sqlite3 transaction (block batches nest as savepoints); the in-memory one snapshots every repository and restores them if the work throws.
+
+**Alternative considered:** keeping async ports and running `BEGIN`/`COMMIT` by hand around `await`s. Rejected: it only stays correct while no awaited call does real I/O, and another request's writes could otherwise land inside the open transaction.
+
+### 5. Project resolution for pages is a registry
+`LibraryService.projectOfPage` walks to the page's root and asks a resolver registered for the root's owner kind. `project` is registered here; `task-core` registers `task` (a task's project).
+
+### 6. Implementation order across changes
 Migrations run in the order `blocks`, `projects`, `tasks`, `comments`. The project entity and library are implemented before `task-core`; the dashboard sections that read tasks are implemented after `task-core` is applied. `tasks.md` is split accordingly.
 
 ## Risks / Trade-offs

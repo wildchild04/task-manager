@@ -6,8 +6,8 @@ import { services } from "../lib/services.server";
 import { useThemeMode } from "../theme-mode";
 import type { Route } from "./+types/shell";
 
-export async function loader() {
-  const pages = await services.blocks.listRootPages();
+export function loader() {
+  const pages = services.blocks.listRootPages();
   return { pages: pages.map((page) => ({ id: page.id, title: plainText(page.content) || "Untitled" })) };
 }
 
