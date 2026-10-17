@@ -1,5 +1,7 @@
 import type { BlockService } from "~/domain/blocks/block.service";
+import { plainText } from "~/domain/blocks/text";
 import type { Block, TreeNode } from "~/domain/blocks/types";
+import type { ProjectService } from "~/domain/projects/project.service";
 import { PROJECT_OWNER_KIND } from "~/domain/projects/types";
 
 import type { ContentBlockType, PageView, ReferenceView, ViewBlock } from "../blocks/view-model";
@@ -93,4 +95,38 @@ function buildChildrenView(blocks: BlockService, rootId: string): ViewBlock[] | 
   };
 
   return (tree.children ?? []).map((node) => viewOfNode(node, [], 0));
+}
+
+export type Crumb = { id: string; label: string; href?: string };
+
+/**
+ * Where a browsable page sits, outermost first, ending with the page itself
+ * (unlinked): the project and "Knowledge library" or its home, then the
+ * pages containing it. Empty for a top-level workspace page.
+ */
+export function pageTrail(blocks: BlockService, projects: ProjectService, pageId: string): Crumb[] {
+  const pages: Block[] = [];
+  for (let block = blocks.getBlock(pageId); block; block = block.parentId ? blocks.getBlock(block.parentId) : undefined) {
+    if (block.type === "page") pages.unshift(block);
+  }
+  const root = pages[0];
+  if (!root) return [];
+
+  const crumbs: Crumb[] = [];
+  let below = pages;
+  if (root.owner?.kind === PROJECT_OWNER_KIND) {
+    const project = projects.get(root.owner.id);
+    if (project) {
+      crumbs.push({ id: project.id, label: project.title || "Untitled", href: `/projects/${project.id}` });
+      if (root.id === project.libraryRootId) {
+        crumbs.push({ id: root.id, label: "Knowledge library", href: `/projects/${project.id}/library` });
+      }
+      // The home page is the project itself in the trail.
+      below = pages.slice(1);
+    }
+  }
+  crumbs.push(...below.map((page) => ({ id: page.id, label: plainText(page.content) || "Untitled", href: `/pages/${page.id}` })));
+  if (crumbs.length < 2) return [];
+  const { href: _current, ...last } = crumbs.at(-1)!;
+  return [...crumbs.slice(0, -1), last];
 }

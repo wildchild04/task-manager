@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { describeSchedule } from "../../app/lib/format";
 import { createDocumentAction, libraryView } from "../../app/lib/library.server";
-import { buildPageView } from "../../app/lib/page-view.server";
+import { buildPageView, pageTrail } from "../../app/lib/page-view.server";
 import { createProjectAction, projectHomeView, projectsHomeView } from "../../app/lib/projects.server";
 import { shellView } from "../../app/lib/shell.server";
 import { taskOverviewView } from "../../app/lib/task-overview.server";
@@ -267,6 +267,34 @@ describe("project screens", () => {
       expect(buildPageView(services.blocks, "doc")?.projectId).toBe("P");
       expect(buildPageView(services.blocks, services.projects.get("P")!.homePageId)?.projectId).toBe("P");
       expect(buildPageView(services.blocks, work("W").bodyPageId)).toBeUndefined();
+    });
+
+    it("builds the breadcrumb trail of library, home and workspace pages", () => {
+      const home = services.projects.get("P")!.homePageId;
+      services.blocks.apply([
+        { op: "insert", block: { id: "arch", type: "page", content: [{ text: "Architecture" }] }, parentId: libraryRoot() },
+        { op: "insert", block: { id: "tog", type: "toggle", content: [{ text: "More" }] }, parentId: "arch" },
+        { op: "insert", block: { id: "pers", type: "page", content: [{ text: "Persistence" }] }, parentId: "tog" },
+        { op: "insert", block: { id: "notes", type: "page", content: [{ text: "Notes" }] }, parentId: home },
+        { op: "insert", block: { id: "wp", type: "page", content: [{ text: "Welcome" }] }, parentId: null },
+        { op: "insert", block: { id: "sub", type: "page", content: [{ text: "Sub" }] }, parentId: "wp" },
+      ]);
+      const trail = (id: string) => pageTrail(services.blocks, services.projects, id);
+      expect(trail("pers")).toEqual([
+        { id: "P", label: "Taskhub", href: "/projects/P" },
+        { id: libraryRoot(), label: "Knowledge library", href: "/projects/P/library" },
+        { id: "arch", label: "Architecture", href: "/pages/arch" },
+        { id: "pers", label: "Persistence" },
+      ]);
+      expect(trail("notes")).toEqual([
+        { id: "P", label: "Taskhub", href: "/projects/P" },
+        { id: "notes", label: "Notes" },
+      ]);
+      expect(trail("sub")).toEqual([
+        { id: "wp", label: "Welcome", href: "/pages/wp" },
+        { id: "sub", label: "Sub" },
+      ]);
+      expect(trail("wp")).toEqual([]);
     });
   });
 

@@ -25,3 +25,7 @@
 - [x] 4.3 Comments section: list, add form, edit and delete dialogs, start exploration from a comment
 - [x] 4.4 Lineage, references (with add and remove) and history sections
 - [x] 4.5 Component rendering tests; typecheck, full test run, and a manual check over HTTP against the dev database
+
+## 5. Page breadcrumbs
+
+- [x] 5.1 Build a page's breadcrumb trail (project, library, containing pages) and show it on `/pages/:pageId` instead of the back link

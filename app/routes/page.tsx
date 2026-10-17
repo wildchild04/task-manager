@@ -1,19 +1,18 @@
-import { Link, Typography } from "@wildchild/design-system";
+import { Breadcrumbs, Stack, Typography } from "@wildchild/design-system";
 import { data, Link as RouterLink } from "react-router";
 
 import { Blocks } from "../blocks/block-view";
 import { RichText } from "../blocks/rich-text";
 import { plainText } from "../blocks/view-model";
 import { NotFound } from "../components/not-found";
-import { buildPageView } from "../lib/page-view.server";
+import { buildPageView, pageTrail } from "../lib/page-view.server";
 import { services } from "../lib/services.server";
 import type { Route } from "./+types/page";
 
 export function loader({ params }: Route.LoaderArgs) {
   const page = buildPageView(services.blocks, params.pageId);
-  if (!page) return data({ page: null, project: null }, { status: 404 });
-  const project = page.projectId ? services.projects.get(page.projectId) : undefined;
-  return { page, project: project ? { id: project.id, title: project.title || "Untitled" } : null };
+  if (!page) return data({ page: null, trail: [] }, { status: 404 });
+  return { page, trail: pageTrail(services.blocks, services.projects, page.id) };
 }
 
 export function meta({ data }: Route.MetaArgs) {
@@ -21,19 +20,23 @@ export function meta({ data }: Route.MetaArgs) {
 }
 
 export default function Page({ loaderData }: Route.ComponentProps) {
-  const { page, project } = loaderData;
+  const { page, trail } = loaderData;
   if (!page) return <NotFound />;
 
   return (
     <article>
-      {project && (
-        <Link component={RouterLink} to={`/projects/${project.id}`} variant="standalone">
-          ← {project.title}
-        </Link>
-      )}
-      <Typography variant="h1" gutterBottom>
-        {page.title.length > 0 ? <RichText value={page.title} /> : "Untitled"}
-      </Typography>
+      <Stack spacing={1}>
+        {trail.length > 0 && (
+          <Breadcrumbs
+            items={trail.map((crumb) =>
+              crumb.href ? { id: crumb.id, label: crumb.label, to: crumb.href, component: RouterLink } : crumb,
+            )}
+          />
+        )}
+        <Typography variant="h1" gutterBottom>
+          {page.title.length > 0 ? <RichText value={page.title} /> : "Untitled"}
+        </Typography>
+      </Stack>
       <Blocks blocks={page.blocks} />
     </article>
   );
