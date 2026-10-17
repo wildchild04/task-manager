@@ -10,10 +10,10 @@
 
 ## 2. Server
 
-- [ ] 2.1 `checkPageEdit` in the domain: scope inside the page's own content, no sub-page deletion, page block only retitled, no page/comment inserts
-- [ ] 2.2 `applyPageEdit` and the `intent=edit` action on `/pages/:pageId`, `/projects/:projectId` and `/tasks/:taskId`, with `shouldRevalidate` skipping edits and the shell revalidating on title changes; loaders send the editable tree and its version
-- [ ] 2.3 `pageDeletionInfo` and `deletePage` (deletable pages, nested page count, where to go next) with the `intent=delete-page` action
-- [ ] 2.4 Tests for edit scope rejections, retitling, and deletion targets
+- [x] 2.1 `checkPageEdit` in the domain: scope inside the page's own content, no sub-page deletion, page block only retitled, no page/comment inserts
+- [x] 2.2 `applyEdit` behind the `/api/edits` resource route (page, project home and task surfaces); loaders send the editable tree, its version and resolved references
+- [x] 2.3 `pageDeletionInfo` and `deletePage` (deletable pages, nested page count, where to go next) with the `intent=delete-page` action
+- [x] 2.4 Tests for edit scope rejections, retitling, and deletion targets
 
 ## 3. Editing loop in the browser (gate)
 

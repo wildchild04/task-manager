@@ -13,7 +13,7 @@ const MAX_REFERENCE_DEPTH = 5;
  * Which pages `/pages/:pageId` may open: workspace pages, and a project's home
  * page and library documents. Task bodies and comments are shown elsewhere.
  */
-function browsableScope(blocks: BlockService, block: Block): { projectId?: string } | undefined {
+export function browsableScope(blocks: BlockService, block: Block): { projectId?: string } | undefined {
   const owner = blocks.rootOf(block.id)?.owner;
   if (owner === null) return {};
   if (owner?.kind === PROJECT_OWNER_KIND) return { projectId: owner.id };

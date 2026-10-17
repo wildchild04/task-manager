@@ -1,18 +1,36 @@
 import { Breadcrumbs, Stack, Typography } from "@wildchild/design-system";
-import { data, Link as RouterLink } from "react-router";
+import { data, Link as RouterLink, redirect } from "react-router";
 
 import { Blocks } from "../blocks/block-view";
 import { RichText } from "../blocks/rich-text";
 import { plainText } from "../blocks/view-model";
 import { NotFound } from "../components/not-found";
+import { deletePage, editablePage, pageDeletion } from "../lib/page-edit.server";
 import { buildPageView, pageTrail } from "../lib/page-view.server";
 import { services } from "../lib/services.server";
 import type { Route } from "./+types/page";
 
 export function loader({ params }: Route.LoaderArgs) {
   const page = buildPageView(services.blocks, params.pageId);
-  if (!page) return data({ page: null, trail: [] }, { status: 404 });
-  return { page, trail: pageTrail(services.blocks, services.projects, page.id) };
+  if (!page) return data({ page: null, trail: [], editable: null, deletion: null }, { status: 404 });
+  return {
+    page,
+    trail: pageTrail(services.blocks, services.projects, page.id),
+    editable: editablePage(services, "page", page.id) ?? null,
+    deletion: pageDeletion(services, page.id) ?? null,
+  };
+}
+
+/**
+ * Deletes the page (`intent=delete-page`). It goes to the parent afterwards,
+ * unless `stay` is set (deleting from the navigation while another page is open).
+ */
+export async function action({ params, request }: Route.ActionArgs) {
+  const form = await request.formData();
+  if (form.get("intent") !== "delete-page") throw data(null, { status: 400 });
+  const deleted = deletePage(services, params.pageId);
+  if (!deleted) throw data(null, { status: 404 });
+  return form.get("stay") ? { ok: true as const, redirectTo: deleted.redirectTo } : redirect(deleted.redirectTo);
 }
 
 export function meta({ data }: Route.MetaArgs) {
