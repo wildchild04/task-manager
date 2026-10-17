@@ -4,9 +4,12 @@ import { TaskError } from "~/domain/tasks/errors";
 
 export type FieldErrors = Record<string, string>;
 
-/** What a create action returns: success, or the errors and the submitted values to show again. */
+/**
+ * What an action returns: success (with where to go next, when it created
+ * something to open), or the errors and the submitted values to show again.
+ */
 export type ActionResult =
-  | { ok: true; id: string }
+  | { ok: true; id: string; redirectTo?: string }
   | { ok: false; fieldErrors: FieldErrors; formError?: string; values: Record<string, string> };
 
 /** The submitted text fields, trimmed. */
@@ -25,11 +28,14 @@ export const invalid = (values: Record<string, string>, fieldErrors: FieldErrors
 
 /**
  * Turns a domain rejection into a form error. Validation problems are shown
- * on `field`; anything that isn't a domain error is a bug and is rethrown.
+ * on `field` (or the whole form when it is `null`); anything that isn't a
+ * domain error is a bug and is rethrown.
  */
-export function domainError(error: unknown, values: Record<string, string>, field = "title"): ActionResult {
+export function domainError(error: unknown, values: Record<string, string>, field: string | null = "title"): ActionResult {
   if (error instanceof TaskError || error instanceof ProjectError) {
-    return error.code === "validation" ? invalid(values, { [field]: error.message }) : invalid(values, {}, error.message);
+    return error.code === "validation" && field !== null
+      ? invalid(values, { [field]: error.message })
+      : invalid(values, {}, error.message);
   }
   if (error instanceof BatchError) return invalid(values, {}, error.error.message);
   throw error;

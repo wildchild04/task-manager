@@ -39,8 +39,18 @@ export function buildBodyView(blocks: BlockService, pageId: string): PageView | 
 }
 
 function buildTreeView(blocks: BlockService, page: Block): PageView | undefined {
-  const pageId = page.id;
-  const tree = blocks.loadTree(pageId);
+  const children = buildChildrenView(blocks, page.id);
+  return children && { id: page.id, title: page.content, blocks: children };
+}
+
+/** A comment's content, rendered like page content. */
+export function buildCommentView(blocks: BlockService, bodyBlockId: string): ViewBlock[] {
+  return buildChildrenView(blocks, bodyBlockId) ?? [];
+}
+
+/** The views of a root's children, with every reference resolved. */
+function buildChildrenView(blocks: BlockService, rootId: string): ViewBlock[] | undefined {
+  const tree = blocks.loadTree(rootId);
   if (!tree) return undefined;
 
   const resolve = (reference: Block, path: string[], depth: number): ReferenceView => {
@@ -82,9 +92,5 @@ function buildTreeView(blocks: BlockService, page: Block): PageView | undefined 
     }
   };
 
-  return {
-    id: page.id,
-    title: page.content,
-    blocks: (tree.children ?? []).map((node) => viewOfNode(node, [], 0)),
-  };
+  return (tree.children ?? []).map((node) => viewOfNode(node, [], 0));
 }
