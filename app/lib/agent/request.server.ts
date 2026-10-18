@@ -12,6 +12,7 @@ type Handler = (services: AppServices, actor: AgentActor, params: Record<string,
 const ROUTES: { method: "GET" | "POST"; path: string; handler: Handler }[] = [
   { method: "GET", path: "projects", handler: (s) => api.listProjects(s) },
   { method: "GET", path: "tasks", handler: (s, _a, _p, input) => api.listTasks(s, input) },
+  { method: "POST", path: "tasks", handler: (s, _a, _p, input) => api.createTask(s, input) },
   { method: "GET", path: "task/:id", handler: (s, a, p) => api.getTask(s, a, p.id!) },
   { method: "GET", path: "task/:id/description", handler: (s, _a, p, input) => api.readDescription(s, p.id!, input) },
   { method: "GET", path: "task/:id/comments", handler: (s, _a, p, input) => api.listComments(s, p.id!, input) },

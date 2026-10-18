@@ -4,6 +4,7 @@ import type { AppServices } from "~/composition";
 import { fromMarkdown, type MarkdownReader, type MarkdownWriter, toMarkdown } from "~/domain/blocks/markdown";
 import { plainText } from "~/domain/blocks/text";
 import type { Batch, TreeNode } from "~/domain/blocks/types";
+import { urgencySchema } from "~/domain/chores/schedule";
 import { TaskError } from "~/domain/tasks/errors";
 import { kinds } from "~/domain/tasks/kinds";
 import { TASK_KINDS, TASK_OWNER_KIND, type Actor, type TaskSummary } from "~/domain/tasks/types";
@@ -251,6 +252,57 @@ export function readPage(services: AppServices, id: string, input: unknown) {
 
 // ----- Writes -----
 
+const createBody = z.object({
+  project: z.string().min(1),
+  kind: z.enum(TASK_KINDS),
+  title: z.string(),
+  description: z.string().optional(),
+  urgency: urgencySchema.optional(),
+  schedule: z.unknown().optional(),
+  iteratesOn: z.string().optional(),
+});
+
+/** Creates a task as the web forms do, with an optional Markdown description. */
+export function createTask(services: AppServices, input: unknown) {
+  const body = parse(createBody, input);
+  const title = body.title.trim();
+  if (!title) throw new AgentError(422, "validation", "A task needs a title");
+  if (body.kind !== "chore" && (body.urgency || body.schedule !== undefined))
+    throw new AgentError(422, "validation", "Only chores take urgency and a schedule");
+  if (body.kind !== "update" && body.iteratesOn) throw new AgentError(422, "validation", "Only updates iterate on work");
+  if (body.kind === "update" && !body.iteratesOn)
+    throw new AgentError(422, "validation", "An update needs `iteratesOn`: the done work it iterates on");
+
+  const projectId = resolveId(
+    body.project,
+    services.projects.list().map((p) => p.id),
+    "project",
+  );
+  const iteratesOn = body.iteratesOn ? findTask(services, body.iteratesOn).id : undefined;
+  const blocks = body.description ? fromMarkdown(body.description, writer(services)) : [];
+  try {
+    const task = services.tasks.create({
+      id: crypto.randomUUID(),
+      projectId,
+      kind: body.kind,
+      title,
+      ...(iteratesOn ? { iteratesOn } : {}),
+      ...(body.kind === "chore"
+        ? {
+            attributes: {
+              urgency: body.urgency ?? "normal",
+              ...(body.schedule !== undefined ? { schedule: body.schedule } : {}),
+            },
+          }
+        : {}),
+    });
+    if (blocks.length > 0) appendBlocks(services, task.bodyPageId, blocks);
+    return { ok: true as const, id: short(task.id), state: task.state };
+  } catch (error) {
+    return toAgentError(error);
+  }
+}
+
 const transitionBody = z.object({ name: z.string().min(1), reason: z.string().optional() });
 
 export function transition(services: AppServices, actor: AgentActor, id: string, input: unknown) {
@@ -297,7 +349,12 @@ export function appendDescription(services: AppServices, actor: AgentActor, id: 
   checkHeld(services, task, actor);
   const blocks = fromMarkdown(markdown, writer(services));
   if (blocks.length === 0) throw new AgentError(422, "validation", "Nothing to add");
-  // Insert each new block (and its children) after the description's last block.
+  appendBlocks(services, task.bodyPageId, blocks);
+  return { ok: true as const };
+}
+
+/** Inserts blocks (and their children) after a page's last block. */
+function appendBlocks(services: AppServices, pageId: string, blocks: ReturnType<typeof fromMarkdown>) {
   const ops: Batch[number][] = [];
   const add = (list: typeof blocks, parentId: string, afterId: string | null) => {
     let previous = afterId;
@@ -307,10 +364,9 @@ export function appendDescription(services: AppServices, actor: AgentActor, id: 
       previous = block.id;
     }
   };
-  add(blocks, task.bodyPageId, services.blocks.getChildren(task.bodyPageId).at(-1)?.id ?? null);
+  add(blocks, pageId, services.blocks.getChildren(pageId).at(-1)?.id ?? null);
   try {
     services.blocks.apply(ops);
-    return { ok: true as const };
   } catch (error) {
     throw new AgentError(422, "validation", error instanceof Error ? error.message : "The description couldn't be changed");
   }

@@ -11,7 +11,10 @@ describe("agent API", () => {
 
   beforeEach(() => {
     clock = 0;
-    services = createInMemoryServices({ now: () => new Date(Date.UTC(2026, 9, 18, 8, 0, clock++)).toISOString() });
+    services = createInMemoryServices({
+      now: () => new Date(Date.UTC(2026, 9, 18, 8, 0, clock++)).toISOString(),
+      timeZone: "UTC",
+    });
     services.projects.create({ id: "proj0001-0000-0000-0000-000000000000", title: "Taskhub" });
   });
 
@@ -193,6 +196,61 @@ describe("agent API", () => {
 
     it("reports transitions not allowed from the state", async () => {
       expect((await call("POST", "task/aaaa0001/transition", { name: "complete" })).body.error.code).toBe("invalid_transition");
+    });
+  });
+
+  describe("creating tasks", () => {
+    it("creates work with a description, as the web forms do", async () => {
+      const { status, body } = await call(
+        "POST",
+        "tasks",
+        { project: "proj0001", kind: "work", title: "Add login", description: "Use **OAuth**" },
+        "planner",
+      );
+      expect(status).toBe(200);
+      expect(Object.keys(body).sort()).toEqual(["id", "ok", "state"]);
+      expect(body).toMatchObject({ ok: true, state: "todo" });
+      expect(services.tasks.list(P).map((t) => t.title)).toEqual(["Add login"]);
+      expect((await call("GET", `task/${body.id}/description`)).body.markdown).toBe("Use **OAuth**");
+    });
+
+    it("creates a scheduled chore due at its next time", async () => {
+      const { body } = await call("POST", "tasks", {
+        project: P,
+        kind: "chore",
+        title: "Back up the database",
+        urgency: "normal",
+        schedule: { type: "frequency", every: "weekly", weekday: 1, time: "09:00" },
+      });
+      const chore = services.tasks.list(P).find((t) => t.kind === "chore")!;
+      expect(body).toMatchObject({ ok: true, id: chore.id.slice(0, 8), state: "todo" });
+      // 18 Oct 2026 is a Sunday; the workspace time zone here is UTC.
+      expect(chore.attributes).toMatchObject({ urgency: "normal", dueAt: "2026-10-19T09:00:00.000Z" });
+    });
+
+    it("creates an update only from done work", async () => {
+      work("work0001-0000-0000-0000-000000000000", "Search");
+      const refused = await call("POST", "tasks", { project: P, kind: "update", title: "Faster search", iteratesOn: "work0001" });
+      expect(refused).toMatchObject({ status: 422, body: { error: { code: "validation" } } });
+      expect(services.tasks.list(P)).toHaveLength(1);
+      services.tasks.transition("work0001-0000-0000-0000-000000000000", "start");
+      services.tasks.transition("work0001-0000-0000-0000-000000000000", "complete");
+      const created = await call("POST", "tasks", { project: P, kind: "update", title: "Faster search", iteratesOn: "work0001" });
+      expect(created.body).toMatchObject({ ok: true, state: "open" });
+    });
+
+    it.each([
+      [{ kind: "work", title: "  " }, 422, "validation"],
+      [{ kind: "epic", title: "X" }, 400, "bad_request"],
+      [{ kind: "work", title: "X", urgency: "urgent" }, 422, "validation"],
+      [{ kind: "chore", title: "X", schedule: { type: "time", time: "25:00" } }, 422, "validation"],
+      [{ kind: "exploration", title: "X", iteratesOn: "work0001" }, 422, "validation"],
+      [{ kind: "update", title: "X" }, 422, "validation"],
+      [{ kind: "work", title: "X", project: "nope0000" }, 404, "not_found"],
+    ])("refuses %j", async (fields, status, code) => {
+      const response = await call("POST", "tasks", { project: P, ...fields });
+      expect(response).toMatchObject({ status, body: { error: { code } } });
+      expect(services.tasks.list(P)).toHaveLength(0);
     });
   });
 

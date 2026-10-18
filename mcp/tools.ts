@@ -62,6 +62,29 @@ export function createAgentServer(call: AgentCall): McpServer {
   );
 
   server.registerTool(
+    "create_task",
+    {
+      description:
+        "Create a task in a project, in its kind's first state. `description` is Markdown (same as `comment`). Chores take `urgency` and `schedule`; updates take `iteratesOn` (a done work task). Returns { ok, id, state }.",
+      inputSchema: {
+        project: z.string().describe("Project ID from list_projects"),
+        kind: z.enum(["exploration", "update", "work", "chore"]),
+        title: z.string(),
+        description: z.string().optional().describe("The task's description, in Markdown"),
+        urgency: z.enum(["normal", "urgent"]).optional().describe("Chores only (default normal)"),
+        schedule: z
+          .record(z.string(), z.unknown())
+          .optional()
+          .describe(
+            'Chores only. One of: { type: "time", time: "HH:mm" }, { type: "date", date: "YYYY-MM-DD", time }, { type: "timer", minutes }, { type: "frequency", every: "daily" | "weekly" | "monthly", time, weekday? (1 = Monday, weekly), dayOfMonth? (monthly) }, { type: "interval", amount, unit: "minutes" | "hours" | "days" | "weeks" }',
+          ),
+        iteratesOn: z.string().optional().describe("Updates only: the done work task's ID"),
+      },
+    },
+    (input) => run(call, "POST", "tasks", input),
+  );
+
+  server.registerTool(
     "get_task",
     {
       description:

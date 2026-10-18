@@ -32,6 +32,7 @@ Run it by hand with `npm run mcp` (the three variables must be set).
 |---|---|
 | `list_projects` | `[{ id, title }]` |
 | `list_tasks` | Filter by `project`, `kind`, `state`, `query`; `limit` (default 10), `cursor` |
+| `create_task` | A task of any kind in a project, with a Markdown `description`; chores take `urgency` and `schedule`, updates `iteratesOn` |
 | `get_task` | Summary: state, `transitions` you may apply now, `heldBy`, counts |
 | `read_description` | The description as Markdown; `maxChars` (default 2000), `offset` |
 | `list_comments` | Newest first; `limit` (default 5), `cursor`, `maxChars` per comment (default 1000) |
