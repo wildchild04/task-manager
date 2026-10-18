@@ -72,15 +72,20 @@ const EditorBlock = memo(function EditorBlock(props: BlockProps) {
   const text = <EditableText block={block} />;
 
   switch (block.type) {
-    case "paragraph":
+    case "paragraph": {
+      const inToggle = block.parentId !== null && state.blocks[block.parentId]?.type === "toggle";
       return (
         <div className="editor-block">
           <Typography>
-            <EditableText block={block} placeholder="Write, or type # for a heading, - for a list, [] for a todo" />
+            <EditableText
+              block={block}
+              placeholder={inToggle ? "Inside the toggle. Write, or type / for blocks" : "Write, or type / for blocks"}
+            />
           </Typography>
           {children}
         </div>
       );
+    }
     case "heading":
       return (
         <div className="editor-block">
@@ -119,7 +124,7 @@ const EditorBlock = memo(function EditorBlock(props: BlockProps) {
     case "toggle": {
       const open = !closed.has(block.id);
       return (
-        <div className="editor-block">
+        <div className="editor-block editor-toggle">
           <div className="editor-row">
             <span contentEditable={false} className="editor-gutter">
               <IconButton

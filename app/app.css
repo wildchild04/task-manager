@@ -93,3 +93,23 @@ body {
   cursor: text;
   padding: 4px 0;
 }
+
+/* A toggle's contents hang off a guide line; while the caret is in the toggle, the whole toggle is highlighted. */
+.editor-toggle {
+  border-radius: 6px;
+  transition: background-color 120ms;
+}
+
+.editor-toggle > .editor-gutter-children {
+  margin-inline-start: 17px;
+  padding-inline-start: 21px;
+  border-inline-start: 2px solid color-mix(in srgb, currentColor 15%, transparent);
+}
+
+.editor-toggle:focus-within {
+  background: color-mix(in srgb, currentColor 5%, transparent);
+}
+
+.editor-toggle:focus-within > .editor-gutter-children {
+  border-inline-start-color: color-mix(in srgb, currentColor 40%, transparent);
+}
