@@ -626,8 +626,37 @@ export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; 
       else window.open(link.href, "_blank", "noopener,noreferrer");
     };
 
+    // Hovering a link says where it goes: the URL, or the page's name for links to app pages (looked up once).
+    const pageNames = new Map<string, string>();
+    const onMouseOver = (event: MouseEvent) => {
+      const link = (event.target as HTMLElement).closest<HTMLAnchorElement>(".editable a[href]");
+      if (!link || !root.contains(link) || link.title) return;
+      const hint = "Click to open · Ctrl+K to edit";
+      const pageId = link.origin === window.location.origin ? /^\/pages\/([^/?#]+)$/.exec(link.pathname)?.[1] : undefined;
+      if (!pageId) {
+        link.title = `${link.href} · ${hint}`;
+        return;
+      }
+      const known = pageNames.get(pageId);
+      if (known) {
+        link.title = `${known} · ${hint}`;
+        return;
+      }
+      link.title = `${link.pathname} · ${hint}`;
+      fetch(`/api/pages?id=${encodeURIComponent(pageId)}`)
+        .then((response) => response.json() as Promise<{ pages: PageMatch[] }>)
+        .then(({ pages }) => {
+          const page = pages[0];
+          const name = page ? `${page.title} (${page.place})` : "A page that no longer exists";
+          pageNames.set(pageId, name);
+          link.title = `${name} · ${hint}`;
+        })
+        .catch(() => {});
+    };
+
     document.addEventListener("selectionchange", onSelectionChange);
     root.addEventListener("click", onClick);
+    root.addEventListener("mouseover", onMouseOver);
     root.addEventListener("beforeinput", onBeforeInput);
     root.addEventListener("keydown", onKeyDown);
     root.addEventListener("compositionstart", onCompositionStart);
@@ -635,6 +664,7 @@ export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; 
     return () => {
       document.removeEventListener("selectionchange", onSelectionChange);
       root.removeEventListener("click", onClick);
+      root.removeEventListener("mouseover", onMouseOver);
       root.removeEventListener("beforeinput", onBeforeInput);
       root.removeEventListener("keydown", onKeyDown);
       root.removeEventListener("compositionstart", onCompositionStart);
