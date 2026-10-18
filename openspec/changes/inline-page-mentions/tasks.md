@@ -11,6 +11,6 @@
 ## 3. Editing
 
 - [ ] 3.1 `normalize`/`slice` keep mention spans whole; `insertMention` command; paste strips U+FFFC; tests including undo
-- [ ] 3.2 `GET /api/pages?q=` page search with place, tests
+- [ ] 3.2 Reuse `GET /api/pages?q=` (added by `block-editor-v0` for page links) for the `@` menu
 - [ ] 3.3 Generalize the slash menu into an inline menu with command and page sources; the `@` menu with debounced search, paging, empty state
 - [ ] 3.4 Headless check: insert, arrows over, Backspace/Delete, split/merge around a mention, rename and delete of the mentioned page; typecheck and full test run

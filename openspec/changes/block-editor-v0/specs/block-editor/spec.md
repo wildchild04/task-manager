@@ -35,11 +35,15 @@ Each block type SHALL declare, in one place, whether it holds text and what Ente
 - **THEN** a new paragraph follows the heading and holds the caret
 
 ### Requirement: Editing text and marks
-Typing, deleting and replacing selected text SHALL change the block's rich text at the caret, keeping the marks of the text around it. Cmd/Ctrl+B, I, U, Shift+S and E SHALL toggle bold, italic, underline, strikethrough and inline code on the selected text; Cmd/Ctrl+K SHALL ask for a URL and add a link to the selected text, or remove the link if the selection is a link. Text typed at the end of a marked span SHALL continue with the same marks, except links.
+Typing, deleting and replacing selected text SHALL change the block's rich text at the caret, keeping the marks of the text around it. Cmd/Ctrl+B, I, U, Shift+S and E SHALL toggle bold, italic, underline, strikethrough and inline code on the selected text; Cmd/Ctrl+K SHALL ask for a URL (focused, saved with Enter) and add a link to the selected text, or remove it when the URL is left empty; a URL without a scheme SHALL get `https://`. Typing `@` in that field SHALL list the workspace's pages and library documents matching the text after it, with their place, and choosing one SHALL link the text to that page (`/pages/:pageId`). Clicking a link in the editor SHALL open an app page in the same tab and any other URL in a new tab. Text typed at the end of a marked span SHALL continue with the same marks, except links.
 
 #### Scenario: Bold a word
 - **WHEN** a word is selected and Cmd/Ctrl+B is pressed
 - **THEN** the word is bold, the rest of the text is unchanged, and the change is saved
+
+#### Scenario: Link to a page
+- **WHEN** a word is selected, Cmd/Ctrl+K is pressed, "@Archi" is typed and Enter is pressed
+- **THEN** the word links to the "Architecture" document, and clicking it opens that document in the same tab
 
 #### Scenario: Accented input
 - **WHEN** "é" is typed with a dead key or input method

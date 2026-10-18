@@ -1,7 +1,7 @@
 import { Alert, createAppTheme, Dialog, InlineCommandMenu, Stack, TextField, Typography } from "@wildchild/design-system";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { useBlocker, useRevalidator } from "react-router";
+import { useBlocker, useNavigate, useRevalidator } from "react-router";
 
 import type { Operation } from "~/domain/blocks/types";
 import { behaviorOf, matchSlashCommands, type SlashCommand } from "~/editor/block-types";
@@ -106,16 +106,65 @@ export function normalizeHref(value: string): string {
   return `https://${href}`;
 }
 
-/** Asks for a link's URL; an empty URL removes the link. */
+type PageMatch = { id: string; title: string; place: string };
+
+/** Pages matching `query`, fetched as the user types (debounced; stale answers are dropped). */
+function usePageSearch(query: string | null): PageMatch[] | null {
+  const [pages, setPages] = useState<PageMatch[] | null>(null);
+  useEffect(() => {
+    if (query === null) return setPages(null);
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      fetch(`/api/pages?q=${encodeURIComponent(query)}`, { signal: controller.signal })
+        .then((response) => response.json() as Promise<{ pages: PageMatch[] }>)
+        .then((body) => setPages(body.pages))
+        .catch(() => {});
+    }, 150);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query]);
+  return pages;
+}
+
+/** How many pages the link dialog suggests at a time. */
+const PAGE_SUGGESTIONS = 5;
+
+/**
+ * Asks for a link's URL; an empty URL removes the link. Typing `@` lists the
+ * workspace's pages instead: choosing one links to it and saves at once.
+ */
 function LinkDialog({ initial, onDone }: { initial: string; onDone: (href: string | null | undefined) => void }) {
   const [href, setHref] = useState(initial);
+  const [active, setActive] = useState(0);
   const field = useRef<HTMLDivElement>(null);
   // The dialog moves focus into itself when it opens; focus the field just after.
   useEffect(() => {
     const timer = setTimeout(() => field.current?.querySelector("input")?.focus(), 0);
     return () => clearTimeout(timer);
   }, []);
-  const save = () => onDone(href.trim() ? normalizeHref(href) : null);
+
+  const query = href.startsWith("@") ? href.slice(1) : null;
+  const pages = usePageSearch(query)?.slice(0, PAGE_SUGGESTIONS) ?? [];
+  const suggesting = query !== null;
+  useEffect(() => setActive(0), [query]);
+
+  const choose = (page: PageMatch) => onDone(`/pages/${page.id}`);
+  const save = () => {
+    if (suggesting) {
+      const page = pages[active];
+      if (page) choose(page);
+      return;
+    }
+    onDone(href.trim() ? normalizeHref(href) : null);
+  };
+  // The suggestions sit under the field; measured once when they open (a new rect every render would re-place the menu forever).
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  useLayoutEffect(() => {
+    setAnchor(suggesting ? (field.current?.querySelector("input")?.getBoundingClientRect() ?? null) : null);
+  }, [suggesting]);
+
   return (
     <Dialog
       open
@@ -124,12 +173,16 @@ function LinkDialog({ initial, onDone }: { initial: string; onDone: (href: strin
       maxWidth="sm"
       fullWidth
       cancelAction={{ label: "Cancel", onClick: () => onDone(undefined) }}
-      confirmAction={{ label: href.trim() ? "Save link" : "Remove link", onClick: save }}
+      confirmAction={{
+        label: suggesting ? "Link to page" : href.trim() ? "Save link" : "Remove link",
+        onClick: save,
+        disabled: suggesting && pages.length === 0,
+      }}
     >
       <div className="dialog-fields">
         <TextField
           ref={field}
-          label="URL"
+          label="URL or @page"
           fullWidth
           value={href}
           onChange={(event) => setHref(event.target.value)}
@@ -137,12 +190,28 @@ function LinkDialog({ initial, onDone }: { initial: string; onDone: (href: strin
             if (event.key === "Enter") {
               event.preventDefault();
               save();
+            } else if (suggesting && (event.key === "ArrowDown" || event.key === "ArrowUp") && pages.length > 0) {
+              event.preventDefault();
+              setActive((index) => (index + (event.key === "ArrowDown" ? 1 : -1) + pages.length) % pages.length);
             }
           }}
           placeholder="https://"
-          helperText="Enter to save. Leave empty to remove the link."
+          helperText={suggesting ? "Choose a page with ↑ ↓ and Enter." : "Enter to save. Type @ to link to a page. Leave empty to remove the link."}
         />
       </div>
+      <InlineCommandMenu
+        open={suggesting}
+        anchorRect={anchor}
+        ariaLabel="Pages"
+        options={pages.map((page) => ({ value: page.id, label: page.title, description: page.place }))}
+        activeValue={pages[active]?.id ?? null}
+        onActiveValueChange={(id) => setActive(Math.max(0, pages.findIndex((page) => page.id === id)))}
+        onSelect={(id) => {
+          const page = pages.find((p) => p.id === id);
+          if (page) choose(page);
+        }}
+        emptyText="No page matches"
+      />
     </Dialog>
   );
 }
@@ -158,6 +227,9 @@ export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; 
   const { mode } = useThemeMode();
   const linkColor = useMemo(() => createAppTheme(mode).palette.primary.main, [mode]);
   const revalidator = useRevalidator();
+  const navigate = useNavigate();
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
   const knownVersion = useRef(page.version);
   const restoreSelection = useRef(false);
   const composing = useRef(false);
@@ -517,12 +589,13 @@ export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; 
 
     applySlashRef.current = applySlash;
 
-    // Browsers don't follow links inside editable text; a click opens the link in a new tab.
+    // Browsers don't follow links inside editable text: links to app pages open here, others in a new tab.
     const onClick = (event: MouseEvent) => {
       const link = (event.target as HTMLElement).closest<HTMLAnchorElement>(".editable a[href]");
       if (!link || !root.contains(link)) return;
       event.preventDefault();
-      window.open(link.href, "_blank", "noopener,noreferrer");
+      if (link.origin === window.location.origin) void navigateRef.current(link.pathname + link.search + link.hash);
+      else window.open(link.href, "_blank", "noopener,noreferrer");
     };
 
     document.addEventListener("selectionchange", onSelectionChange);

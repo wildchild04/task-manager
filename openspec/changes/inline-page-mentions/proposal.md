@@ -7,7 +7,7 @@ Links can point at web pages, but there is no good way to point at another page 
 - **Mentions in rich text:** a new kind of span that points at a page by ID instead of holding text. It counts as one character, so splitting, merging, deleting and undo treat it as a single unit. It is allowed in block text, not in page titles.
 - **Rendering:** a mention shows the page's current title as a link that opens the page in the app (same tab). A mention of a deleted page shows as a missing page. Read-only views and the editor render it the same way.
 - **`@` menu in the editor:** typing `@` at the start of a block or after a space opens the design system's `InlineCommandMenu` with the workspace's pages (workspace pages and library documents, with their project), filtered as you type, five per page with the same keys as the slash menu. Enter inserts the mention followed by a space; Escape closes and keeps the text.
-- **Page search** for the menu: a small endpoint returning pages whose title matches, with the page's place (project and parent) to tell same-named pages apart.
+- **Page search** for the menu: the `/api/pages` endpoint added by `block-editor-v0` for linking to pages, which returns pages whose title matches with their place (project and parent).
 
 ## Capabilities
 
@@ -39,5 +39,4 @@ None: `InlineCommandMenu` is in `@wildchild/design-system` v0.5.0.
 - `src/domain/blocks`: rich-text schema and validation (mention spans, target check, not in titles); `plainText` renders a mention as `@` followed by nothing (titles can't hold mentions).
 - `src/editor`: rich-text helpers keep mention spans whole; a `mention` command.
 - `app/blocks` and `app/editor`: mention rendering (read-only and editable), the `@` menu, caret handling around the non-editable mention element.
-- A `/api/pages` resource route for page search.
 - No database migration: mentions live inside the existing content JSON.
