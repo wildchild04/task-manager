@@ -29,7 +29,7 @@ Children of any block SHALL be rendered nested under it.
 - **THEN** the items are numbered 1, 2 and then 1
 
 ### Requirement: Rich text marks
-Text SHALL be rendered with its marks: bold, italic, underline, strikethrough, inline code, and links (which open their `href`). A mention SHALL be rendered inline as the mentioned page's current title, linking to `/pages/:pageId` in the app, with its marks; a mention of a page that no longer exists SHALL be rendered as a "missing page" marker that links nowhere.
+Text SHALL be rendered with its marks: bold, italic, underline, strikethrough, inline code, and links (which open their `href`). A mention SHALL be rendered inline as the mentioned page's current title, linking to `/pages/:pageId` in the app, with its marks; a mention of a task (which points at the task's description page) SHALL show the task's current title and link to `/tasks/:taskId`; a mention of a page that no longer exists SHALL be rendered as a "missing page" marker that links nowhere.
 
 #### Scenario: Marks are visible
 - **WHEN** a paragraph contains a bold span and a link span
@@ -42,6 +42,10 @@ Text SHALL be rendered with its marks: bold, italic, underline, strikethrough, i
 #### Scenario: Mention of a deleted page
 - **WHEN** a paragraph mentions a page that is then deleted
 - **THEN** the paragraph shows a missing-page marker in its place
+
+#### Scenario: Mention of a task
+- **WHEN** a paragraph mentions the work task "Add login", which is then renamed "Add passkey login"
+- **THEN** the paragraph shows "Add passkey login", linking to the task's page
 
 ### Requirement: References
 A `reference` block SHALL be resolved on the server with the page's expansion path. A reference to a page SHALL render as a link to that page; a reference to another block SHALL render that block's content inline; a missing target SHALL render as a "missing reference" notice; a cycle SHALL render as a "circular reference" notice instead of expanding.
