@@ -122,3 +122,8 @@ body {
 .editor-toggle:focus-within > .editor-gutter-children {
   border-inline-start-color: color-mix(in srgb, currentColor 40%, transparent);
 }
+
+/* Dialog content has no top padding after its title, which clips a first field's floating label. */
+.dialog-fields {
+  padding-top: 8px;
+}

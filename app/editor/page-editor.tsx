@@ -100,6 +100,13 @@ function turnPage(editor: Editor, menu: SlashMenu, step: number): SlashMenu {
 /** Asks for a link's URL; an empty URL removes the link. */
 function LinkDialog({ initial, onDone }: { initial: string; onDone: (href: string | null | undefined) => void }) {
   const [href, setHref] = useState(initial);
+  const field = useRef<HTMLDivElement>(null);
+  // The dialog moves focus into itself when it opens; focus the field just after.
+  useEffect(() => {
+    const timer = setTimeout(() => field.current?.querySelector("input")?.focus(), 0);
+    return () => clearTimeout(timer);
+  }, []);
+  const save = () => onDone(href.trim() || null);
   return (
     <Dialog
       open
@@ -108,16 +115,25 @@ function LinkDialog({ initial, onDone }: { initial: string; onDone: (href: strin
       maxWidth="sm"
       fullWidth
       cancelAction={{ label: "Cancel", onClick: () => onDone(undefined) }}
-      confirmAction={{ label: href.trim() ? "Save link" : "Remove link", onClick: () => onDone(href.trim() || null) }}
+      confirmAction={{ label: href.trim() ? "Save link" : "Remove link", onClick: save }}
     >
-      <TextField
-        label="URL"
-        fullWidth
-        value={href}
-        onChange={(event) => setHref(event.target.value)}
-        placeholder="https://"
-        helperText="Leave empty to remove the link."
-      />
+      <div className="dialog-fields">
+        <TextField
+          ref={field}
+          label="URL"
+          fullWidth
+          value={href}
+          onChange={(event) => setHref(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              save();
+            }
+          }}
+          placeholder="https://"
+          helperText="Enter to save. Leave empty to remove the link."
+        />
+      </div>
     </Dialog>
   );
 }

@@ -49,7 +49,7 @@ export function FormDialog({
         onClick: () => formRef.current?.requestSubmit(),
       }}
     >
-      <fetcher.Form method="post" ref={formRef}>
+      <fetcher.Form method="post" ref={formRef} className="dialog-fields">
         <Stack spacing={2}>
           {result && !result.ok && result.formError && (
             <Alert severity="error" role="alert">
