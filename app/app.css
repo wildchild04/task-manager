@@ -123,7 +123,10 @@ body {
   border-inline-start-color: color-mix(in srgb, currentColor 40%, transparent);
 }
 
-/* Dialog content has no top padding after its title, which clips a first field's floating label. */
+/*
+ * The design system's Dialog (v0.5.2) only makes room for a floating label when a field is its
+ * direct child; a FormDialog's fields sit inside a <form>, so it still needs this.
+ */
 .dialog-fields {
   padding-top: 8px;
 }

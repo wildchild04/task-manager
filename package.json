@@ -19,7 +19,7 @@
     "@mui/x-date-pickers": "^8.29.5",
     "@react-router/node": "^7.18.4",
     "@react-router/serve": "^7.18.4",
-    "@wildchild/design-system": "github:wildchild04/Wildchild-Design-System#v0.5.1",
+    "@wildchild/design-system": "github:wildchild04/Wildchild-Design-System#v0.5.2",
     "better-sqlite3": "^13.0.3",
     "dayjs": "^1.11.23",
     "isbot": "^5.2.2",

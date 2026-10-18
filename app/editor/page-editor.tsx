@@ -69,7 +69,10 @@ type SlashItem = { value: string; label: string; description?: string; command?:
  * The rows of the slash menu's current page, or `null` when the menu should
  * close. A changed filter starts again from the first page.
  */
-function slashMatches(editor: Editor, menu: SlashMenu): { query: string; commands: SlashItem[]; page: number; pages: number } | null {
+function slashMatches(
+  editor: Editor,
+  menu: SlashMenu,
+): { query: string; commands: SlashItem[]; page: number; pages: number } | null {
   const block = editor.state.blocks[menu.blockId];
   const { selection } = editor;
   if (!block || selection.blockId !== menu.blockId || selection.focus <= menu.start) return null;
@@ -199,33 +202,42 @@ function LinkDialog({ initial, onDone }: { initial: string; onDone: (href: strin
         disabled: suggesting && pages.length === 0,
       }}
     >
-      <div className="dialog-fields">
-        <TextField
-          ref={field}
-          label="URL or @page"
-          fullWidth
-          value={href}
-          onChange={(event) => setHref(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              save();
-            } else if (suggesting && (event.key === "ArrowDown" || event.key === "ArrowUp") && pages.length > 0) {
-              event.preventDefault();
-              setActive((index) => (index + (event.key === "ArrowDown" ? 1 : -1) + pages.length) % pages.length);
-            }
-          }}
-          placeholder="https://"
-          helperText={suggesting ? "Choose a page with ↑ ↓ and Enter." : "Enter to save. Type @ to link to a page. Leave empty to remove the link."}
-        />
-      </div>
+      <TextField
+        ref={field}
+        label="URL or @page"
+        fullWidth
+        value={href}
+        onChange={(event) => setHref(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            save();
+          } else if (suggesting && (event.key === "ArrowDown" || event.key === "ArrowUp") && pages.length > 0) {
+            event.preventDefault();
+            setActive((index) => (index + (event.key === "ArrowDown" ? 1 : -1) + pages.length) % pages.length);
+          }
+        }}
+        placeholder="https://"
+        helperText={
+          suggesting
+            ? "Choose a page with ↑ ↓ and Enter."
+            : "Enter to save. Type @ to link to a page. Leave empty to remove the link."
+        }
+      />
       <InlineCommandMenu
         open={suggesting}
         anchorRect={anchor}
         ariaLabel="Pages"
         options={pages.map((page) => ({ value: page.id, label: page.title, description: page.place }))}
         activeValue={pages[active]?.id ?? null}
-        onActiveValueChange={(id) => setActive(Math.max(0, pages.findIndex((page) => page.id === id)))}
+        onActiveValueChange={(id) =>
+          setActive(
+            Math.max(
+              0,
+              pages.findIndex((page) => page.id === id),
+            ),
+          )
+        }
         onSelect={(id) => {
           const page = pages.find((p) => p.id === id);
           if (page) choose(page);
@@ -327,7 +339,9 @@ export function PageEditor({
 
   // ----- Leaving with unsaved edits -----
 
-  const blocker = useBlocker(({ currentLocation, nextLocation }) => queue.dirty && currentLocation.pathname !== nextLocation.pathname);
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) => queue.dirty && currentLocation.pathname !== nextLocation.pathname,
+  );
   useEffect(() => {
     if (blocker.state !== "blocked") return;
     queue.flush();
@@ -693,7 +707,8 @@ export function PageEditor({
     const element = editableOf(rootRef.current, slash.blockId);
     if (!element) return;
     element.setAttribute("aria-controls", SLASH_MENU_ID);
-    if (slash.active) element.setAttribute("aria-activedescendant", `${SLASH_MENU_ID}-option-${encodeURIComponent(slash.active)}`);
+    if (slash.active)
+      element.setAttribute("aria-activedescendant", `${SLASH_MENU_ID}-option-${encodeURIComponent(slash.active)}`);
     return () => {
       element.removeAttribute("aria-controls");
       element.removeAttribute("aria-activedescendant");

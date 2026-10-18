@@ -33,7 +33,7 @@ context: |
   the format of the existing files there (Status, Problem, Request, use case, Suggested API,
   Proposed Types, Requirements, Acceptance Criteria, Storybook Coverage, Tests, MCP
   Documentation). Bugs in the design system (broken behaviour, not missing features) are
-  Markdown files in ~/dev/design-system/docs/bugs/<name>.md following the existing bug reports
+  Markdown files in ~/dev/design-system/bugs/<name>.md following the existing bug reports
   there. Not GitHub issues.
 
 rules:
