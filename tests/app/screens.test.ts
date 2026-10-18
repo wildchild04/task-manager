@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { describeSchedule } from "../../app/lib/format";
 import { createDocumentAction, libraryView } from "../../app/lib/library.server";
 import { buildPageView, pageTrail } from "../../app/lib/page-view.server";
-import { createProjectAction, projectHomeView, projectsHomeView } from "../../app/lib/projects.server";
+import { homeView } from "../../app/lib/home.server";
+import { createProjectAction, projectHomeView } from "../../app/lib/projects.server";
 import { shellView } from "../../app/lib/shell.server";
 import { taskOverviewView } from "../../app/lib/task-overview.server";
 import { createTaskAction, scheduleFromForm, taskListView } from "../../app/lib/task-lists.server";
@@ -32,7 +33,7 @@ describe("project screens", () => {
     it("creates a project and lists it", () => {
       const result = createProjectAction(services, form({ title: "Garden" }));
       expect(result).toMatchObject({ ok: true });
-      expect(projectsHomeView(services).projects.map((p) => p.title)).toEqual(["Taskhub", "Garden"]);
+      expect(homeView(services).projects.map((p) => p.title)).toEqual(["Taskhub", "Garden"]);
     });
 
     it("rejects an empty title, keeping the input", () => {

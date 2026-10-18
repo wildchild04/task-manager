@@ -6,14 +6,6 @@ import { formatDateTime, stateColor, stateLabel } from "./format";
 import { type ActionResult, domainError, formValues, invalid } from "./forms.server";
 import { buildPageView } from "./page-view.server";
 
-export type ProjectsHomeView = { projects: { id: string; title: string; createdAt: string }[] };
-
-export function projectsHomeView(services: AppServices): ProjectsHomeView {
-  return {
-    projects: services.projects.list().map((p) => ({ id: p.id, title: p.title || "Untitled", createdAt: p.createdAt })),
-  };
-}
-
 /** Creates a project from the `title` field. */
 export function createProjectAction(services: AppServices, formData: FormData): ActionResult {
   const values = formValues(formData);
