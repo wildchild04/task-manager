@@ -1,7 +1,7 @@
 ## 1. Markdown
 
-- [ ] 1.1 `toMarkdown`: every block type, nesting, marks, mentions, references; tests
-- [ ] 1.2 `fromMarkdown`: paragraphs, headings, lists, todos, quotes, dividers, marks, links, mentions (resolved or plain); round-trip tests
+- [x] 1.1 `toMarkdown`: every block type, nesting, marks, mentions, references; tests
+- [x] 1.2 `fromMarkdown`: paragraphs, headings, lists, todos, quotes, dividers, marks, links, mentions (resolved or plain); round-trip tests
 
 ## 2. Agent API
 
