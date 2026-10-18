@@ -32,6 +32,8 @@ export interface RowStore {
   treeRows(rootId: string): BlockRow[];
   ownedRoots(kind: string, id: string): BlockRow[];
   referencesTo(targetId: string): BlockRow[];
+  /** Rows whose content has a mention of the page. */
+  mentioning(pageId: string): BlockRow[];
   insert(row: BlockRow): void;
   update(id: string, patch: Partial<Omit<BlockRow, "id">>): void;
   delete(ids: readonly string[]): void;

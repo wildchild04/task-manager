@@ -34,6 +34,10 @@ export class BlockService {
     return this.blocks.listIncomingReferences(targetId);
   }
 
+  listMentioning(pageId: string): Block[] {
+    return this.blocks.listMentioning(pageId);
+  }
+
   /** The root of a block's tree: a workspace root page or an owned root. */
   rootOf(id: string): Block | undefined {
     let current = this.blocks.getBlock(id);

@@ -6,23 +6,26 @@ import { Blocks } from "../blocks/block-view";
 import { MentionTitlesContext } from "../blocks/rich-text";
 import { RichText } from "../blocks/rich-text";
 import { plainText } from "../blocks/view-model";
+import { Backlinks } from "../components/backlinks";
 import { DeletePageButton } from "../components/delete-page";
 import { NotFound } from "../components/not-found";
 import { PageEditor } from "../editor/page-editor";
 import { deletePage, editablePage, isWithin, pageDeletion } from "../lib/page-edit.server";
 import { buildPageView, pageTrail } from "../lib/page-view.server";
+import { pageBacklinks } from "../lib/backlinks.server";
 import { services } from "../lib/services.server";
 import { useHydrated } from "../lib/use-hydrated";
 import type { Route } from "./+types/page";
 
 export function loader({ params }: Route.LoaderArgs) {
   const page = buildPageView(services.blocks, params.pageId);
-  if (!page) return data({ page: null, trail: [], editable: null, deletion: null }, { status: 404 });
+  if (!page) return data({ page: null, trail: [], editable: null, deletion: null, backlinks: [] }, { status: 404 });
   return {
     page,
     trail: pageTrail(services.blocks, services.projects, page.id),
     editable: editablePage(services, "page", page.id) ?? null,
     deletion: pageDeletion(services, page.id) ?? null,
+    backlinks: pageBacklinks(services, page.id),
   };
 }
 
@@ -46,7 +49,7 @@ export function meta({ data }: Route.MetaArgs) {
 }
 
 export default function Page({ loaderData }: Route.ComponentProps) {
-  const { page, trail, editable, deletion } = loaderData;
+  const { page, trail, editable, deletion, backlinks } = loaderData;
   const hydrated = useHydrated();
   const [statusSlot, setStatusSlot] = useState<HTMLElement | null>(null);
   if (!page) return <NotFound />;
@@ -84,6 +87,9 @@ export default function Page({ loaderData }: Route.ComponentProps) {
           <Blocks blocks={page.blocks} />
         </MentionTitlesContext.Provider>
       )}
+      <div className="page-backlinks">
+        <Backlinks backlinks={backlinks} />
+      </div>
     </article>
   );
 }

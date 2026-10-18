@@ -54,6 +54,10 @@ class MapRowStore implements RowStore {
     return [...this.rows.values()].filter((row) => row.targetId === targetId);
   }
 
+  mentioning(pageId: string) {
+    return [...this.rows.values()].filter((row) => row.content.some((span) => span.mention?.pageId === pageId));
+  }
+
   // Rows are replaced, never mutated, so a copied map is an independent snapshot.
   insert(row: BlockRow) {
     this.rows.set(row.id, row);
@@ -97,6 +101,10 @@ export class MemoryBlockRepository implements BlockRepository {
 
   listIncomingReferences(targetId: string): Block[] {
     return this.store.referencesTo(targetId).map(rowToBlock);
+  }
+
+  listMentioning(pageId: string): Block[] {
+    return this.store.mentioning(pageId).map(rowToBlock);
   }
 
   apply(batch: Batch, options?: ApplyOptions): void {

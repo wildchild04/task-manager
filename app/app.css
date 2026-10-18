@@ -172,3 +172,7 @@ body {
   color: inherit;
   cursor: default;
 }
+
+.page-backlinks:not(:empty) {
+  margin-top: 32px;
+}

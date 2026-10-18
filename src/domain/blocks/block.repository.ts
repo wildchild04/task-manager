@@ -20,6 +20,8 @@ export interface BlockRepository {
   getOwnedRoots(owner: Owner): Block[];
   /** Reference blocks pointing at a block, including ones whose target no longer exists. */
   listIncomingReferences(targetId: string): Block[];
+  /** Blocks whose content mentions the page, each once (also when the page no longer exists). */
+  listMentioning(pageId: string): Block[];
   /** Applies a batch atomically. Throws `BatchError` and changes nothing if any operation is rejected. */
   apply(batch: Batch, options?: ApplyOptions): void;
 }

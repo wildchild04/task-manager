@@ -343,6 +343,20 @@ export function blockRepositoryContract(name: string, factory: ContractFactory) 
         expect(blocks.resolveReference("R2", ["P", "Q"])).toEqual({ status: "cycle", targetId: "P" });
       });
 
+      it("lists the blocks mentioning a page, each once, also after the page is deleted", () => {
+        const m = (pageId: string) => ({ text: "\uFFFC", mention: { pageId } });
+        apply([
+          ins(nb("M1", "paragraph", { content: [m("Q"), { text: " and " }, m("Q")] }), "P"),
+          ins(nb("M2", "quote", { content: [{ text: "see " }, m("Q")] }), "P", "M1"),
+          ins(nb("M3", "paragraph", { content: [m("P")] }), "Q"),
+        ]);
+        expect(ids(blocks.listMentioning("Q")).sort()).toEqual(["M1", "M2"]);
+        expect(ids(blocks.listMentioning("P"))).toEqual(["M3"]);
+        apply([{ op: "delete", id: "M3" }, { op: "delete", id: "Q" }]);
+        expect(ids(blocks.listMentioning("Q")).sort()).toEqual(["M1", "M2"]);
+        expect(blocks.listMentioning("A")).toEqual([]);
+      });
+
       it("lists incoming references", () => {
         apply([ins(ref("R1", "A"), "Q"), ins(ref("R2", "A"), "Q", "R1")]);
         expect(ids(blocks.listIncomingReferences("A")).sort()).toEqual(["R1", "R2"]);

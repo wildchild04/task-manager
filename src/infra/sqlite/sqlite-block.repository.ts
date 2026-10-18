@@ -87,6 +87,12 @@ class SqliteRowStore implements RowStore {
         "SELECT * FROM blocks WHERE owner_kind = ? AND owner_id = ? ORDER BY created_at, rowid",
       ),
       referencesTo: db.prepare<[string], SqlRow>("SELECT * FROM blocks WHERE target_id = ?"),
+      // Exact match inside the content JSON; no index, which is fine at a single user's scale.
+      mentioning: db.prepare<[string], SqlRow>(
+        `SELECT * FROM blocks b WHERE EXISTS (
+           SELECT 1 FROM json_each(b.content) j WHERE json_extract(j.value, '$.mention.pageId') = ?
+         )`,
+      ),
       insert: db.prepare(
         `INSERT INTO blocks (id, type, parent_id, prev_id, owner_kind, owner_id, props, content, target_id, created_at, updated_at)
          VALUES (@id, @type, @parent_id, @prev_id, @owner_kind, @owner_id, @props, @content, @target_id, @created_at, @updated_at)`,
@@ -122,6 +128,10 @@ class SqliteRowStore implements RowStore {
 
   referencesTo(targetId: string) {
     return this.statements.referencesTo.all(targetId).map(fromSql);
+  }
+
+  mentioning(pageId: string) {
+    return this.statements.mentioning.all(pageId).map(fromSql);
   }
 
   insert(row: BlockRow) {
@@ -182,6 +192,10 @@ export class SqliteBlockRepository implements BlockRepository {
 
   listIncomingReferences(targetId: string): Block[] {
     return this.store.referencesTo(targetId).map(rowToBlock);
+  }
+
+  listMentioning(pageId: string): Block[] {
+    return this.store.mentioning(pageId).map(rowToBlock);
   }
 
   apply(batch: Batch, options?: ApplyOptions): void {
