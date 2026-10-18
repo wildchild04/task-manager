@@ -5,7 +5,7 @@ import { useFetcher, useRevalidator } from "react-router";
 import type { TreeNode } from "~/domain/blocks/types";
 import type { CommentBlockInput } from "~/domain/comments/types";
 
-import { Blocks } from "../blocks/block-view";
+import { Blocks, TodoToggleContext } from "../blocks/block-view";
 import { MentionTargetsContext } from "../blocks/rich-text";
 import { PageEditor } from "../editor/page-editor";
 import type { ActionResult } from "../lib/forms.server";
@@ -132,12 +132,14 @@ function Comment({
   onEdit,
   onDoneEditing,
   onOpen,
+  toggleTodo,
 }: {
   comment: CommentView;
   editing: boolean;
   onEdit: () => void;
   onDoneEditing: () => void;
   onOpen: (dialog: CommentDialog) => void;
+  toggleTodo: (commentId: string, blockId: string, checked: boolean) => void;
 }) {
   return (
     <div id={`comment-${comment.id}`}>
@@ -155,9 +157,11 @@ function Comment({
         ) : (
           <>
             <MentionTargetsContext.Provider value={comment.mentions}>
-              <div>
-                <Blocks blocks={comment.blocks} />
-              </div>
+              <TodoToggleContext.Provider value={(id, checked) => toggleTodo(comment.id, id, checked)}>
+                <div>
+                  <Blocks blocks={comment.blocks} />
+                </div>
+              </TodoToggleContext.Provider>
             </MentionTargetsContext.Provider>
             <Stack direction="row" spacing={1}>
               <Button size="small" variant="text" onClick={onEdit}>
@@ -183,6 +187,14 @@ export function TaskComments({ comments }: { comments: CommentView[] }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const revalidator = useRevalidator();
   const close = () => setDialog(null);
+  // Checking a todo in a posted comment is an edit of the comment, saved at once.
+  const toggleTodo = (commentId: string, blockId: string, checked: boolean) => {
+    void fetch("/api/edits", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ surface: "comment", id: commentId, batch: [{ op: "update", id: blockId, props: { checked } }] }),
+    }).then(() => revalidator.revalidate());
+  };
 
   return (
     <Stack spacing={2}>
@@ -204,6 +216,7 @@ export function TaskComments({ comments }: { comments: CommentView[] }) {
                 void revalidator.revalidate();
               }}
               onOpen={setDialog}
+              toggleTodo={toggleTodo}
             />
           ))}
         </Stack>

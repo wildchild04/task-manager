@@ -1,4 +1,5 @@
 import { Alert, Checkbox, Divider, Icon, Link, Stack, Typography } from "@wildchild/design-system";
+import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 import { Link as RouterLink } from "react-router";
 
 import { RichText } from "./rich-text";
@@ -30,6 +31,30 @@ function Children({ blocks }: { blocks: ViewBlock[] }) {
 
 const headingVariants = { 1: "h2", 2: "h3", 3: "h4" } as const;
 
+/**
+ * Checks or unchecks a todo where the read-only view allows it (a posted
+ * comment); without it, todos are shown but can't be changed.
+ */
+export const TodoToggleContext = createContext<((id: string, checked: boolean) => void) | null>(null);
+
+/** A todo's checkbox; it shows a click at once, before the saved content comes back. */
+function TodoCheckbox({ id, label, checked }: { id: string; label: ReactNode; checked: boolean }) {
+  const toggle = useContext(TodoToggleContext);
+  const [shown, setShown] = useState(checked);
+  useEffect(() => setShown(checked), [checked]);
+  return (
+    <Checkbox
+      label={label}
+      checked={shown}
+      disabled={!toggle}
+      onChange={(next) => {
+        setShown(next);
+        toggle?.(id, next);
+      }}
+    />
+  );
+}
+
 function ContentBlockView({ block }: { block: ContentBlock }) {
   const text = <RichText value={block.content} />;
   switch (block.type) {
@@ -52,7 +77,9 @@ function ContentBlockView({ block }: { block: ContentBlock }) {
     case "todo":
       return (
         <>
-          <Checkbox label={text} checked={block.props.checked === true} disabled />
+          <div className="block-todo">
+            <TodoCheckbox id={block.id} label={text} checked={block.props.checked === true} />
+          </div>
           <Children blocks={block.children} />
         </>
       );

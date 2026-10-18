@@ -78,12 +78,13 @@ body {
 }
 
 /* Pull the checkbox and arrow back by their own padding, so their icons line up with the text edge. */
+/* Measured against the first line of text: each control's centre sits on the line's centre. */
 .editor-gutter-todo > * {
-  transform: translateX(-6px);
+  transform: translate(-6px, -6px);
 }
 
 .editor-gutter-toggle > * {
-  transform: translateX(-12px);
+  transform: translate(-12px, -5px);
 }
 
 .editor-gutter-children {
