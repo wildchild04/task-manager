@@ -5,7 +5,7 @@ Domain services (`TaskService`, `CommentService`, `BlockService`, `ProjectServic
 ## Decisions
 
 ### 1. The API lives in the app; the MCP server is a client
-`/api/agent/*` are resource routes, one module per function, all delegating to `app/lib/agent/*.server.ts`. The MCP server only maps tools to HTTP calls, so rules, permissions and data shapes live in one place and can be tested without MCP. The two ship from one repo (`mcp/` package) and evolve together.
+`/api/agent/*` are resource routes, one module per function, all delegating to `app/lib/agent/*.server.ts`. The MCP server only maps tools to HTTP calls, so rules, permissions and data shapes live in one place and can be tested without MCP. The two ship from one repo and evolve together: the server lives in `mcp/` but uses the root package (one install, one test run; `npm run mcp` starts it).
 
 ### 2. One request pipeline
 `agentRequest(request, handler)` checks the token (constant-time comparison) and the name, builds the actor, parses query/body with zod per function, resolves ID prefixes, runs the handler, and maps errors: `TaskError` codes → `invalid_transition` (409), `validation` (422), `not_found` (404); permission and claim checks → 403 / 409; unknown → 500 without details.
@@ -14,7 +14,7 @@ Domain services (`TaskService`, `CommentService`, `BlockService`, `ProjectServic
 Responses shorten IDs to 8 characters. Requests resolve an ID by exact match, else by prefix (≥ 6 characters) among the right kind of item (tasks in the projects, comments of the task, pages); more than one match → 409 `ambiguous`. With a single user's data, collisions at 8 hex characters are rare; the 409 makes them safe.
 
 ### 4. Caps and cursors
-Lists sort deterministically (tasks by `updatedAt` desc then id; comments by `createdAt` desc then id) and page with an opaque cursor: base64 of the last item's sort key. Texts are cut at `maxChars` on a character boundary (never inside a surrogate pair) and report `offset` for the next read; `offset` beyond the end returns `""` with `more: false`.
+Lists sort deterministically (tasks by `updatedAt` desc then id; comments by `createdAt` desc then id) and page with a cursor that is the last item's short ID (8 characters, cheaper than an opaque token; an unknown cursor is refused so the agent lists again). Texts are cut at `maxChars` on a character boundary (never inside a surrogate pair) and report `offset` for the next read; `offset` beyond the end returns `""` with `more: false`.
 
 ### 5. Markdown conversion in the domain
 `src/domain/blocks/markdown.ts` holds `toMarkdown(tree, resolve)` and `fromMarkdown(text, resolve)`: pure functions over blocks and rich text, with `resolve` looking up mention targets (title and kind, or the page a `task:` / `page:` ID stands for). The Markdown subset is the one in the spec: block types line by line (indentation of two spaces per level for nesting), inline marks by a small tokenizer (`**`, `*`, `~~`, `` ` ``, `<u>`, `[text](url)`, `@[title](kind:id)`). Unsupported or malformed syntax stays as plain text; nothing is lost silently.

@@ -12,6 +12,6 @@
 
 ## 3. MCP server
 
-- [ ] 3.1 `mcp/` package with the SDK; tools with input schemas and descriptions; config checks
-- [ ] 3.2 Tests: tools against an in-process app (memory services), including errors
-- [ ] 3.3 `mcp/README.md` with setup for Claude Code; an end-to-end check against the dev server
+- [x] 3.1 `mcp/` package with the SDK; tools with input schemas and descriptions; config checks
+- [x] 3.2 Tests: tools against an in-process app (memory services), including errors
+- [x] 3.3 `mcp/README.md` with setup for Claude Code; an end-to-end check against the dev server

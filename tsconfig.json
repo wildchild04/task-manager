@@ -17,5 +17,5 @@
     "noEmit": true,
     "paths": { "~/*": ["./src/*"] }
   },
-  "include": ["src", "tests", "app", "scripts", ".react-router/types/**/*", "vite.config.ts", "vitest.config.ts", "react-router.config.ts"]
+  "include": ["src", "tests", "app", "scripts", "mcp", ".react-router/types/**/*", "vite.config.ts", "vitest.config.ts", "react-router.config.ts"]
 }

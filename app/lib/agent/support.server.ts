@@ -38,26 +38,20 @@ export const limitSchema = (fallback: number) => z.coerce.number().int().min(1).
 export const maxCharsSchema = (fallback: number) => z.coerce.number().int().min(1).max(20000).default(fallback);
 export const offsetSchema = z.coerce.number().int().min(0).default(0);
 
-/** A page of a sorted list: items after the cursor's key, at most `limit`. */
-export function pageOf<T>(items: readonly T[], key: (item: T) => string, limit: number, cursor?: string) {
+/**
+ * A page of a sorted list: the items after the cursor, at most `limit`. The
+ * cursor is the last item's short ID, as the agent saw it.
+ */
+export function pageOf<T>(items: readonly T[], id: (item: T) => string, limit: number, cursor?: string) {
   let start = 0;
   if (cursor) {
-    let after: string;
-    try {
-      after = Buffer.from(cursor, "base64url").toString("utf8");
-    } catch {
-      throw new AgentError(400, "bad_request", "Invalid cursor");
-    }
-    const index = items.findIndex((item) => key(item) === after);
-    start = index >= 0 ? index + 1 : items.length;
+    const index = items.findIndex((item) => short(id(item)) === cursor);
+    if (index < 0) throw new AgentError(400, "bad_request", "Unknown cursor; list again from the start");
+    start = index + 1;
   }
   const page = items.slice(start, start + limit);
   const more = start + limit < items.length;
-  return {
-    items: page,
-    more,
-    ...(more ? { cursor: Buffer.from(key(page.at(-1)!), "utf8").toString("base64url") } : {}),
-  };
+  return { items: page, more, ...(more ? { cursor: short(id(page.at(-1)!)) } : {}) };
 }
 
 /** Text cut at `maxChars` from `offset`, never inside a surrogate pair; `offset` tells where to continue. */
