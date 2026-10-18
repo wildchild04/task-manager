@@ -2,7 +2,7 @@ import { Container, IconButton, Link, PageNavigation, PageShell, Stack, ThemeTog
 import { type MouseEvent, useEffect, useState } from "react";
 import { Link as RouterLink, Outlet, type ShouldRevalidateFunctionArgs, useLocation, useNavigate } from "react-router";
 
-import { DeletePageButton, NavigationDeleteWatcher } from "../components/delete-page";
+import { NewPageDialog } from "../components/new-page-dialog";
 import { NewProjectDialog } from "../components/new-project-dialog";
 import { PageTree } from "../components/page-tree";
 import { services } from "../lib/services.server";
@@ -67,9 +67,13 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
   const { mode, setMode } = useThemeMode();
   const navigate = useNavigate();
   const [creatingProject, setCreatingProject] = useState(false);
-  // Creating a project redirects to it; the dialog lives in the shell, so close it once the page changes.
+  const [creatingPage, setCreatingPage] = useState(false);
+  // Creating a project or page redirects to it; the dialogs live in the shell, so close them once the page changes.
   const { pathname } = useLocation();
-  useEffect(() => setCreatingProject(false), [pathname]);
+  useEffect(() => {
+    setCreatingProject(false);
+    setCreatingPage(false);
+  }, [pathname]);
   // The page being viewed, if any: deleting it (or a page containing it) from here leaves it.
   const openPageId = /^\/pages\/([^/]+)/.exec(pathname)?.[1] ?? null;
   const go = (href: string) => (event: MouseEvent) => {
@@ -108,21 +112,22 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
               ariaLabel={`${current.title} knowledge library`}
               nodes={current.library}
               activePageId={current.activePageId}
-              action={(node) => <DeletePageButton key={node.id} pageId={node.id} openPageId={openPageId} size="small" />}
             />
           )}
         </Group>
       )}
-      {pages.length > 0 && (
-        <Group label="Pages">
-          <PageTree
-            ariaLabel="Workspace pages"
-            nodes={pages}
-            activePageId={openPageId}
-            action={(node) => <DeletePageButton key={node.id} pageId={node.id} openPageId={openPageId} size="small" />}
-          />
-        </Group>
-      )}
+      <Group
+        label="Pages"
+        action={<IconButton ariaLabel="New page" icon="add" size="small" onClick={() => setCreatingPage(true)} />}
+      >
+        {pages.length > 0 ? (
+          <PageTree ariaLabel="Workspace pages" nodes={pages} activePageId={openPageId} />
+        ) : (
+          <Typography variant="body2" color="text.secondary">
+            No pages yet
+          </Typography>
+        )}
+      </Group>
     </Stack>
   );
 
@@ -133,9 +138,9 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
       navigationLabel="Workspace navigation"
       actions={<ThemeToggle mode={mode} onModeChange={setMode} ariaLabel="Toggle dark mode" />}
     >
-      <NavigationDeleteWatcher />
       {/* Rendered once, outside the navigation (which is drawn twice: sidebar and mobile drawer). */}
       <NewProjectDialog open={creatingProject} onClose={() => setCreatingProject(false)} />
+      <NewPageDialog open={creatingPage} onClose={() => setCreatingPage(false)} />
       <Container maxWidth="lg">
         <Outlet />
       </Container>

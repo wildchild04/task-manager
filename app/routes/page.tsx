@@ -10,7 +10,7 @@ import { Backlinks } from "../components/backlinks";
 import { DeletePageButton } from "../components/delete-page";
 import { NotFound } from "../components/not-found";
 import { PageEditor } from "../editor/page-editor";
-import { deletePage, editablePage, isWithin, pageDeletion } from "../lib/page-edit.server";
+import { deletePage, editablePage, pageDeletion } from "../lib/page-edit.server";
 import { buildPageView, pageTrail } from "../lib/page-view.server";
 import { pageBacklinks } from "../lib/backlinks.server";
 import { services } from "../lib/services.server";
@@ -29,19 +29,13 @@ export function loader({ params }: Route.LoaderArgs) {
   };
 }
 
-/**
- * Deletes the page (`intent=delete-page`). It goes to the parent afterwards,
- * unless `stay` is set (deleting from the navigation while another page is open).
- */
+/** Deletes the page (`intent=delete-page`), with the pages inside it, and goes to its parent. */
 export async function action({ params, request }: Route.ActionArgs) {
   const form = await request.formData();
   if (form.get("intent") !== "delete-page") throw data(null, { status: 400 });
-  // From the navigation, `openPageId` is the page being viewed: it only needs to change if it goes too.
-  const openPageId = form.get("openPageId");
-  const leaving = typeof openPageId === "string" && openPageId !== "" && isWithin(services, openPageId, params.pageId);
   const deleted = deletePage(services, params.pageId);
   if (!deleted) throw data(null, { status: 404 });
-  return form.get("stay") ? { ok: true as const, redirectTo: deleted.redirectTo, leaving } : redirect(deleted.redirectTo);
+  return redirect(deleted.redirectTo);
 }
 
 export function meta({ data }: Route.MetaArgs) {
@@ -75,9 +69,7 @@ export default function Page({ loaderData }: Route.ComponentProps) {
           </Stack>
         </Stack>
         {!(editing && editable.title) && (
-          <Typography variant="h1">
-            {page.title.length > 0 ? <RichText value={page.title} /> : "Untitled"}
-          </Typography>
+          <Typography variant="h1">{page.title.length > 0 ? <RichText value={page.title} /> : "Untitled"}</Typography>
         )}
       </Stack>
       {editing ? (

@@ -5,6 +5,7 @@ import { redirect, useNavigate } from "react-router";
 import { NewProjectDialog } from "../components/new-project-dialog";
 import { createProjectAction, projectsHomeView } from "../lib/projects.server";
 import { services } from "../lib/services.server";
+import { createWorkspacePageAction } from "../lib/workspace-pages.server";
 import type { Route } from "./+types/home";
 
 export function meta() {
@@ -15,8 +16,14 @@ export function loader() {
   return projectsHomeView(services);
 }
 
+/** Creates a project, or (`intent=create-page`) a workspace page, and opens it. */
 export async function action({ request }: Route.ActionArgs) {
-  const result = createProjectAction(services, await request.formData());
+  const form = await request.formData();
+  if (form.get("intent") === "create-page") {
+    const result = createWorkspacePageAction(services, form);
+    return result.ok ? redirect(`/pages/${result.id}`) : result;
+  }
+  const result = createProjectAction(services, form);
   return result.ok ? redirect(`/projects/${result.id}`) : result;
 }
 
