@@ -25,10 +25,3 @@ A deletable page SHALL show a delete button at the top right. It SHALL open a co
 - **WHEN** a top-level library document is deleted
 - **THEN** the browser is on the project's knowledge library page, which no longer lists it
 
-### Requirement: Deleting from the navigation
-Each library document in the navigation's library tree, and each page in the "Pages" group, SHALL offer a delete action that opens the same confirmation dialog. Deleting the page that is open SHALL navigate as deleting from the page does; deleting another page SHALL keep the current page open.
-
-#### Scenario: Delete another document from the sidebar
-- **WHEN** document "Conventions" is deleted from the navigation while "Persistence" is open
-- **THEN** "Conventions" is gone from the tree and "Persistence" stays open
-
