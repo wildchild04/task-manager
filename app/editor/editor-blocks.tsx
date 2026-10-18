@@ -56,10 +56,11 @@ type BlockProps = {
 
 const headingVariants = { 1: "h2", 2: "h3", 3: "h4" } as const;
 
-function Children(props: Omit<BlockProps, "block"> & { ids: readonly string[] }) {
+/** Nested blocks. Under a toggle or todo they line up with its text, past the arrow or checkbox. */
+function Children({ gutter, ...props }: Omit<BlockProps, "block"> & { ids: readonly string[]; gutter?: boolean }) {
   if (props.ids.length === 0) return null;
   return (
-    <div className="block-children">
+    <div className={gutter ? "block-children editor-gutter-children" : "block-children"}>
       <EditorBlocks {...props} />
     </div>
   );
@@ -67,7 +68,7 @@ function Children(props: Omit<BlockProps, "block"> & { ids: readonly string[] })
 
 const EditorBlock = memo(function EditorBlock(props: BlockProps) {
   const { block, state, closed, references, actions } = props;
-  const children = <Children {...props} ids={block.children} />;
+  const children = <Children {...props} ids={block.children} gutter={block.type === "toggle" || block.type === "todo"} />;
   const text = <EditableText block={block} />;
 
   switch (block.type) {

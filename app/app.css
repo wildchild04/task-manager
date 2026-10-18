@@ -68,9 +68,17 @@ body {
   min-width: 0;
 }
 
+/* The arrow or checkbox column; children of toggles and todos start where the text does. */
 .editor-gutter {
   flex: none;
+  width: 36px;
+  display: flex;
+  justify-content: center;
   margin-top: -4px;
+}
+
+.editor-gutter-children {
+  padding-inline-start: 40px;
 }
 
 .editor-done .editable {
