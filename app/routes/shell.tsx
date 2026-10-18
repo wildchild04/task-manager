@@ -3,7 +3,7 @@ import type { MouseEvent } from "react";
 import { Outlet, type ShouldRevalidateFunctionArgs, useLocation, useNavigate } from "react-router";
 
 import { DeletePageButton, NavigationDeleteWatcher } from "../components/delete-page";
-import { LibraryTree } from "../components/library-tree";
+import { PageTree } from "../components/page-tree";
 import { services } from "../lib/services.server";
 import { type ProjectSection, shellView } from "../lib/shell.server";
 import { useThemeMode } from "../theme-mode";
@@ -71,7 +71,7 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
             items={SECTIONS.map((s) => item(s.label, `/projects/${current.id}${s.path}`, s.section === current.section))}
           />
           {current.library.length > 0 && (
-            <LibraryTree
+            <PageTree
               key={current.id}
               ariaLabel={`${current.title} knowledge library`}
               nodes={current.library}
@@ -83,12 +83,11 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
       )}
       {pages.length > 0 && (
         <Group label="Pages">
-          <PageNavigation
+          <PageTree
             ariaLabel="Workspace pages"
-            items={pages.map((p) => ({
-              ...item(p.title, `/pages/${p.id}`, p.id === openPageId),
-              action: <DeletePageButton key={p.id} pageId={p.id} openPageId={openPageId} size="small" />,
-            }))}
+            nodes={pages}
+            activePageId={openPageId}
+            action={(node) => <DeletePageButton key={node.id} pageId={node.id} openPageId={openPageId} size="small" />}
           />
         </Group>
       )}

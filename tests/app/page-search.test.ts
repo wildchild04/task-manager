@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { allPages, searchPages } from "../../app/lib/page-search.server";
+import { allPages, searchPages, workspacePageTree } from "../../app/lib/page-search.server";
 import { type AppServices, createInMemoryServices } from "~/composition";
 
 describe("page search", () => {
@@ -26,6 +26,23 @@ describe("page search", () => {
       { id: "sub", title: "Search notes", place: "Pages › Welcome" },
       { id: "arch", title: "Architecture", place: "Taskhub" },
       { id: "auth", title: "Auth design", place: "Taskhub › Architecture" },
+    ]);
+  });
+
+  it("builds the workspace page tree with pages nested anywhere in their parent, in reading order", () => {
+    services.blocks.apply([
+      { op: "insert", block: { id: "deep", type: "page", content: [{ text: "Deep" }] }, parentId: "sub" },
+      { op: "insert", block: { id: "top", type: "page", content: [{ text: "Top note" }] }, parentId: "wp" },
+    ]);
+    expect(workspacePageTree(services)).toEqual([
+      {
+        id: "wp",
+        title: "Welcome",
+        children: [
+          { id: "top", title: "Top note", children: [] },
+          { id: "sub", title: "Search notes", children: [{ id: "deep", title: "Deep", children: [] }] },
+        ],
+      },
     ]);
   });
 

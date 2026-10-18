@@ -4,8 +4,8 @@ import { Link as RouterLink } from "react-router";
 
 import type { LibraryNode } from "~/domain/library/library.service";
 
-/** Library documents as tree items linking through the router, with the open one active. */
-export function libraryItems(
+/** Pages as tree items linking through the router, with the open one active. */
+export function pageItems(
   nodes: readonly LibraryNode[],
   activePageId: string | null,
   action?: (node: LibraryNode) => ReactNode,
@@ -17,7 +17,7 @@ export function libraryItems(
     to: `/pages/${node.id}`,
     active: node.id === activePageId,
     ...(action ? { action: action(node) } : {}),
-    ...(node.children.length > 0 ? { children: libraryItems(node.children, activePageId, action) } : {}),
+    ...(node.children.length > 0 ? { children: pageItems(node.children, activePageId, action) } : {}),
   }));
 }
 
@@ -37,11 +37,11 @@ export function ancestorIds(nodes: readonly LibraryNode[], id: string): string[]
 }
 
 /**
- * A project's library in the navigation. Expansion is kept while moving
+ * A tree of pages in the navigation: a project's library, or the workspace's pages. Expansion is kept while moving
  * between documents, and the open document's ancestors are expanded every
  * time it changes (not only on first render).
  */
-export function LibraryTree({
+export function PageTree({
   ariaLabel,
   nodes,
   activePageId,
@@ -69,7 +69,7 @@ export function LibraryTree({
     <TreeNavigation
       ariaLabel={ariaLabel}
       dense
-      items={libraryItems(nodes, activePageId, action)}
+      items={pageItems(nodes, activePageId, action)}
       expandedIds={expanded}
       onExpandedIdsChange={setExpanded}
     />

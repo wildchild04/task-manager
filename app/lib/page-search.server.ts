@@ -6,38 +6,36 @@ import type { LibraryNode } from "~/domain/library/library.service";
 /** A page to link to: its title and where it lives ("Taskhub › Architecture", "Pages"). */
 export type PageMatch = { id: string; title: string; place: string };
 
+/**
+ * The workspace's pages as a tree: root pages in order, each with the pages
+ * nested in it (found anywhere in its blocks, in reading order), at any depth.
+ */
+export function workspacePageTree(services: AppServices): LibraryNode[] {
+  // A loaded tree stops at nested pages, so each one is loaded in turn.
+  const nested = (node: TreeNode): LibraryNode[] =>
+    (node.children ?? []).flatMap((child) => {
+      if (child.block.type !== "page") return nested(child);
+      const tree = services.blocks.loadTree(child.block.id);
+      return [{ id: child.block.id, title: plainText(child.block.content) || "Untitled", children: tree ? nested(tree) : [] }];
+    });
+  return services.blocks.listRootPages().map((root) => {
+    const tree = services.blocks.loadTree(root.id);
+    return { id: root.id, title: plainText(root.content) || "Untitled", children: tree ? nested(tree) : [] };
+  });
+}
+
 /** Every page that can be opened: workspace pages and library documents, at any depth. */
 export function allPages(services: AppServices): PageMatch[] {
   const pages: PageMatch[] = [];
-
-  // A loaded tree stops at nested pages, so each one is loaded in turn.
-  const workspace = (node: TreeNode, trail: string[]) => {
-    for (const child of node.children ?? []) {
-      if (child.block.type === "page") {
-        const title = plainText(child.block.content) || "Untitled";
-        pages.push({ id: child.block.id, title, place: trail.join(" › ") });
-        const nested = services.blocks.loadTree(child.block.id);
-        if (nested) workspace(nested, [...trail, title]);
-      } else {
-        workspace(child, trail);
-      }
-    }
-  };
-  for (const root of services.blocks.listRootPages()) {
-    const title = plainText(root.content) || "Untitled";
-    pages.push({ id: root.id, title, place: "Pages" });
-    const tree = services.blocks.loadTree(root.id);
-    if (tree) workspace(tree, ["Pages", title]);
-  }
-
-  const library = (nodes: readonly LibraryNode[], trail: string[]) => {
+  const walk = (nodes: readonly LibraryNode[], trail: string[]) => {
     for (const node of nodes) {
       pages.push({ id: node.id, title: node.title || "Untitled", place: trail.join(" › ") });
-      library(node.children, [...trail, node.title || "Untitled"]);
+      walk(node.children, [...trail, node.title || "Untitled"]);
     }
   };
+  walk(workspacePageTree(services), ["Pages"]);
   for (const project of services.projects.list()) {
-    library(services.library.getLibraryTree(project.id) ?? [], [project.title || "Untitled"]);
+    walk(services.library.getLibraryTree(project.id) ?? [], [project.title || "Untitled"]);
   }
   return pages;
 }

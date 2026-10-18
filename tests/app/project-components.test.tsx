@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { ChoreFields } from "../../app/components/chore-fields";
 import { DashboardCard } from "../../app/components/dashboard-card";
-import { ancestorIds, LibraryTree } from "../../app/components/library-tree";
+import { ancestorIds, PageTree } from "../../app/components/page-tree";
 
 const render = (node: ReactNode) =>
   renderToString(
@@ -75,7 +75,7 @@ describe("ChoreFields", () => {
   });
 });
 
-describe("LibraryTree", () => {
+describe("PageTree", () => {
   const tree = [
     { id: "arch", title: "Architecture", children: [{ id: "auth", title: "Auth design", children: [{ id: "tok", title: "Tokens", children: [] }] }] },
     { id: "conv", title: "Conventions", children: [] },
@@ -88,14 +88,14 @@ describe("LibraryTree", () => {
   });
 
   it("expands the open document's ancestors and marks it current", () => {
-    const html = render(<LibraryTree ariaLabel="Library" nodes={tree} activePageId="tok" />);
+    const html = render(<PageTree ariaLabel="Library" nodes={tree} activePageId="tok" />);
     expect(html).toContain('href="/pages/tok"');
     expect(html).toContain('aria-current="page"');
     expect(html).toContain("Tokens");
   });
 
   it("keeps collapsed branches collapsed when nothing is open", () => {
-    const html = render(<LibraryTree ariaLabel="Library" nodes={tree} activePageId={null} />);
+    const html = render(<PageTree ariaLabel="Library" nodes={tree} activePageId={null} />);
     expect(html).toContain("Architecture");
     expect(html).not.toContain("Tokens");
   });

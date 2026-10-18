@@ -57,7 +57,7 @@ describe("project screens", () => {
     it("lists projects in order and workspace pages separately", () => {
       const view = shellView(services, "/");
       expect(view.projects.map((p) => p.title)).toEqual(["Taskhub", "Garden"]);
-      expect(view.pages).toEqual([{ id: "wp", title: "Welcome" }]);
+      expect(view.pages).toEqual([{ id: "wp", title: "Welcome", children: [] }]);
       expect(view.current).toBeNull();
     });
 

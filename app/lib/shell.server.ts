@@ -1,8 +1,8 @@
 import type { AppServices } from "~/composition";
-import { plainText } from "~/domain/blocks/text";
 import type { LibraryNode } from "~/domain/library/library.service";
 
 import { isTaskListSlug, slugOfKind, type TaskListSlug } from "./format";
+import { workspacePageTree } from "./page-search.server";
 
 export type ProjectSection = "home" | TaskListSlug | "library";
 
@@ -19,7 +19,8 @@ export type ShellView = {
     library: LibraryNode[];
     activePageId: string | null;
   } | null;
-  pages: { id: string; title: string }[];
+  /** The workspace's pages as a tree. */
+  pages: LibraryNode[];
 };
 
 /** Works out which project and section the URL belongs to. */
@@ -56,6 +57,6 @@ export function shellView(services: AppServices, pathname: string): ShellView {
   return {
     projects: services.projects.list().map((p) => ({ id: p.id, title: p.title || "Untitled" })),
     current: currentProject(services, pathname),
-    pages: services.blocks.listRootPages().map((page) => ({ id: page.id, title: plainText(page.content) || "Untitled" })),
+    pages: workspacePageTree(services),
   };
 }

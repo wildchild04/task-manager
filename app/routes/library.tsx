@@ -3,7 +3,7 @@ import { useState } from "react";
 import { data, useFetcher } from "react-router";
 
 import { fieldError, FormDialog, lastValue } from "../components/form-dialog";
-import { LibraryTree } from "../components/library-tree";
+import { PageTree } from "../components/page-tree";
 import { NotFound } from "../components/not-found";
 import type { ActionResult } from "../lib/forms.server";
 import { createDocumentAction, libraryView } from "../lib/library.server";
@@ -40,7 +40,7 @@ export default function Library({ loaderData }: Route.ComponentProps) {
           This library has no documents yet.
         </Alert>
       ) : (
-        <LibraryTree ariaLabel="Knowledge library" nodes={view.tree} activePageId={null} expandAll />
+        <PageTree ariaLabel="Knowledge library" nodes={view.tree} activePageId={null} expandAll />
       )}
 
       <FormDialog open={creating} title="New document" confirmLabel="Create" fetcher={fetcher} onClose={() => setCreating(false)}>
