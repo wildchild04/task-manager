@@ -1,18 +1,23 @@
 import { TreeNavigation, type TreeNavigationItem } from "@wildchild/design-system";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Link as RouterLink } from "react-router";
 
 import type { LibraryNode } from "~/domain/library/library.service";
 
 /** Library documents as tree items linking through the router, with the open one active. */
-export function libraryItems(nodes: readonly LibraryNode[], activePageId: string | null): TreeNavigationItem[] {
+export function libraryItems(
+  nodes: readonly LibraryNode[],
+  activePageId: string | null,
+  action?: (node: LibraryNode) => ReactNode,
+): TreeNavigationItem[] {
   return nodes.map((node) => ({
     id: node.id,
     label: node.title || "Untitled",
     component: RouterLink,
     to: `/pages/${node.id}`,
     active: node.id === activePageId,
-    ...(node.children.length > 0 ? { children: libraryItems(node.children, activePageId) } : {}),
+    ...(action ? { action: action(node) } : {}),
+    ...(node.children.length > 0 ? { children: libraryItems(node.children, activePageId, action) } : {}),
   }));
 }
 
@@ -41,11 +46,14 @@ export function LibraryTree({
   nodes,
   activePageId,
   expandAll = false,
+  action,
 }: {
   ariaLabel: string;
   nodes: readonly LibraryNode[];
   activePageId: string | null;
   expandAll?: boolean;
+  /** Something to show on each document's row, e.g. a delete button. */
+  action?: (node: LibraryNode) => ReactNode;
 }) {
   const [expanded, setExpanded] = useState<string[]>(() =>
     expandAll ? allIds(nodes) : activePageId ? ancestorIds(nodes, activePageId) : [],
@@ -61,7 +69,7 @@ export function LibraryTree({
     <TreeNavigation
       ariaLabel={ariaLabel}
       dense
-      items={libraryItems(nodes, activePageId)}
+      items={libraryItems(nodes, activePageId, action)}
       expandedIds={expanded}
       onExpandedIdsChange={setExpanded}
     />

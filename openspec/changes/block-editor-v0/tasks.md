@@ -48,8 +48,8 @@
 
 ## 7. Deleting pages
 
-- [ ] 7.1 Delete button at the top right of deletable pages, with the confirmation dialog and redirect
-- [ ] 7.2 Delete actions on library documents and "Pages" items in the navigation, navigating only when the open page goes
+- [x] 7.1 Delete button at the top right of deletable pages, with the confirmation dialog and redirect
+- [x] 7.2 Delete actions on library documents and "Pages" items in the navigation, navigating only when the open page goes
 
 ## 8. Verification
 

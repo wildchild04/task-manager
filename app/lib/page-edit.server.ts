@@ -150,3 +150,11 @@ export function deletePage(services: AppServices, pageId: string): PageDeletion 
   if (deletion) services.blocks.apply([{ op: "delete", id: pageId }]);
   return deletion;
 }
+
+/** Whether `pageId` is `ancestorId` or lies anywhere inside it. */
+export function isWithin(services: AppServices, pageId: string, ancestorId: string): boolean {
+  for (let block = services.blocks.getBlock(pageId); block; block = block.parentId ? services.blocks.getBlock(block.parentId) : undefined) {
+    if (block.id === ancestorId) return true;
+  }
+  return false;
+}

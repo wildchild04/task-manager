@@ -1,7 +1,8 @@
 import { Container, PageNavigation, PageShell, Stack, ThemeToggle, Typography } from "@wildchild/design-system";
 import type { MouseEvent } from "react";
-import { Outlet, type ShouldRevalidateFunctionArgs, useNavigate } from "react-router";
+import { Outlet, type ShouldRevalidateFunctionArgs, useLocation, useNavigate } from "react-router";
 
+import { DeletePageButton, NavigationDeleteWatcher } from "../components/delete-page";
 import { LibraryTree } from "../components/library-tree";
 import { services } from "../lib/services.server";
 import { type ProjectSection, shellView } from "../lib/shell.server";
@@ -41,6 +42,8 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
   const { projects, current, pages } = loaderData;
   const { mode, setMode } = useThemeMode();
   const navigate = useNavigate();
+  // The page being viewed, if any: deleting it (or a page containing it) from here leaves it.
+  const openPageId = /^\/pages\/([^/]+)/.exec(useLocation().pathname)?.[1] ?? null;
   const go = (href: string) => (event: MouseEvent) => {
     event.preventDefault();
     void navigate(href);
@@ -73,13 +76,20 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
               ariaLabel={`${current.title} knowledge library`}
               nodes={current.library}
               activePageId={current.activePageId}
+              action={(node) => <DeletePageButton key={node.id} pageId={node.id} openPageId={openPageId} size="small" />}
             />
           )}
         </Group>
       )}
       {pages.length > 0 && (
         <Group label="Pages">
-          <PageNavigation ariaLabel="Workspace pages" items={pages.map((p) => item(p.title, `/pages/${p.id}`, false))} />
+          <PageNavigation
+            ariaLabel="Workspace pages"
+            items={pages.map((p) => ({
+              ...item(p.title, `/pages/${p.id}`, p.id === openPageId),
+              action: <DeletePageButton key={p.id} pageId={p.id} openPageId={openPageId} size="small" />,
+            }))}
+          />
         </Group>
       )}
     </Stack>
@@ -92,6 +102,7 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
       navigationLabel="Workspace navigation"
       actions={<ThemeToggle mode={mode} onModeChange={setMode} ariaLabel="Toggle dark mode" />}
     >
+      <NavigationDeleteWatcher />
       <Container maxWidth="lg">
         <Outlet />
       </Container>
