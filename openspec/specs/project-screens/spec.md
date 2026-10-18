@@ -15,7 +15,7 @@ The home route `/` SHALL list all projects, oldest first, each linking to its pr
 - **THEN** no project is created and the dialog shows that a title is required
 
 ### Requirement: Project home and dashboard
-`/projects/:projectId` SHALL show the project's title, its home page content (read-only, rendered like any page), and its dashboard: one card per dashboard section in the dashboard's order, each with its title, its count, and its items. Task items SHALL link to the task overview; library items SHALL link to the document. Chore items SHALL show an "Urgent" marker when urgent and their due time in the workspace time zone. A section with no items SHALL show that it is empty. An unknown project SHALL show the not-found page with status 404.
+`/projects/:projectId` SHALL show the project's title, its home page content (editable, as specified by the `block-editor` capability), and its dashboard: one card per dashboard section in the dashboard's order, each with its title, its count, and its items. Task items SHALL link to the task overview; library items SHALL link to the document. Chore items SHALL show an "Urgent" marker when urgent and their due time in the workspace time zone. A section with no items SHALL show that it is empty. An unknown project SHALL show the not-found page with status 404.
 
 #### Scenario: Dashboard cards
 - **WHEN** a project has one work task in progress and no updates
@@ -80,7 +80,7 @@ Rejected input (for example an empty title, an invalid time or a missing field) 
 - **THEN** the library page shows "Auth design" nested under "Architecture", linking to its page
 
 ### Requirement: Task overview
-`/tasks/:taskId` SHALL show a task: its title, kind, state, a link to its project, and its body page content rendered like any page. For a chore it SHALL also show its urgency (including when urgent because overdue), its schedule in words, and its due time in the workspace time zone. The title and body SHALL stay read-only; acting on the task (transitions, comments, references, lineage) is specified by the `task-screen` capability. An unknown task SHALL show the not-found page with status 404.
+`/tasks/:taskId` SHALL show a task: its title, kind, state, a link to its project, and its body page content. The title and body SHALL be editable as specified by the `block-editor` capability. For a chore it SHALL also show its urgency (including when urgent because overdue), its schedule in words, and its due time in the workspace time zone. Acting on the task (transitions, comments, references, lineage) is specified by the `task-screen` capability. An unknown task SHALL show the not-found page with status 404.
 
 #### Scenario: Chore overview
 - **WHEN** the overview of a weekly Monday 09:00 chore is opened
