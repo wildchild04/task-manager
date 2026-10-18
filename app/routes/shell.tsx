@@ -1,8 +1,9 @@
-import { Container, PageNavigation, PageShell, Stack, ThemeToggle, Typography } from "@wildchild/design-system";
-import type { MouseEvent } from "react";
-import { Outlet, type ShouldRevalidateFunctionArgs, useLocation, useNavigate } from "react-router";
+import { Container, IconButton, Link, PageNavigation, PageShell, Stack, ThemeToggle, Typography } from "@wildchild/design-system";
+import { type MouseEvent, useEffect, useState } from "react";
+import { Link as RouterLink, Outlet, type ShouldRevalidateFunctionArgs, useLocation, useNavigate } from "react-router";
 
 import { DeletePageButton, NavigationDeleteWatcher } from "../components/delete-page";
+import { NewProjectDialog } from "../components/new-project-dialog";
 import { PageTree } from "../components/page-tree";
 import { services } from "../lib/services.server";
 import { type ProjectSection, shellView } from "../lib/shell.server";
@@ -27,12 +28,35 @@ const SECTIONS: { section: ProjectSection; label: string; path: string }[] = [
   { section: "library", label: "Knowledge library", path: "/library" },
 ];
 
-function Group({ label, children }: { label: string; children: React.ReactNode }) {
+/** A navigation group: its heading (a link when `href` is given), an optional action beside it, and its items. */
+function Group({
+  label,
+  href,
+  action,
+  children,
+}: {
+  label: string;
+  href?: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const heading = (
+    <Typography variant="overline" color="text.secondary">
+      {label}
+    </Typography>
+  );
   return (
     <Stack spacing={0.5}>
-      <Typography variant="overline" color="text.secondary">
-        {label}
-      </Typography>
+      <Stack direction="row" justifyContent="space-between" alignItems="center">
+        {href ? (
+          <Link component={RouterLink} to={href} underline="hover" color="inherit">
+            {heading}
+          </Link>
+        ) : (
+          heading
+        )}
+        {action}
+      </Stack>
       {children}
     </Stack>
   );
@@ -42,8 +66,12 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
   const { projects, current, pages } = loaderData;
   const { mode, setMode } = useThemeMode();
   const navigate = useNavigate();
+  const [creatingProject, setCreatingProject] = useState(false);
+  // Creating a project redirects to it; the dialog lives in the shell, so close it once the page changes.
+  const { pathname } = useLocation();
+  useEffect(() => setCreatingProject(false), [pathname]);
   // The page being viewed, if any: deleting it (or a page containing it) from here leaves it.
-  const openPageId = /^\/pages\/([^/]+)/.exec(useLocation().pathname)?.[1] ?? null;
+  const openPageId = /^\/pages\/([^/]+)/.exec(pathname)?.[1] ?? null;
   const go = (href: string) => (event: MouseEvent) => {
     event.preventDefault();
     void navigate(href);
@@ -52,7 +80,11 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
 
   const navigation = (
     <Stack spacing={2}>
-      <Group label="Projects">
+      <Group
+        label="Projects"
+        href="/"
+        action={<IconButton ariaLabel="New project" icon="add" size="small" onClick={() => setCreatingProject(true)} />}
+      >
         {projects.length > 0 ? (
           <PageNavigation
             ariaLabel="Projects"
@@ -102,6 +134,8 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
       actions={<ThemeToggle mode={mode} onModeChange={setMode} ariaLabel="Toggle dark mode" />}
     >
       <NavigationDeleteWatcher />
+      {/* Rendered once, outside the navigation (which is drawn twice: sidebar and mobile drawer). */}
+      <NewProjectDialog open={creatingProject} onClose={() => setCreatingProject(false)} />
       <Container maxWidth="lg">
         <Outlet />
       </Container>

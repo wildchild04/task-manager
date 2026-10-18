@@ -1,9 +1,8 @@
-import { Alert, Button, Card, InlineCode, ResponsivePanelGrid, Stack, TextField, Typography } from "@wildchild/design-system";
+import { Alert, Button, Card, InlineCode, ResponsivePanelGrid, Stack, Typography } from "@wildchild/design-system";
 import { useState } from "react";
-import { redirect, useFetcher, useNavigate } from "react-router";
+import { redirect, useNavigate } from "react-router";
 
-import { fieldError, FormDialog, lastValue } from "../components/form-dialog";
-import type { ActionResult } from "../lib/forms.server";
+import { NewProjectDialog } from "../components/new-project-dialog";
 import { createProjectAction, projectsHomeView } from "../lib/projects.server";
 import { services } from "../lib/services.server";
 import type { Route } from "./+types/home";
@@ -23,7 +22,6 @@ export async function action({ request }: Route.ActionArgs) {
 
 export default function Home({ loaderData }: Route.ComponentProps) {
   const [creating, setCreating] = useState(false);
-  const fetcher = useFetcher<ActionResult>();
   const navigate = useNavigate();
 
   return (
@@ -52,16 +50,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         </ResponsivePanelGrid>
       )}
 
-      <FormDialog open={creating} title="New project" confirmLabel="Create" fetcher={fetcher} onClose={() => setCreating(false)}>
-        <TextField
-          name="title"
-          label="Title"
-          required
-          fullWidth
-          defaultValue={lastValue(fetcher.data, "title")}
-          {...fieldError(fetcher.data, "title")}
-        />
-      </FormDialog>
+      <NewProjectDialog open={creating} onClose={() => setCreating(false)} />
     </Stack>
   );
 }

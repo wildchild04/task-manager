@@ -17,6 +17,7 @@ export function FormDialog({
   onClose,
   children,
   confirmDisabled,
+  action,
 }: {
   open: boolean;
   title: string;
@@ -25,6 +26,8 @@ export function FormDialog({
   onClose: () => void;
   children: ReactNode;
   confirmDisabled?: boolean;
+  /** Where the form posts; the current route when omitted. */
+  action?: string;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
   const submitting = fetcher.state !== "idle";
@@ -49,7 +52,7 @@ export function FormDialog({
         onClick: () => formRef.current?.requestSubmit(),
       }}
     >
-      <fetcher.Form method="post" ref={formRef} className="dialog-fields">
+      <fetcher.Form method="post" action={action} ref={formRef} className="dialog-fields">
         <Stack spacing={2}>
           {result && !result.ok && result.formError && (
             <Alert severity="error" role="alert">
