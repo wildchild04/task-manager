@@ -99,6 +99,19 @@ function checkReferenceTarget(reader: BlockReader, id: string, type: BlockType, 
   mustGet(reader, targetId, "Reference target");
 }
 
+/**
+ * Every mention a write adds must point at an existing page. Mentions the
+ * content already had are kept as they are, even if their page was deleted since.
+ */
+function checkMentionTargets(reader: BlockReader, content: RichText, previous: RichText = []) {
+  const kept = new Set(previous.flatMap((span) => (span.mention ? [span.mention.pageId] : [])));
+  for (const span of content) {
+    if (!span.mention || kept.has(span.mention.pageId)) continue;
+    const target = reader.getBlock(span.mention.pageId);
+    if (target?.type !== "page") fail("validation", `Mention target ${span.mention.pageId} is not a page`);
+  }
+}
+
 /** Checks that `type` may be placed under `parentId`, after `afterId`. */
 function checkPlacement(
   reader: BlockReader,
@@ -152,6 +165,7 @@ export function validateOperation(
       const props = parseProps(type, op.block.props);
       const content = parseContent(type, op.block.content);
       checkReferenceTarget(reader, id, type, props);
+      checkMentionTargets(reader, content);
 
       if ("owner" in op) {
         if (!isRootType(type)) fail("invalid_parent", `A ${type} block cannot be an owned root`);
@@ -184,6 +198,7 @@ export function validateOperation(
 
       const props = parseProps(type, type === block.type ? { ...block.props, ...op.props } : (op.props ?? {}));
       const content = parseContent(type, op.content ?? block.content);
+      if (op.content !== undefined) checkMentionTargets(reader, content, block.content);
       checkReferenceTarget(reader, block.id, type, props);
       return { kind: "update", id: block.id, type, props, content, targetId: targetIdOf(type, props) };
     }

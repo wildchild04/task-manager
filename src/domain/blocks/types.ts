@@ -36,7 +36,14 @@ export type SimpleMark = "bold" | "italic" | "underline" | "strikethrough" | "co
 export type LinkMark = { type: "link"; href: string };
 export type Mark = SimpleMark | LinkMark;
 
-export type TextSpan = { text: string; marks?: Mark[] };
+/** The single placeholder character a mention span holds (U+FFFC, "object replacement"). */
+export const MENTION_TEXT = "\uFFFC";
+
+/**
+ * A run of text with marks, or a mention: a pointer at a page that counts as one
+ * character (its text is always `MENTION_TEXT`) and shows the page's current title.
+ */
+export type TextSpan = { text: string; marks?: Mark[]; mention?: { pageId: string } };
 export type RichText = TextSpan[];
 
 export type PropsByType = {

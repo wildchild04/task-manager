@@ -116,6 +116,38 @@ export function blockRepositoryContract(name: string, factory: ContractFactory) 
       it("rejects content on a non-text type", () => {
         expectRejected(() => apply([ins(nb("D", "divider", { content: text("x") }), "P")]), 0, "validation");
       });
+
+      const mention = (pageId: string) => ({ text: "\uFFFC", mention: { pageId } });
+
+      it("round-trips a mention of a page", () => {
+        const content = [{ text: "See " }, { ...mention("Q"), marks: ["bold" as const] }];
+        apply([ins(nb("M", "paragraph", { content }), "P")]);
+        expect(blocks.getBlock("M")?.content).toEqual(content);
+      });
+
+      it("rejects a mention of a missing block or of a block that isn't a page", () => {
+        expectRejected(() => apply([ins(nb("M", "paragraph", { content: [mention("nope")] }), "P")]), 0, "validation");
+        expectRejected(() => apply([ins(nb("M", "paragraph", { content: [mention("A")] }), "P")]), 0, "validation");
+        expectRejected(() => apply([{ op: "update", id: "A", content: [mention("nope")] }]), 0, "validation");
+      });
+
+      it("rejects mentions in page titles, mention text other than the placeholder, and linked mentions", () => {
+        expectRejected(() => apply([{ op: "update", id: "Q", content: [mention("P")] }]), 0, "validation");
+        expectRejected(() => apply([ins(nb("M", "paragraph", { content: [{ text: "Q", mention: { pageId: "Q" } }] }), "P")]), 0, "validation");
+        const linked = { ...mention("Q"), marks: [{ type: "link" as const, href: "https://x.dev" }] };
+        expectRejected(() => apply([ins(nb("M", "paragraph", { content: [linked] }), "P")]), 0, "validation");
+      });
+
+      it("keeps a mention whose page is deleted later, and allows other edits around it", () => {
+        apply([ins(nb("M", "paragraph", { content: [mention("Q")] }), "P")]);
+        apply([{ op: "delete", id: "Q" }]);
+        expect(blocks.getBlock("M")?.content).toEqual([mention("Q")]);
+        apply([{ op: "update", id: "M", type: "quote" }]);
+        expect(blocks.getBlock("M")?.type).toBe("quote");
+        // Typing next to the dangling mention still saves.
+        apply([{ op: "update", id: "M", content: [{ text: "Was " }, mention("Q")] }]);
+        expect(blocks.getBlock("M")?.content).toEqual([{ text: "Was " }, mention("Q")]);
+      });
     });
 
     describe("ownership tree", () => {

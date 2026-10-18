@@ -1,7 +1,7 @@
 ## 1. Model
 
-- [ ] 1.1 Mention spans in the rich-text schema and types; validation of targets and no mentions in titles; `plainText` skips mentions
-- [ ] 1.2 Contract tests for SQLite and memory: round-trip, missing target rejected, title rejected, mention of a page deleted later reads back unchanged
+- [x] 1.1 Mention spans in the rich-text schema and types; validation of targets and no mentions in titles; `plainText` skips mentions
+- [x] 1.2 Contract tests for SQLite and memory: round-trip, missing target rejected, title rejected, mention of a page deleted later reads back unchanged
 
 ## 2. Rendering
 

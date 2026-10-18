@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { BlockOperationError } from "./errors";
 import type { BlockType, RichText } from "./types";
-import { isTextType } from "./types";
+import { isTextType, MENTION_TEXT } from "./types";
 
 const empty = z.object({}).strict();
 
@@ -27,7 +27,17 @@ const markSchema = z.union([
 ]);
 
 export const richTextSchema = z.array(
-  z.object({ text: z.string(), marks: z.array(markSchema).optional() }).strict(),
+  z
+    .object({
+      text: z.string(),
+      marks: z.array(markSchema).optional(),
+      mention: z.object({ pageId: z.string().min(1) }).strict().optional(),
+    })
+    .strict()
+    .refine((span) => !span.mention || span.text === MENTION_TEXT, { message: "A mention holds exactly one placeholder character" })
+    .refine((span) => !span.mention || !(span.marks ?? []).some((mark) => typeof mark === "object"), {
+      message: "A mention can't be a link",
+    }),
 );
 
 export const blockTypeSchema = z.enum([
@@ -71,6 +81,9 @@ export function parseContent(type: BlockType, content: unknown): RichText {
   if (!result.success) throw toError("content", result.error);
   if (!isTextType(type) && result.data.length > 0) {
     throw new BlockOperationError("validation", `A ${type} block cannot have content`, ["content"]);
+  }
+  if (type === "page" && result.data.some((span) => span.mention)) {
+    throw new BlockOperationError("validation", "A page title cannot contain mentions", ["content"]);
   }
   return result.data as RichText;
 }
