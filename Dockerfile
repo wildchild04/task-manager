@@ -38,8 +38,9 @@ COPY --from=production-dependencies-env /app/node_modules ./node_modules
 COPY --from=build-env /app/build ./build
 # Applied at startup; the built server finds them under the working directory.
 COPY db/migrations ./db/migrations
+COPY server.mjs ./
 
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD ["node", "-e", "fetch('http://localhost:3000' + process.env.APP_BASE_PATH.replace(/\\/?$/, '/')).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
-CMD ["node_modules/@react-router/serve/dist/cli.js", "./build/server/index.js"]
+CMD ["node", "server.mjs"]
