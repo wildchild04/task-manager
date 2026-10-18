@@ -32,7 +32,9 @@ context: |
   request is a Markdown file in ~/dev/design-system/feature-requests/<name>.md following
   the format of the existing files there (Status, Problem, Request, use case, Suggested API,
   Proposed Types, Requirements, Acceptance Criteria, Storybook Coverage, Tests, MCP
-  Documentation). Not GitHub issues.
+  Documentation). Bugs in the design system (broken behaviour, not missing features) are
+  Markdown files in ~/dev/design-system/docs/bugs/<name>.md following the existing bug reports
+  there. Not GitHub issues.
 
 rules:
   proposal:
