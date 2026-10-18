@@ -53,5 +53,5 @@
 
 ## 8. Verification
 
-- [ ] 8.1 Typecheck and full test run
-- [ ] 8.2 Manual checklist for the user covering every `block-editor` and `page-deletion` scenario in a browser
+- [x] 8.1 Typecheck and full test run
+- [x] 8.2 Manual checklist for the user covering every `block-editor` and `page-deletion` scenario in a browser (`manual-checklist.md`)
