@@ -1,5 +1,6 @@
 import { Alert, createAppTheme, Dialog, InlineCommandMenu, Stack, TextField, Typography } from "@wildchild/design-system";
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useBlocker, useNavigate, useRevalidator } from "react-router";
 
@@ -240,7 +241,19 @@ function LinkDialog({ initial, onDone }: { initial: string; onDone: (href: strin
  * in the background; the page's server data is only re-read when it changed
  * elsewhere and nothing is waiting to be saved.
  */
-export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; titleVariant?: "h1" | "h2" }) {
+export function PageEditor({
+  page,
+  titleVariant = "h1",
+  afterTitle,
+  statusSlot,
+}: {
+  page: EditablePage;
+  titleVariant?: "h1" | "h2";
+  /** Shown between the title and the blocks (a task's state and actions). */
+  afterTitle?: ReactNode;
+  /** Where to show the saving indicator; at the top right of the editor when not given. */
+  statusSlot?: HTMLElement | null;
+}) {
   const rootRef = useRef<HTMLDivElement>(null);
   // Links inside editable text are plain elements; they take the design system's link colour from the theme.
   const { mode } = useThemeMode();
@@ -495,6 +508,8 @@ export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; 
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (composing.current || event.isComposing) return;
+      // Only keys typed into the text: buttons placed inside the editor (a task's actions) keep their own keys.
+      if (!(event.target instanceof HTMLElement) || !event.target.closest(".editable")) return;
       const selection = sync();
       if (!selection) return;
       const element = editableOf(root, selection.blockId)!;
@@ -696,15 +711,18 @@ export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; 
   );
 
   const { state, closed } = editor;
+  const statusText = (
+    <span aria-live="polite">
+      <Typography variant="caption" color={status === "failed" || status === "retrying" ? "error" : "text.secondary"}>
+        {STATUS_TEXT[status]}
+      </Typography>
+    </span>
+  );
   const root = state.blocks[state.rootId]!;
 
   return (
     <div className="page-editor" ref={rootRef} style={{ "--editor-link": linkColor } as CSSProperties}>
-      <div className="editor-status" aria-live="polite">
-        <Typography variant="caption" color={status === "failed" || status === "retrying" ? "error" : "text.secondary"}>
-          {STATUS_TEXT[status]}
-        </Typography>
-      </div>
+      {statusSlot ? createPortal(statusText, statusSlot) : <div className="editor-status">{statusText}</div>}
       {error && (
         <Alert severity="error" role="alert">
           {error}
@@ -715,6 +733,7 @@ export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; 
           <EditableText block={root} placeholder="Untitled" ariaLabel="Title" />
         </Typography>
       )}
+      {afterTitle}
       <div className="editor-body">
         {root.children.length === 0 ? (
           <button

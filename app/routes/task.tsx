@@ -1,8 +1,12 @@
 import { Breadcrumbs, Card, Chip, Stack, Typography } from "@wildchild/design-system";
+import { useState } from "react";
 import { data, Link as RouterLink, redirect } from "react-router";
 
 import { Blocks } from "../blocks/block-view";
 import { NotFound } from "../components/not-found";
+import { PageEditor } from "../editor/page-editor";
+import { editablePage } from "../lib/page-edit.server";
+import { useHydrated } from "../lib/use-hydrated";
 import { TransitionBar } from "../components/task-actions";
 import { TaskComments } from "../components/task-comments";
 import { History, Lineage, References } from "../components/task-relations";
@@ -13,7 +17,9 @@ import type { Route } from "./+types/task";
 
 export function loader({ params }: Route.LoaderArgs) {
   const view = taskOverviewView(services, params.taskId);
-  return view ? { view } : data({ view: null }, { status: 404 });
+  return view
+    ? { view, editable: editablePage(services, "task", params.taskId) ?? null }
+    : data({ view: null, editable: null }, { status: 404 });
 }
 
 export async function action({ params, request }: Route.ActionArgs) {
@@ -35,30 +41,15 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export default function Task({ loaderData }: Route.ComponentProps) {
-  const { view } = loaderData;
+  const { view, editable } = loaderData;
+  const hydrated = useHydrated();
+  const [statusSlot, setStatusSlot] = useState<HTMLElement | null>(null);
   if (!view) return <NotFound />;
   const { task, project, chore, body } = view;
 
-  return (
+  // Between the title and the description: the task's kind, state, actions and schedule.
+  const details = (
     <Stack spacing={2}>
-      <Breadcrumbs
-        items={[
-          {
-            id: "project",
-            label: project.title,
-            to: `/projects/${project.id}`,
-            component: RouterLink,
-          },
-          {
-            id: "list",
-            label: project.listTitle,
-            to: `/projects/${project.id}/${project.listSlug}`,
-            component: RouterLink,
-          },
-          { id: "task", label: task.title },
-        ]}
-      />
-      <Typography variant="h1">{task.title}</Typography>
       <Stack direction="row" spacing={1}>
         <Chip label={task.kindLabel} size="small" variant="outlined" />
         <Chip label={task.stateLabel} color={task.stateColor} size="small" />
@@ -77,14 +68,48 @@ export default function Task({ loaderData }: Route.ComponentProps) {
           </Stack>
         </Section>
       )}
-      {body && body.blocks.length > 0 ? (
-        <article>
-          <Blocks blocks={body.blocks} />
-        </article>
+    </Stack>
+  );
+
+  return (
+    <Stack spacing={2}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center">
+        <Breadcrumbs
+          items={[
+            {
+              id: "project",
+              label: project.title,
+              to: `/projects/${project.id}`,
+              component: RouterLink,
+            },
+            {
+              id: "list",
+              label: project.listTitle,
+              to: `/projects/${project.id}/${project.listSlug}`,
+              component: RouterLink,
+            },
+            { id: "task", label: task.title },
+          ]}
+        />
+        <span ref={setStatusSlot} />
+      </Stack>
+      {/* The title and description are edited in place; the server renders them read-only. */}
+      {hydrated && editable ? (
+        <PageEditor key={editable.id} page={editable} afterTitle={details} statusSlot={statusSlot} />
       ) : (
-        <Typography variant="body2" color="text.secondary">
-          This task's page is empty.
-        </Typography>
+        <>
+          <Typography variant="h1">{task.title}</Typography>
+          {details}
+          {body && body.blocks.length > 0 ? (
+            <article>
+              <Blocks blocks={body.blocks} />
+            </article>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              This task's page is empty.
+            </Typography>
+          )}
+        </>
       )}
       {view.comments && (
         <Section title="Comments">

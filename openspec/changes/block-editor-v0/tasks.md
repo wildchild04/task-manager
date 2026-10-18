@@ -19,7 +19,7 @@
 
 - [x] 3.1 `dom-caret.ts`: DOM selection ↔ offsets, caret restore, line-edge detection, point to offset
 - [x] 3.2 `EditableBlock` and `PageEditor` with the `beforeinput` loop and composition handling, for paragraphs only, on `/pages/:pageId`
-- [ ] 3.3 Manual check by the user: typing, deleting, selection replace, accented input (é, ñ), caret stays put after re-render; adjust before going on
+- [x] 3.3 Manual check by the user: typing, deleting, selection replace, accented input (é, ñ), caret stays put after re-render; adjust before going on
 
 ## 4. Full editing behaviour
 
@@ -43,8 +43,8 @@
 ## 6. Surfaces
 
 - [x] 6.1 Library documents and workspace pages (`/pages/:pageId`), title included
-- [ ] 6.2 Project home page content on `/projects/:projectId`
-- [ ] 6.3 Task title and description on `/tasks/:taskId`, staying in sync after transitions that change the body (return)
+- [x] 6.2 Project home page content on `/projects/:projectId`
+- [x] 6.3 Task title and description on `/tasks/:taskId`, staying in sync after transitions that change the body (return)
 
 ## 7. Deleting pages
 
