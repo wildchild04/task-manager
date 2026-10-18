@@ -61,7 +61,7 @@ export function textOf(element: HTMLElement): string {
 }
 
 /** The text offset of a DOM position inside an editable element. */
-function offsetOf(element: HTMLElement, node: Node, offset: number): number {
+export function offsetOf(element: HTMLElement, node: Node, offset: number): number {
   const range = document.createRange();
   range.selectNodeContents(element);
   range.setEnd(node, offset);

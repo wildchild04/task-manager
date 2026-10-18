@@ -1,4 +1,14 @@
-import { Alert, createAppTheme, Dialog, InlineCommandMenu, Stack, TextField, Typography } from "@wildchild/design-system";
+import {
+  Alert,
+  Button,
+  createAppTheme,
+  Dialog,
+  HoverCard,
+  InlineCommandMenu,
+  Stack,
+  TextField,
+  Typography,
+} from "@wildchild/design-system";
 import type { CSSProperties, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -16,6 +26,7 @@ import { useThemeMode } from "../theme-mode";
 import {
   caretOnEdgeLine,
   caretRect,
+  offsetOf,
   editableOf,
   offsetAtX,
   readSelection,
@@ -130,6 +141,35 @@ function usePageSearch(query: string | null): PageMatch[] | null {
     };
   }, [query]);
   return pages;
+}
+
+/** A link being previewed: its element and whole range in its block, where to show the card, and where it goes. */
+type LinkCard = {
+  element: HTMLAnchorElement;
+  blockId: string;
+  start: number;
+  end: number;
+  href: string;
+  rect: DOMRect;
+  label: string;
+};
+
+/** Waits before opening a link card and before closing it, so the pointer can travel from the link onto the card. */
+function hoverTimers(openMs = 400, closeMs = 200) {
+  let opening: ReturnType<typeof setTimeout> | undefined;
+  let closing: ReturnType<typeof setTimeout> | undefined;
+  return {
+    open(run: () => void) {
+      clearTimeout(opening);
+      opening = setTimeout(run, openMs);
+    },
+    close(run: () => void) {
+      clearTimeout(closing);
+      closing = setTimeout(run, closeMs);
+    },
+    cancelOpen: () => clearTimeout(opening),
+    cancelClose: () => clearTimeout(closing),
+  };
 }
 
 /** How many pages the link dialog suggests at a time. */
@@ -279,6 +319,15 @@ export function PageEditor({
   const composing = useRef(false);
   const goalX = useRef<number | null>(null);
   const applySlashRef = useRef<((item: SlashItem) => void) | null>(null);
+  // The card shown for a hovered link, and the timers that open and close it.
+  const [linkCard, setLinkCardState] = useState<LinkCard | null>(null);
+  const linkCardRef = useRef<LinkCard | null>(null);
+  const setLinkCard = useCallback((card: LinkCard | null) => {
+    linkCardRef.current = card;
+    setLinkCardState(card);
+  }, []);
+  const cardTimers = useMemo(() => hoverTimers(), []);
+  const pageNames = useMemo(() => new Map<string, string>(), []);
   const [status, setStatus] = useState<SaveStatus>("saved");
   const [error, setError] = useState<string | null>(null);
   const [linkFor, setLinkFor] = useState<{ selection: Selection; href: string } | null>(null);
@@ -315,6 +364,33 @@ export function PageEditor({
   }, [page.surface, page.id]);
 
   useEffect(() => () => queue.dispose(), [queue]);
+
+  /** Opens the card for a link element: its whole range in the block, its rectangle and where it goes. */
+  const showLinkCard = useCallback(
+    (link: HTMLAnchorElement) => {
+      const block = link.closest<HTMLElement>("[data-block-id]");
+      if (!block || !link.isConnected) return;
+      const blockId = block.dataset.blockId!;
+      const range = linkRangeAt(getBlock(editor.state, blockId).content, offsetOf(block, link, 0));
+      if (!range) return;
+      const card: LinkCard = { element: link, blockId, ...range, rect: link.getBoundingClientRect(), label: link.getAttribute("href") ?? link.href };
+      const pageId = link.origin === window.location.origin ? /^\/pages\/([^/?#]+)$/.exec(link.pathname)?.[1] : undefined;
+      if (link.origin === window.location.origin) card.label = pageId ? (pageNames.get(pageId) ?? "…") : link.pathname;
+      setLinkCard(card);
+      if (pageId && !pageNames.has(pageId)) {
+        fetch(`/api/pages?id=${encodeURIComponent(pageId)}`)
+          .then((response) => response.json() as Promise<{ pages: PageMatch[] }>)
+          .then(({ pages }) => {
+            const page = pages[0];
+            const name = page ? `${page.title} · ${page.place}` : "A page that no longer exists";
+            pageNames.set(pageId, name);
+            if (linkCardRef.current?.element === link) setLinkCard({ ...linkCardRef.current, label: name });
+          })
+          .catch(() => {});
+      }
+    },
+    [editor, pageNames, setLinkCard],
+  );
 
   // Content changed elsewhere (e.g. a task's return): take it when nothing is waiting to be saved.
   useEffect(() => {
@@ -405,6 +481,7 @@ export function PageEditor({
     };
 
     const onBeforeInput = (event: InputEvent) => {
+      setLinkCard(null);
       if (composing.current || event.isComposing || event.inputType === "insertCompositionText") return;
       event.preventDefault();
       if (!sync()) return;
@@ -655,37 +732,28 @@ export function PageEditor({
       else window.open(link.href, "_blank", "noopener,noreferrer");
     };
 
-    // Hovering a link says where it goes: the URL, or the page's name for links to app pages (looked up once).
-    const pageNames = new Map<string, string>();
-    const onMouseOver = (event: MouseEvent) => {
+    // Resting on a link shows its card (after a moment); leaving the link starts closing it, unless the pointer reaches the card.
+    // Pointer events, not mouse events: they arrive in order with the card's pointerenter, which cancels the close.
+    const onPointerOver = (event: PointerEvent) => {
       const link = (event.target as HTMLElement).closest<HTMLAnchorElement>(".editable a[href]");
-      if (!link || !root.contains(link) || link.title) return;
-      const hint = "Click to open - Select and Ctrl+K to edit";
-      const pageId = link.origin === window.location.origin ? /^\/pages\/([^/?#]+)$/.exec(link.pathname)?.[1] : undefined;
-      if (!pageId) {
-        link.title = `${link.href} · ${hint}`;
-        return;
-      }
-      const known = pageNames.get(pageId);
-      if (known) {
-        link.title = `${known} · ${hint}`;
-        return;
-      }
-      link.title = `${link.pathname} · ${hint}`;
-      fetch(`/api/pages?id=${encodeURIComponent(pageId)}`)
-        .then((response) => response.json() as Promise<{ pages: PageMatch[] }>)
-        .then(({ pages }) => {
-          const page = pages[0];
-          const name = page ? `${page.title} (${page.place})` : "A page that no longer exists";
-          pageNames.set(pageId, name);
-          link.title = `${name} · ${hint}`;
-        })
-        .catch(() => {});
+      if (!link || !root.contains(link)) return;
+      cardTimers.cancelClose();
+      if (linkCardRef.current?.element === link) return;
+      cardTimers.open(() => showLinkCard(link));
     };
+    const onPointerOut = (event: PointerEvent) => {
+      const link = (event.target as HTMLElement).closest<HTMLAnchorElement>(".editable a[href]");
+      if (!link || link.contains(event.relatedTarget as Node | null)) return;
+      cardTimers.cancelOpen();
+      if (linkCardRef.current) cardTimers.close(() => setLinkCard(null));
+    };
+    const onScroll = () => setLinkCard(null);
 
     document.addEventListener("selectionchange", onSelectionChange);
     root.addEventListener("click", onClick);
-    root.addEventListener("mouseover", onMouseOver);
+    root.addEventListener("pointerover", onPointerOver);
+    root.addEventListener("pointerout", onPointerOut);
+    window.addEventListener("scroll", onScroll, true);
     root.addEventListener("beforeinput", onBeforeInput);
     root.addEventListener("keydown", onKeyDown);
     root.addEventListener("compositionstart", onCompositionStart);
@@ -693,7 +761,11 @@ export function PageEditor({
     return () => {
       document.removeEventListener("selectionchange", onSelectionChange);
       root.removeEventListener("click", onClick);
-      root.removeEventListener("mouseover", onMouseOver);
+      root.removeEventListener("pointerover", onPointerOver);
+      root.removeEventListener("pointerout", onPointerOut);
+      window.removeEventListener("scroll", onScroll, true);
+      cardTimers.cancelOpen();
+      cardTimers.cancelClose();
       root.removeEventListener("beforeinput", onBeforeInput);
       root.removeEventListener("keydown", onKeyDown);
       root.removeEventListener("compositionstart", onCompositionStart);
@@ -716,6 +788,29 @@ export function PageEditor({
   }, [slash]);
 
   const slashOptions = slash ? (slashMatches(editor, slash)?.commands ?? []) : [];
+
+  // ----- Link card actions -----
+
+  const openLink = (card: LinkCard) => {
+    setLinkCard(null);
+    const link = card.element;
+    if (link.origin === window.location.origin) void navigate(link.pathname + link.search + link.hash);
+    else window.open(link.href, "_blank", "noopener,noreferrer");
+  };
+  const editLink = (card: LinkCard) => {
+    setLinkCard(null);
+    const whole = { blockId: card.blockId, anchor: card.start, focus: card.end };
+    editor.setSelection(whole);
+    if (rootRef.current) writeSelection(rootRef.current, whole);
+    setLinkFor({ selection: whole, href: card.href });
+  };
+  const removeLink = (card: LinkCard) => {
+    setLinkCard(null);
+    editor.setSelection({ blockId: card.blockId, anchor: card.start, focus: card.end });
+    editor.setLink(null);
+    editor.setSelection(caret(card.blockId, card.end));
+    restoreSelection.current = true;
+  };
 
   const actions = useMemo(
     () => ({
@@ -782,6 +877,36 @@ export function PageEditor({
         onDismiss={() => setSlash(null)}
         emptyText="No matching blocks"
       />
+      <HoverCard
+        open={linkCard !== null}
+        anchorRect={linkCard?.rect ?? null}
+        ariaLabel="Link"
+        onPointerEnter={cardTimers.cancelClose}
+        onPointerLeave={() => cardTimers.close(() => setLinkCard(null))}
+        onDismiss={() => setLinkCard(null)}
+      >
+        {linkCard && (
+          // Pressing a button keeps the caret and selection in the text.
+          <div onMouseDown={(event) => event.preventDefault()}>
+            <Stack spacing={1}>
+              <Typography variant="body2" noWrap>
+                {linkCard.label}
+              </Typography>
+              <Stack direction="row" spacing={1}>
+                <Button size="small" variant="text" onClick={() => openLink(linkCard)}>
+                  Open
+                </Button>
+                <Button size="small" variant="text" onClick={() => editLink(linkCard)}>
+                  Edit
+                </Button>
+                <Button size="small" variant="text" color="error" onClick={() => removeLink(linkCard)}>
+                  Remove
+                </Button>
+              </Stack>
+            </Stack>
+          </div>
+        )}
+      </HoverCard>
       {linkFor && (
         <LinkDialog
           initial={linkFor.href}
