@@ -148,7 +148,9 @@ export default function TaskList({ loaderData }: Route.ComponentProps) {
 
   const usesDialog = view.list.kind === "update" || view.list.kind === "chore";
   const filter = usesDialog ? "" : typed.trim().toLowerCase();
-  const rows = filter ? view.rows.filter((row) => row.title.toLowerCase().includes(filter)) : view.rows;
+  // Typing matches titles and state names ("to do", "in progress").
+  const matches = (row: TaskRowView) => row.title.toLowerCase().includes(filter) || row.stateLabel.toLowerCase().includes(filter);
+  const rows = filter ? view.rows.filter(matches) : view.rows;
 
   return (
     <Stack spacing={2}>

@@ -2,7 +2,7 @@
 
 ### Requirement: Creating tasks
 Each task list SHALL offer creating a task of its kind in its initial state, with a server-generated ID:
-- **explorations and work:** a quick-add row with the title; while it holds text, the list SHALL show only the tasks whose title contains that text (ignoring case and surrounding spaces), saying when none match, and creating the task SHALL clear the row and the filter
+- **explorations and work:** a quick-add row with the title; while it holds text, the list SHALL show only the tasks whose title or state (as shown, e.g. "To do", "In progress") contains that text (ignoring case and surrounding spaces), saying when none match, and creating the task SHALL clear the row and the filter
 - **updates:** a dialog with the title and the done work task it iterates on, chosen from the project's done work; if the project has no done work, the dialog SHALL say so and creation SHALL be unavailable
 - **chores:** a dialog with the title, urgency (normal or urgent), and an optional schedule of any of the five types with that type's fields
 
@@ -15,6 +15,10 @@ Rejected input (for example an empty title, an invalid time or a missing field) 
 #### Scenario: Quick-add filters the list
 - **WHEN** "sign" is typed in the work list's quick-add row, with work "Sign in with OAuth" and "Search"
 - **THEN** only "Sign in with OAuth" is listed, and after pressing Enter a work task "sign" is created and the whole list shows again
+
+#### Scenario: Filter by state
+- **WHEN** "to do" is typed in the work list's quick-add row, with "Search" in to do and "Project screens" in progress
+- **THEN** "Search" is listed and "Project screens" is not
 
 #### Scenario: Update needs done work
 - **WHEN** the update dialog is opened in a project with no done work
