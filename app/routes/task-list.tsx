@@ -50,11 +50,19 @@ function columnsFor(view: TaskListView): TableColumn<TaskRowView>[] {
         </Link>
       ),
     },
-    { id: "state", header: "State", cell: (row) => <Chip label={row.stateLabel} color={row.stateColor} size="small" variant="outlined" /> },
+    {
+      id: "state",
+      header: "State",
+      cell: (row) => <Chip label={row.stateLabel} color={row.stateColor} size="small" variant="outlined" />,
+    },
   ];
   if (view.list.kind === "chore") {
     columns.push(
-      { id: "urgent", header: "Urgency", cell: (row) => (row.urgent ? <Chip label="Urgent" color="error" size="small" /> : "Normal") },
+      {
+        id: "urgent",
+        header: "Urgency",
+        cell: (row) => (row.urgent ? <Chip label="Urgent" color="error" size="small" /> : "Normal"),
+      },
       { id: "due", header: "Due", cell: (row) => row.due ?? "—" },
     );
   }
@@ -62,19 +70,23 @@ function columnsFor(view: TaskListView): TableColumn<TaskRowView>[] {
   return columns;
 }
 
-/** Quick add by title, for explorations and work. Clears itself after each task is created. */
-function QuickAdd({ singular }: { singular: string }) {
+/**
+ * Quick add by title, for explorations and work. What's typed also filters the
+ * list (held by the list); it clears after each task is created.
+ */
+function QuickAdd({ singular, value, onChange }: { singular: string; value: string; onChange: (value: string) => void }) {
   const fetcher = useFetcher<ActionResult>();
-  const [key, setKey] = useState(0);
   useEffect(() => {
-    if (fetcher.state === "idle" && fetcher.data?.ok) setKey((k) => k + 1);
-  }, [fetcher.state, fetcher.data]);
+    if (fetcher.state === "idle" && fetcher.data?.ok) onChange("");
+  }, [fetcher.state, fetcher.data, onChange]);
   const error = fetcher.data && !fetcher.data.ok ? fetcher.data.fieldErrors.title : undefined;
 
   return (
-    <fetcher.Form method="post" key={key}>
+    <fetcher.Form method="post">
       <TableAddRow
         name="title"
+        value={value}
+        onChange={onChange}
         ariaLabel={`New ${singular} title`}
         placeholder={`Add ${singular === "work" ? "work" : `an ${singular}`}…`}
         submitting={fetcher.state !== "idle"}
@@ -95,7 +107,14 @@ function UpdateDialog({ view, open, onClose }: { view: TaskListView; open: boole
         </Alert>
       ) : (
         <>
-          <TextField name="title" label="Title" required fullWidth defaultValue={lastValue(fetcher.data, "title")} {...fieldError(fetcher.data, "title")} />
+          <TextField
+            name="title"
+            label="Title"
+            required
+            fullWidth
+            defaultValue={lastValue(fetcher.data, "title")}
+            {...fieldError(fetcher.data, "title")}
+          />
           <Select
             name="iteratesOn"
             label="Iterates on"
@@ -124,9 +143,12 @@ export default function TaskList({ loaderData }: Route.ComponentProps) {
   const { view } = loaderData;
   const navigate = useNavigate();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [typed, setTyped] = useState("");
   if (!view) return <NotFound />;
 
   const usesDialog = view.list.kind === "update" || view.list.kind === "chore";
+  const filter = usesDialog ? "" : typed.trim().toLowerCase();
+  const rows = filter ? view.rows.filter((row) => row.title.toLowerCase().includes(filter)) : view.rows;
 
   return (
     <Stack spacing={2}>
@@ -141,11 +163,13 @@ export default function TaskList({ loaderData }: Route.ComponentProps) {
         onChange={(value) => void navigate(`?state=${value}`)}
       />
       <Table
-        rows={view.rows}
+        rows={rows}
         columns={columnsFor(view)}
         getRowId={(row) => row.id}
-        emptyState={`No ${view.list.title.toLowerCase()} here.`}
-        addRow={usesDialog ? undefined : <QuickAdd singular={view.list.singular} />}
+        emptyState={
+          filter ? `Nothing matches "${typed.trim()}". Press Enter to add it.` : `No ${view.list.title.toLowerCase()} here.`
+        }
+        addRow={usesDialog ? undefined : <QuickAdd singular={view.list.singular} value={typed} onChange={setTyped} />}
         addRowPosition="top"
       />
       {view.list.kind === "update" && <UpdateDialog view={view} open={dialogOpen} onClose={() => setDialogOpen(false)} />}
