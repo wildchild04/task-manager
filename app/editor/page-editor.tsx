@@ -52,17 +52,21 @@ async function sendBatch(page: EditablePage, batch: Operation[]): Promise<SendRe
   }
 }
 
-type SlashMenu = { blockId: string; start: number; anchor: DOMRect; active: string | null; expanded: boolean };
+/** The open slash menu: where its `/` is, where to show it, the highlighted row, and the page (with the filter it's for). */
+type SlashMenu = { blockId: string; start: number; anchor: DOMRect; active: string | null; page: number; query: string };
 
-/** How many commands the slash menu shows before a "more" row. */
-const SLASH_VISIBLE = 5;
-const SLASH_MORE = "more";
+/** How many commands the slash menu shows per page. */
+const SLASH_PAGE_SIZE = 5;
+const SLASH_NEXT_PAGE = "next-page";
 
-/** A row of the slash menu: a command, or the row that shows the rest. */
+/** A row of the slash menu: a command, or the row that turns the page. */
 type SlashItem = { value: string; label: string; description?: string; command?: SlashCommand };
 
-/** The slash menu's rows, or `null` when the menu should close. */
-function slashMatches(editor: Editor, menu: SlashMenu): { query: string; commands: SlashItem[] } | null {
+/**
+ * The rows of the slash menu's current page, or `null` when the menu should
+ * close. A changed filter starts again from the first page.
+ */
+function slashMatches(editor: Editor, menu: SlashMenu): { query: string; commands: SlashItem[]; page: number; pages: number } | null {
   const block = editor.state.blocks[menu.blockId];
   const { selection } = editor;
   if (!block || selection.blockId !== menu.blockId || selection.focus <= menu.start) return null;
@@ -73,9 +77,21 @@ function slashMatches(editor: Editor, menu: SlashMenu): { query: string; command
   if (matches.length === 0 && query.endsWith(" ")) return null;
   const rows = (list: SlashCommand[]): SlashItem[] =>
     list.map((command) => ({ value: command.value, label: command.label, description: command.description, command }));
-  if (menu.expanded || matches.length <= SLASH_VISIBLE + 1) return { query, commands: rows(matches) };
-  const hidden = matches.length - SLASH_VISIBLE;
-  return { query, commands: [...rows(matches.slice(0, SLASH_VISIBLE)), { value: SLASH_MORE, label: `${hidden} more…` }] };
+  const pages = Math.max(1, Math.ceil(matches.length / SLASH_PAGE_SIZE));
+  const page = query === menu.query ? Math.min(menu.page, pages - 1) : 0;
+  const shown = rows(matches.slice(page * SLASH_PAGE_SIZE, (page + 1) * SLASH_PAGE_SIZE));
+  if (pages === 1) return { query, commands: shown, page, pages };
+  const pager = { value: SLASH_NEXT_PAGE, label: `Page ${page + 1} of ${pages}`, description: "Tab next · Shift+Tab back" };
+  return { query, commands: [...shown, pager], page, pages };
+}
+
+/** The menu turned `step` pages (wrapping around), with its first command highlighted. */
+function turnPage(editor: Editor, menu: SlashMenu, step: number): SlashMenu {
+  const matches = slashMatches(editor, menu);
+  if (!matches || matches.pages === 1) return menu;
+  const page = (matches.page + step + matches.pages) % matches.pages;
+  const turned = { ...menu, page, query: matches.query };
+  return { ...turned, active: slashMatches(editor, turned)?.commands[0]?.value ?? null };
 }
 
 /** Asks for a link's URL; an empty URL removes the link. */
@@ -215,15 +231,17 @@ export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; 
       const matches = slashMatches(editor, menu);
       if (!matches) return setSlash(null);
       const active = matches.commands.some((c) => c.value === menu.active) ? menu.active : (matches.commands[0]?.value ?? null);
-      if (active !== menu.active) setSlash({ ...menu, active });
+      if (active !== menu.active || matches.page !== menu.page || matches.query !== menu.query) {
+        setSlash({ ...menu, active, page: matches.page, query: matches.query });
+      }
     };
 
-    /** Applies a command, or for the "more" row shows every match with the first hidden one highlighted. */
+    /** Applies a command, or for the page row turns to the next page. */
     const applySlash = (item: SlashItem) => {
       const menu = slashRef.current;
       if (!menu) return;
       if (!item.command) {
-        setSlash({ ...menu, expanded: true, active: slashMatches(editor, { ...menu, expanded: true })?.commands[SLASH_VISIBLE]?.value ?? null });
+        setSlash(turnPage(editor, menu, 1));
         return;
       }
       setSlash(null);
@@ -266,7 +284,8 @@ export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; 
               start,
               anchor: anchor ?? editableOf(root, block.id)!.getBoundingClientRect(),
               active: "text",
-              expanded: false,
+              page: 0,
+              query: "",
             });
           }
           break;
@@ -375,13 +394,10 @@ export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; 
           }
           return;
         }
-        // Tab shows every command (keeping the highlight); it never nests the block while the menu is open.
-        if (event.key === "Tab") {
+        // Tab and Page Down turn to the next page, Shift+Tab and Page Up back. Tab never nests the block while the menu is open.
+        if (event.key === "Tab" || event.key === "PageDown" || event.key === "PageUp") {
           event.preventDefault();
-          if (!menu.expanded && matches.commands.some((c) => c.value === SLASH_MORE)) {
-            const active = menu.active === SLASH_MORE ? (matches.commands[SLASH_VISIBLE - 1]?.value ?? null) : menu.active;
-            setSlash({ ...menu, expanded: true, active });
-          }
+          setSlash(turnPage(editor, menu, event.key === "PageUp" || (event.key === "Tab" && event.shiftKey) ? -1 : 1));
           return;
         }
         if (event.key === "Enter" && index >= 0) {
@@ -559,7 +575,6 @@ export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; 
         }}
         onDismiss={() => setSlash(null)}
         emptyText="No matching blocks"
-        maxHeight={480}
       />
       {linkFor && (
         <LinkDialog

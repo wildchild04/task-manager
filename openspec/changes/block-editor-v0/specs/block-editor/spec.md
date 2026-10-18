@@ -116,11 +116,15 @@ Typing one of these at the start of a paragraph, followed by a space, SHALL remo
 - **THEN** the paragraph is back, containing "- "
 
 ### Requirement: Slash menu
-Typing `/` in a text block other than the title, at its start or after a space, SHALL open a menu at the caret listing: Text, Heading 1, Heading 2, Heading 3, Bulleted list, Numbered list, To-do, Toggle, Quote and Divider. The menu SHALL show at most five commands followed by a "N more…" row that shows the rest when chosen (by click, by ↓ and Enter, or by Tab, which keeps the highlight). The text typed after `/` SHALL filter the list by name; ↑ and ↓ SHALL move the highlight, Enter SHALL apply the highlighted command, and Escape SHALL close the menu leaving the text. While the menu is open, Tab SHALL not nest the block. Focus SHALL stay in the block while the menu is open, and clicking a command SHALL apply it. Applying a command SHALL remove the `/` and the filter text, then turn the block into that type, keeping its other text; Divider SHALL replace an empty block with a divider followed by an empty paragraph, or insert a divider after a non-empty one. The menu SHALL close when the caret leaves the `/` text, when the `/` is deleted, or when nothing matches and a space is typed. Applying a command SHALL be one undo step.
+Typing `/` in a text block other than the title, at its start or after a space, SHALL open a menu at the caret listing: Text, Heading 1, Heading 2, Heading 3, Bulleted list, Numbered list, To-do, Toggle, Quote and Divider. The menu SHALL show the matching commands five at a time, with a page row ("Page 1 of 2") when there are more: Tab or Page Down SHALL turn to the next page and Shift+Tab or Page Up to the previous one, wrapping around, with the page's first command highlighted; choosing the page row (by click, or ↓ and Enter) SHALL turn to the next page. Changing the filter text SHALL go back to the first page. The text typed after `/` SHALL filter the list by name; ↑ and ↓ SHALL move the highlight, Enter SHALL apply the highlighted command, and Escape SHALL close the menu leaving the text. While the menu is open, Tab SHALL not nest the block. Focus SHALL stay in the block while the menu is open, and clicking a command SHALL apply it. Applying a command SHALL remove the `/` and the filter text, then turn the block into that type, keeping its other text; Divider SHALL replace an empty block with a divider followed by an empty paragraph, or insert a divider after a non-empty one. The menu SHALL close when the caret leaves the `/` text, when the `/` is deleted, or when nothing matches and a space is typed. Applying a command SHALL be one undo step.
 
 #### Scenario: Turn a paragraph into a heading
 - **WHEN** "/hea" is typed at the start of a paragraph "Intro" and Enter is pressed with "Heading 1" highlighted
 - **THEN** the block is a heading 1 containing "Intro"
+
+#### Scenario: Paging through commands
+- **WHEN** "/" is typed and Tab is pressed
+- **THEN** the menu shows the next five commands with the first of them highlighted, and Shift+Tab shows the first five again
 
 #### Scenario: Escape keeps the text
 - **WHEN** "/qu" is typed and Escape is pressed
