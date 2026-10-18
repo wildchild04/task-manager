@@ -5,7 +5,6 @@ import { MemoryRouter } from "react-router";
 import { describe, expect, it } from "vitest";
 
 import { ChoreFields } from "../../app/components/chore-fields";
-import { DashboardCard } from "../../app/components/dashboard-card";
 import { ancestorIds, PageTree } from "../../app/components/page-tree";
 
 const render = (node: ReactNode) =>
@@ -14,30 +13,6 @@ const render = (node: ReactNode) =>
       <DesignSystemProvider mode="light">{node}</DesignSystemProvider>
     </MemoryRouter>,
   );
-
-describe("DashboardCard", () => {
-  it("shows the count, linked items, urgency, due time and overflow", () => {
-    const html = render(
-      <DashboardCard
-        card={{
-          id: "chores",
-          title: "Chores",
-          count: 7,
-          items: [{ id: "c1", title: "Renew cert", href: "/tasks/c1", urgent: true, due: "15 Jan 2026, 09:00" }],
-        }}
-      />,
-    );
-    for (const fragment of ["Chores", ">7<", 'href="/tasks/c1"', "Renew cert", "Urgent", "Due 15 Jan 2026, 09:00", "and 6 more"]) {
-      expect(html).toContain(fragment);
-    }
-  });
-
-  it("says when a section is empty", () => {
-    expect(render(<DashboardCard card={{ id: "open-updates", title: "Open updates", count: 0, items: [] }} />)).toContain(
-      "Nothing here",
-    );
-  });
-});
 
 describe("ChoreFields", () => {
   it("renders the base fields with no schedule fields by default", () => {
@@ -51,7 +26,11 @@ describe("ChoreFields", () => {
   it("keeps rejected input and shows the time error", () => {
     const html = render(
       <ChoreFields
-        result={{ ok: false, fieldErrors: { time: "Choose a time" }, values: { title: "Feed cat", scheduleType: "time", time: "" } }}
+        result={{
+          ok: false,
+          fieldErrors: { time: "Choose a time" },
+          values: { title: "Feed cat", scheduleType: "time", time: "" },
+        }}
       />,
     );
     expect(html).toContain('value="Feed cat"');
@@ -69,7 +48,9 @@ describe("ChoreFields", () => {
     );
     expect(weekly).toContain('name="weekday"');
     const dated = render(
-      <ChoreFields result={{ ok: false, fieldErrors: {}, values: { scheduleType: "date", date: "2026-11-03", time: "14:30" } }} />,
+      <ChoreFields
+        result={{ ok: false, fieldErrors: {}, values: { scheduleType: "date", date: "2026-11-03", time: "14:30" } }}
+      />,
     );
     expect(dated).toMatch(/type="hidden" name="date" value="2026-11-03"/);
   });
@@ -77,7 +58,11 @@ describe("ChoreFields", () => {
 
 describe("PageTree", () => {
   const tree = [
-    { id: "arch", title: "Architecture", children: [{ id: "auth", title: "Auth design", children: [{ id: "tok", title: "Tokens", children: [] }] }] },
+    {
+      id: "arch",
+      title: "Architecture",
+      children: [{ id: "auth", title: "Auth design", children: [{ id: "tok", title: "Tokens", children: [] }] }],
+    },
     { id: "conv", title: "Conventions", children: [] },
   ];
 

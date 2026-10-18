@@ -100,7 +100,7 @@ export default function Task({ loaderData }: Route.ComponentProps) {
       </Stack>
       {/* Keyed by state so dialogs and errors reset after each transition. */}
       <TransitionBar key={`${task.id}-${task.state}`} view={view} extra={chore && <ChoreControls chore={chore} />} />
-      <Tabs ariaLabel="Task sections" value={tab} options={tabs} onChange={openTab} />
+      <Tabs ariaLabel="Task sections" variant="scrollable" value={tab} options={tabs} onChange={openTab} />
     </Stack>
   );
 

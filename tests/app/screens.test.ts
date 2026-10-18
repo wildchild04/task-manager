@@ -73,7 +73,9 @@ describe("project screens", () => {
     });
 
     it("includes the current project's library and the open document", () => {
-      services.blocks.apply([{ op: "insert", block: { id: "child", type: "page", content: [{ text: "Child" }] }, parentId: "doc" }]);
+      services.blocks.apply([
+        { op: "insert", block: { id: "child", type: "page", content: [{ text: "Child" }] }, parentId: "doc" },
+      ]);
       const current = shellView(services, "/pages/child").current!;
       expect(current.activePageId).toBe("child");
       expect(current.library).toEqual([{ id: "doc", title: "Doc", children: [{ id: "child", title: "Child", children: [] }] }]);
@@ -87,18 +89,40 @@ describe("project screens", () => {
   });
 
   describe("project home and dashboard", () => {
-    it("shows counts, links and empty sections", () => {
-      work("W");
-      services.tasks.transition("W", "start");
+    it("shows a quick glance and the tabs' lists, in progress work first", () => {
+      work("W1");
+      work("W2");
+      work("W3");
+      services.tasks.transition("W3", "start");
+      for (const id of ["E1", "E2", "E3", "E4"]) services.tasks.create({ id, projectId: "P", kind: "exploration", title: id });
       const view = projectHomeView(services, "P")!;
-      const wip = view.dashboard.find((c) => c.id === "work-in-progress")!;
-      expect(wip).toMatchObject({ title: "Work in progress", count: 1 });
-      expect(wip.items[0]).toMatchObject({ id: "W", href: "/tasks/W", stateLabel: "In progress" });
-      expect(view.dashboard.find((c) => c.id === "open-updates")).toMatchObject({ count: 0, items: [] });
+      expect(view.glance.map((g) => g.label)).toEqual(["2 to do", "1 in progress", "4 open explorations", "0 chores"]);
+      expect(view.tabs.map((t) => [t.id, t.items.length])).toEqual([
+        ["work", 3],
+        ["explorations", 4],
+        ["updates", 0],
+        ["chores", 0],
+      ]);
+      const workTab = view.tabs[0]!;
+      expect(workTab.items[0]).toMatchObject({ id: "W3", href: "/tasks/W3", chip: { label: "In progress" } });
+      expect(workTab.listHref).toBe("/projects/P/work");
       expect(view.home?.id).toBe(services.projects.get("P")!.homePageId);
     });
 
-    it("marks overdue chores urgent with their due time", () => {
+    it("lists returned work after work in progress, and counts it in the glance", () => {
+      work("R");
+      services.tasks.transition("R", "start");
+      services.tasks.transition("R", "return", { input: { reason: "Blocked" } });
+      work("T");
+      const view = projectHomeView(services, "P")!;
+      expect(view.glance).toContainEqual({ label: "1 returned", color: "warning" });
+      expect(view.tabs[0]!.items.map((i) => [i.id, i.chip?.label])).toEqual([
+        ["R", "Returned"],
+        ["T", "To do"],
+      ]);
+    });
+
+    it("marks overdue chores urgent with their due time, in the glance and the Chores tab", () => {
       services.tasks.create({
         id: "C",
         projectId: "P",
@@ -106,14 +130,19 @@ describe("project screens", () => {
         title: "Renew cert",
         attributes: { schedule: { type: "date", date: "2026-10-13", time: "09:00" } },
       });
-      const chores = projectHomeView(services, "P")!.dashboard.find((c) => c.id === "chores")!;
-      expect(chores.items[0]).toMatchObject({ id: "C", urgent: true, due: "13 Oct 2026, 09:00" });
+      const view = projectHomeView(services, "P")!;
+      expect(view.glance).toContainEqual({ label: "1 urgent", color: "error" });
+      expect(view.glance.map((g) => g.label)).toContain("1 chore · next due 13 Oct 2026, 09:00");
+      expect(view.tabs.find((t) => t.id === "chores")!.items[0]).toMatchObject({
+        id: "C",
+        chip: { label: "Urgent" },
+        detail: "Due 13 Oct 2026, 09:00",
+      });
     });
 
-    it("links library items to their page", () => {
+    it("includes the library tree", () => {
       services.blocks.apply([{ op: "insert", block: { id: "doc", type: "page" }, parentId: libraryRoot() }]);
-      const library = projectHomeView(services, "P")!.dashboard.find((c) => c.id === "library")!;
-      expect(library.items[0]).toMatchObject({ id: "doc", href: "/pages/doc", title: "Untitled" });
+      expect(projectHomeView(services, "P")!.library).toEqual([{ id: "doc", title: "", children: [] }]);
     });
 
     it("returns nothing for an unknown project", () => {
@@ -139,7 +168,11 @@ describe("project screens", () => {
       services.tasks.transition("B", "start");
       services.tasks.transition("C", "start");
       services.tasks.transition("C", "complete");
-      expect(taskListView(services, "P", "work", null)!.rows.map((r) => r.id).sort()).toEqual(["A", "B"]);
+      expect(
+        taskListView(services, "P", "work", null)!
+          .rows.map((r) => r.id)
+          .sort(),
+      ).toEqual(["A", "B"]);
       expect(taskListView(services, "P", "work", "done")!.rows.map((r) => r.id)).toEqual(["C"]);
     });
 
@@ -173,7 +206,14 @@ describe("project screens", () => {
         services,
         "P",
         "chores",
-        form({ title: "Water plants", urgency: "normal", scheduleType: "frequency", every: "weekly", weekday: "1", time: "09:00" }),
+        form({
+          title: "Water plants",
+          urgency: "normal",
+          scheduleType: "frequency",
+          every: "weekly",
+          weekday: "1",
+          time: "09:00",
+        }),
       );
       expect(result).toMatchObject({ ok: true });
       expect(taskListView(services, "P", "chores", null)!.rows).toMatchObject([
@@ -182,12 +222,7 @@ describe("project screens", () => {
     });
 
     it("shows a time error and keeps the other fields", () => {
-      const result = createTaskAction(
-        services,
-        "P",
-        "chores",
-        form({ title: "Feed cat", scheduleType: "time", time: "25:00" }),
-      );
+      const result = createTaskAction(services, "P", "chores", form({ title: "Feed cat", scheduleType: "time", time: "25:00" }));
       expect(result).toMatchObject({
         ok: false,
         fieldErrors: { time: "Choose a time" },
@@ -197,7 +232,12 @@ describe("project screens", () => {
     });
 
     it("orders chores urgent first", () => {
-      createTaskAction(services, "P", "chores", form({ title: "Later", scheduleType: "date", date: "2026-10-20", time: "09:00" }));
+      createTaskAction(
+        services,
+        "P",
+        "chores",
+        form({ title: "Later", scheduleType: "date", date: "2026-10-20", time: "09:00" }),
+      );
       createTaskAction(services, "P", "chores", form({ title: "Now", urgency: "urgent" }));
       expect(taskListView(services, "P", "chores", null)!.rows.map((r) => r.title)).toEqual(["Now", "Later"]);
     });
@@ -206,13 +246,22 @@ describe("project screens", () => {
   describe("schedule form", () => {
     it.each([
       [{ scheduleType: "none" }, undefined],
-      [{ scheduleType: "timer", minutes: "30" }, { type: "timer", minutes: 30 }],
-      [{ scheduleType: "date", date: "2026-11-03", time: "14:30" }, { type: "date", date: "2026-11-03", time: "14:30" }],
+      [
+        { scheduleType: "timer", minutes: "30" },
+        { type: "timer", minutes: 30 },
+      ],
+      [
+        { scheduleType: "date", date: "2026-11-03", time: "14:30" },
+        { type: "date", date: "2026-11-03", time: "14:30" },
+      ],
       [
         { scheduleType: "frequency", every: "monthly", dayOfMonth: "31", time: "09:00", weekday: "3" },
         { type: "frequency", every: "monthly", dayOfMonth: 31, time: "09:00" },
       ],
-      [{ scheduleType: "interval", amount: "6", unit: "hours" }, { type: "interval", amount: 6, unit: "hours" }],
+      [
+        { scheduleType: "interval", amount: "6", unit: "hours" },
+        { type: "interval", amount: 6, unit: "hours" },
+      ],
     ])("parses %j", (values, schedule) => {
       expect(scheduleFromForm(values as Record<string, string>)).toEqual({ ...(schedule ? { schedule } : {}), errors: {} });
     });

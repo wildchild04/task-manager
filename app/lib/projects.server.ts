@@ -1,5 +1,6 @@
 import type { AppServices } from "~/composition";
-import type { DashboardSectionResult } from "~/domain/projects/dashboard";
+import type { LibraryNode } from "~/domain/library/library.service";
+import { byRecency, type DashboardItem, taskItem } from "~/domain/projects/dashboard";
 
 import type { PageView } from "../blocks/view-model";
 import { formatDateTime, stateColor, stateLabel } from "./format";
@@ -18,50 +19,105 @@ export function createProjectAction(services: AppServices, formData: FormData): 
   }
 }
 
-export type DashboardItemView = {
+/** One line of a project tab: a task, with an optional marker and a detail line. */
+export type ProjectItemView = {
   id: string;
   title: string;
   href: string;
-  state?: string;
-  stateLabel?: string;
-  stateColor?: ReturnType<typeof stateColor>;
-  urgent?: boolean;
-  due?: string;
+  chip?: { label: string; color: ReturnType<typeof stateColor> | "error" | "warning" };
+  /** "Due …" for chores, "Updated …" otherwise. */
+  detail: string;
 };
 
-export type DashboardCardView = { id: string; title: string; count: number; items: DashboardItemView[] };
+export type ProjectTabId = "work" | "explorations" | "updates" | "chores";
+
+export type ProjectTabView = { id: ProjectTabId; title: string; items: ProjectItemView[]; listHref: string };
+
+export type GlanceView = { label: string; color?: "info" | "warning" | "error" };
 
 export type ProjectHomeView = {
   project: { id: string; title: string };
   home: PageView | undefined;
-  dashboard: DashboardCardView[];
+  /** The quick-glance header. */
+  glance: GlanceView[];
+  tabs: ProjectTabView[];
+  /** The knowledge library's documents. */
+  library: LibraryNode[];
 };
 
-function card(section: DashboardSectionResult, timeZone: string): DashboardCardView {
-  return {
-    id: section.id,
-    title: section.title,
-    count: section.count,
-    items: section.items.map((item) => ({
-      id: item.id,
-      title: item.title || "Untitled",
-      // Task items have a kind; library items are pages.
-      href: item.kind ? `/tasks/${item.id}` : `/pages/${item.id}`,
-      ...(item.state ? { state: item.state, stateLabel: stateLabel(item.state), stateColor: stateColor(item.state) } : {}),
-      ...(item.urgent !== undefined ? { urgent: item.urgent } : {}),
-      ...(item.dueAt ? { due: formatDateTime(item.dueAt, timeZone) } : {}),
-    })),
-  };
-}
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 export function projectHomeView(services: AppServices, projectId: string): ProjectHomeView | undefined {
   const project = services.projects.get(projectId);
-  const dashboard = services.dashboard.getDashboard(projectId);
+  // Uncapped: the tabs list whole sections.
+  const dashboard = services.dashboard.getDashboard(projectId, Number.POSITIVE_INFINITY);
   if (!project || !dashboard) return undefined;
+  const timeZone = services.tasks.timeZone;
+  const section = (id: string) => dashboard.find((s) => s.id === id)?.items ?? [];
+
+  const item = (entry: DashboardItem, chip?: ProjectItemView["chip"]): ProjectItemView => ({
+    id: entry.id,
+    title: entry.title || "Untitled",
+    href: `/tasks/${entry.id}`,
+    ...(chip ? { chip } : {}),
+    detail: entry.dueAt
+      ? `Due ${formatDateTime(entry.dueAt, timeZone)}`
+      : `Updated ${formatDateTime(services.tasks.get(entry.id)!.updatedAt, timeZone)}`,
+  });
+  const stateChip = (state: string) => ({ label: stateLabel(state), color: stateColor(state) });
+
+  const inProgress = section("work-in-progress");
+  const returned = section("returned-work");
+  const returnedIds = new Set(returned.map((t) => t.id));
+  const todo = byRecency(services.tasks.list(projectId, { kind: "work", state: "todo" }))
+    .filter((t) => !returnedIds.has(t.id))
+    .map(taskItem);
+  const explorations = section("open-explorations");
+  const updates = section("open-updates");
+  const chores = section("chores");
+  const urgent = chores.filter((c) => c.urgent).length;
+  const nextDue = chores
+    .map((c) => c.dueAt)
+    .filter((d): d is string => !!d)
+    .sort()[0];
+
+  const glance: GlanceView[] = [
+    { label: `${todo.length + returned.length} to do` },
+    { label: `${inProgress.length} in progress`, ...(inProgress.length ? { color: "info" as const } : {}) },
+    ...(returned.length ? [{ label: `${returned.length} returned`, color: "warning" as const }] : []),
+    { label: plural(explorations.length, "open exploration") },
+    ...(updates.length ? [{ label: plural(updates.length, "open update") }] : []),
+    { label: `${plural(chores.length, "chore")}${nextDue ? ` · next due ${formatDateTime(nextDue, timeZone)}` : ""}` },
+    ...(urgent ? [{ label: `${urgent} urgent`, color: "error" as const }] : []),
+  ];
+
+  const list = (slug: string) => `/projects/${project.id}/${slug}`;
   return {
     project: { id: project.id, title: project.title || "Untitled" },
     home: buildPageView(services.blocks, project.homePageId),
-    dashboard: dashboard.map((section) => card(section, services.tasks.timeZone)),
+    glance,
+    tabs: [
+      {
+        id: "work",
+        title: "Work",
+        listHref: list("work"),
+        // In progress first, then returned, then the rest of the to-do work.
+        items: [
+          ...inProgress.map((t) => item(t, stateChip("in_progress"))),
+          ...returned.map((t) => item(t, { label: "Returned", color: "warning" })),
+          ...todo.map((t) => item(t, stateChip("todo"))),
+        ],
+      },
+      { id: "explorations", title: "Explorations", listHref: list("explorations"), items: explorations.map((t) => item(t)) },
+      { id: "updates", title: "Updates", listHref: list("updates"), items: updates.map((t) => item(t)) },
+      {
+        id: "chores",
+        title: "Chores",
+        listHref: list("chores"),
+        items: chores.map((t) => item(t, t.urgent ? { label: "Urgent", color: "error" } : undefined)),
+      },
+    ],
+    library: services.library.getLibraryTree(project.id) ?? [],
   };
 }
 
