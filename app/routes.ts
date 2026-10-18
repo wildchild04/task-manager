@@ -3,6 +3,7 @@ import { type RouteConfig, index, layout, route } from "@react-router/dev/routes
 export default [
   route("api/edits", "routes/api.edits.ts"),
   route("api/pages", "routes/api.pages.ts"),
+  route("api/comments/:commentId/editable", "routes/api.comment-editable.ts"),
   layout("routes/shell.tsx", [
     index("routes/home.tsx"),
     route("projects/:projectId", "routes/project-home.tsx"),

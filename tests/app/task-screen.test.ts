@@ -3,8 +3,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { ActionResult } from "../../app/lib/forms.server";
 import { taskAction } from "../../app/lib/task-actions.server";
 import { taskOverviewView } from "../../app/lib/task-overview.server";
-import { paragraphsFromText, textOfBody } from "../../app/lib/text.server";
+import { applyEdit } from "../../app/lib/page-edit.server";
+import { paragraphsFromText } from "../../app/lib/text.server";
 import { type AppServices, createInMemoryServices } from "~/composition";
+
+/** A comment as the editor posts it: its blocks as JSON (here, paragraphs of plain text). */
+const blocksOf = (text: string) => JSON.stringify(paragraphsFromText(text));
 
 const form = (fields: Record<string, string>) => {
   const data = new FormData();
@@ -77,7 +81,10 @@ describe("task screen", () => {
 
     it("rejects an empty title", () => {
       create("E", "exploration");
-      expect(transition("E", "promote", { title: " " })).toMatchObject({ ok: false, fieldErrors: { title: "A title is required" } });
+      expect(transition("E", "promote", { title: " " })).toMatchObject({
+        ok: false,
+        fieldErrors: { title: "A title is required" },
+      });
       expect(view("E").task.state).toBe("open");
     });
   });
@@ -86,7 +93,11 @@ describe("task screen", () => {
     beforeEach(() => {
       create("W", "work");
       services.blocks.apply([
-        { op: "insert", block: { id: "intro", type: "paragraph", content: [{ text: "Intro" }] }, parentId: services.tasks.get("W")!.bodyPageId },
+        {
+          op: "insert",
+          block: { id: "intro", type: "paragraph", content: [{ text: "Intro" }] },
+          parentId: services.tasks.get("W")!.bodyPageId,
+        },
       ]);
       services.tasks.transition("W", "start");
     });
@@ -97,7 +108,11 @@ describe("task screen", () => {
       ).toMatchObject({ ok: true });
       const screen = view("W");
       expect(screen.task.state).toBe("todo");
-      expect(screen.comments!.at(-1)).toMatchObject({ author: "You", text: "Blocked on the API key" });
+      const returned = screen.comments!.at(-1)!;
+      expect(returned.author).toBe("You");
+      expect(returned.blocks.map((b) => (b.kind === "content" ? b.content[0]?.text : b.kind))).toEqual([
+        "Blocked on the API key",
+      ]);
       expect(screen.history[0]).toMatchObject({ label: "Return", note: "Blocked on the API key" });
       expect(screen.body!.blocks.map((b) => (b.kind === "content" ? b.content[0]?.text : b.kind))).toEqual([
         "Intro",
@@ -106,7 +121,10 @@ describe("task screen", () => {
     });
 
     it("requires a reason", () => {
-      expect(transition("W", "return", { reason: "" })).toMatchObject({ ok: false, fieldErrors: { reason: "A return needs a reason" } });
+      expect(transition("W", "return", { reason: "" })).toMatchObject({
+        ok: false,
+        fieldErrors: { reason: "A return needs a reason" },
+      });
       expect(view("W").task.state).toBe("in_progress");
     });
   });
@@ -163,7 +181,10 @@ describe("task screen", () => {
     it("names agents and shows notes, newest first", () => {
       create("W", "work");
       services.tasks.transition("W", "start");
-      services.tasks.transition("W", "return", { actor: { kind: "agent", name: "builder" }, input: { reason: "Tests fail on CI" } });
+      services.tasks.transition("W", "return", {
+        actor: { kind: "agent", name: "builder" },
+        input: { reason: "Tests fail on CI" },
+      });
       expect(view("W").history[0]).toMatchObject({
         label: "Return",
         from: "In progress",
@@ -179,7 +200,9 @@ describe("task screen", () => {
     beforeEach(() => create("W", "work"));
 
     it("adds a comment with one paragraph per blank-line-separated block", () => {
-      expect(post("W", { intent: "comment-add", text: "First line\n\nSecond paragraph" })).toMatchObject({ ok: true });
+      expect(post("W", { intent: "comment-add", blocks: blocksOf("First line\n\nSecond paragraph") })).toMatchObject({
+        ok: true,
+      });
       const comment = view("W").comments!.at(-1)!;
       expect(comment).toMatchObject({ author: "You", edited: false });
       expect(comment.blocks.map((b) => (b.kind === "content" ? b.content[0]?.text : b.kind))).toEqual([
@@ -189,29 +212,84 @@ describe("task screen", () => {
     });
 
     it("rejects an empty comment", () => {
-      expect(post("W", { intent: "comment-add", text: "  \n\n " })).toMatchObject({
+      expect(post("W", { intent: "comment-add", blocks: blocksOf("  \n\n ") })).toMatchObject({
         ok: false,
         fieldErrors: { text: "The comment is empty" },
       });
       expect(view("W").comments).toEqual([]);
     });
 
-    it("edits a comment by replacing its content", () => {
-      const added = post("W", { intent: "comment-add", text: "Old\n\nText" });
+    it("posts any block type, marks and mentions, but no pages", () => {
+      services.blocks.apply([
+        { op: "insert", block: { id: "arch", type: "page", content: [{ text: "Architecture" }] }, parentId: null },
+      ]);
+      const blocks = [
+        {
+          id: "p",
+          type: "paragraph",
+          content: [
+            { text: "See ", marks: ["bold"] },
+            { text: "\uFFFC", mention: { pageId: "arch" } },
+          ],
+        },
+        {
+          id: "l",
+          type: "bulleted_list_item",
+          content: [{ text: "Point" }],
+          children: [{ id: "n", type: "paragraph", content: [{ text: "Nested" }] }],
+        },
+      ];
+      expect(post("W", { intent: "comment-add", blocks: JSON.stringify(blocks) })).toMatchObject({ ok: true });
+      const comment = view("W").comments![0]!;
+      expect(comment.mentions).toEqual({ arch: { title: "Architecture", href: "/pages/arch" } });
+      expect(comment.blocks.map((b) => (b.kind === "content" ? b.type : b.kind))).toEqual(["paragraph", "bulleted_list_item"]);
+
+      const page = [{ id: "x", type: "page", content: [{ text: "Sub" }] }];
+      expect(post("W", { intent: "comment-add", blocks: JSON.stringify(page) })).toMatchObject({ ok: false });
+      expect(post("W", { intent: "comment-add", blocks: "not json" })).toMatchObject({
+        ok: false,
+        formError: "The comment couldn't be read",
+      });
+      expect(view("W").comments).toHaveLength(1);
+    });
+
+    it("edits a comment in place through the comment surface, marking it edited", () => {
+      const added = post("W", { intent: "comment-add", blocks: blocksOf("Old") });
       const commentId = added.ok ? added.id : "";
-      expect(post("W", { intent: "comment-edit", commentId, text: "Updated text" })).toMatchObject({ ok: true });
-      expect(view("W").comments![0]).toMatchObject({ id: commentId, edited: true, text: "Updated text", onlyParagraphs: true });
+      const first = services.comments.body(commentId)!.children![0]!.block.id;
+      expect(
+        applyEdit(services, {
+          surface: "comment",
+          id: commentId,
+          batch: [{ op: "update", id: first, content: [{ text: "Updated text" }] }],
+        }),
+      ).toMatchObject({ ok: true });
+      const comment = view("W").comments![0]!;
+      expect(comment).toMatchObject({ id: commentId, edited: true });
+      expect(comment.blocks.map((b) => (b.kind === "content" ? b.content[0]?.text : b.kind))).toEqual(["Updated text"]);
+
+      const root = services.comments.get(commentId)!.bodyBlockId;
+      expect(
+        applyEdit(services, {
+          surface: "comment",
+          id: commentId,
+          batch: [{ op: "insert", block: { id: "pg", type: "page" }, parentId: root }],
+        }),
+      ).toEqual({
+        ok: false,
+        message: "A page block can't be created here",
+      });
     });
 
     it("deletes a comment", () => {
-      const added = post("W", { intent: "comment-add", text: "Bye" });
+      const added = post("W", { intent: "comment-add", blocks: blocksOf("Bye") });
       post("W", { intent: "comment-delete", commentId: added.ok ? added.id : "" });
       expect(view("W").comments).toEqual([]);
     });
 
     it("refuses comments of another task", () => {
       create("W2", "work");
-      const added = post("W2", { intent: "comment-add", text: "Mine" });
+      const added = post("W2", { intent: "comment-add", blocks: blocksOf("Mine") });
       expect(post("W", { intent: "comment-delete", commentId: added.ok ? added.id : "" })).toMatchObject({ ok: false });
       expect(view("W2").comments).toHaveLength(1);
     });
@@ -281,7 +359,7 @@ describe("task screen", () => {
 
     it("links comments and blocks to where they are shown, and marks deleted targets missing", () => {
       create("W", "work");
-      const added = post("W", { intent: "comment-add", text: "An idea" });
+      const added = post("W", { intent: "comment-add", blocks: blocksOf("An idea") });
       const commentId = added.ok ? added.id : "";
       const bodyPageId = services.tasks.get("W")!.bodyPageId;
       const libraryRoot = services.projects.get("P")!.libraryRootId;
@@ -318,7 +396,7 @@ describe("task screen", () => {
 
     it("starts an exploration from a comment", () => {
       create("W", "work");
-      const added = post("W", { intent: "comment-add", text: "What about offline?" });
+      const added = post("W", { intent: "comment-add", blocks: blocksOf("What about offline?") });
       const commentId = added.ok ? added.id : "";
       const result = post("W", { intent: "start-exploration", commentId, title: "Offline mode" });
       const id = result.ok ? result.id : "";
@@ -368,16 +446,5 @@ describe("plain text helpers", () => {
       { id: "p1", type: "paragraph", content: [{ text: "One\nline two" }] },
       { id: "p2", type: "paragraph", content: [{ text: "Three" }] },
     ]);
-  });
-
-  it("turns a body back into text, noting other block types", () => {
-    const body = {
-      block: { id: "root" },
-      children: [
-        { block: { id: "a", type: "paragraph", content: [{ text: "A" }] }, children: [] },
-        { block: { id: "b", type: "quote", content: [{ text: "B" }] }, children: [] },
-      ],
-    } as unknown as Parameters<typeof textOfBody>[0];
-    expect(textOfBody(body)).toEqual({ text: "A\n\nB", onlyParagraphs: false });
   });
 });

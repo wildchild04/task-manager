@@ -1,36 +1,115 @@
-import { Alert, Button, Divider, Stack, TextField, Typography } from "@wildchild/design-system";
-import { useEffect, useState } from "react";
-import { useFetcher } from "react-router";
+import { Alert, Button, Divider, Stack, Typography } from "@wildchild/design-system";
+import { useEffect, useRef, useState } from "react";
+import { useFetcher, useRevalidator } from "react-router";
+
+import type { TreeNode } from "~/domain/blocks/types";
+import type { CommentBlockInput } from "~/domain/comments/types";
 
 import { Blocks } from "../blocks/block-view";
+import { MentionTargetsContext } from "../blocks/rich-text";
+import { PageEditor } from "../editor/page-editor";
 import type { ActionResult } from "../lib/forms.server";
+import type { EditablePage } from "../lib/page-edit.server";
 import type { CommentView } from "../lib/task-overview.server";
-import { fieldError, FormDialog, lastValue } from "./form-dialog";
+import { useHydrated } from "../lib/use-hydrated";
+import { FormDialog } from "./form-dialog";
 import { Hidden, StartDialog } from "./task-actions";
 
-const PARAGRAPH_HINT = "Separate paragraphs with a blank line.";
+/** A fresh draft: a comment root with one empty paragraph, ready to type in. */
+function draftPage(): EditablePage {
+  const now = new Date().toISOString();
+  const node = (id: string, type: "comment" | "paragraph", parentId: string | null): TreeNode => ({
+    block: { id, type, props: {}, content: [], parentId, owner: null, createdAt: now, updatedAt: now } as TreeNode["block"],
+    children: [],
+  });
+  const root = node(crypto.randomUUID(), "comment", null);
+  root.children = [node(crypto.randomUUID(), "paragraph", root.block.id)];
+  return { surface: "comment", id: "draft", tree: root, version: "draft", title: false, references: {}, mentions: {} };
+}
 
-function EditCommentDialog({ comment, onClose }: { comment: CommentView; onClose: () => void }) {
+/**
+ * The new-comment editor. The draft stays in the browser until it's posted
+ * (button or Cmd/Ctrl+Enter); then a fresh draft takes its place.
+ */
+function AddComment() {
   const fetcher = useFetcher<ActionResult>();
+  const hydrated = useHydrated();
+  const [draft, setDraft] = useState<EditablePage | null>(null);
+  const blocks = useRef<CommentBlockInput[]>([]);
+  useEffect(() => setDraft(draftPage()), []);
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data?.ok) {
+      blocks.current = [];
+      setDraft(draftPage());
+    }
+  }, [fetcher.state, fetcher.data]);
+
+  const post = () => {
+    if (fetcher.state !== "idle") return;
+    void fetcher.submit({ intent: "comment-add", blocks: JSON.stringify(blocks.current) }, { method: "post" });
+  };
+  const error = fetcher.data && !fetcher.data.ok ? (fetcher.data.fieldErrors.text ?? fetcher.data.formError) : undefined;
+
   return (
-    <FormDialog open title="Edit comment" confirmLabel="Save" fetcher={fetcher} onClose={onClose}>
-      <Hidden name="intent" value="comment-edit" />
-      <Hidden name="commentId" value={comment.id} />
-      {!comment.onlyParagraphs && (
-        <Alert severity="warning" role="status">
-          This comment has formatting that plain text can't keep. Saving turns every block into a paragraph.
+    <Stack spacing={1} alignItems="stretch">
+      <div className="comment-composer">
+        {hydrated && draft ? (
+          <PageEditor
+            key={draft.tree.block.id}
+            page={draft}
+            emptyText="Write a comment…"
+            draft={{ onChange: (next) => (blocks.current = next), onSubmit: post }}
+          />
+        ) : (
+          <Typography color="text.secondary">Write a comment…</Typography>
+        )}
+      </div>
+      {error && (
+        <Alert severity="error" role="alert">
+          {error}
         </Alert>
       )}
-      <TextField
-        name="text"
-        label="Comment"
-        fullWidth
-        multiline
-        minRows={3}
-        defaultValue={lastValue(fetcher.data, "text") ?? comment.text}
-        {...fieldError(fetcher.data, "text")}
-      />
-    </FormDialog>
+      <Stack direction="row" spacing={1} alignItems="center">
+        <Button onClick={post} disabled={fetcher.state !== "idle"}>
+          Comment
+        </Button>
+        <Typography variant="caption" color="text.secondary">
+          Cmd/Ctrl+Enter to post · type / for blocks, @ to mention
+        </Typography>
+      </Stack>
+    </Stack>
+  );
+}
+
+/** Edits a comment in place, saving as it changes; "Done" shows it read-only again. */
+function EditComment({ comment, onDone }: { comment: CommentView; onDone: () => void }) {
+  const [editable, setEditable] = useState<EditablePage | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [statusSlot, setStatusSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    fetch(`/api/comments/${encodeURIComponent(comment.id)}/editable`)
+      .then((response) => (response.ok ? (response.json() as Promise<EditablePage>) : Promise.reject(new Error("not found"))))
+      .then(setEditable)
+      .catch(() => setFailed(true));
+  }, [comment.id]);
+
+  if (failed) return <Alert severity="error">This comment can't be edited any more.</Alert>;
+  return (
+    <Stack spacing={1}>
+      <div className="comment-composer">
+        {editable ? (
+          <PageEditor page={editable} statusSlot={statusSlot} emptyText="Write a comment…" />
+        ) : (
+          <Typography color="text.secondary">Loading…</Typography>
+        )}
+      </div>
+      <Stack direction="row" spacing={1} alignItems="center">
+        <Button size="small" onClick={onDone}>
+          Done
+        </Button>
+        <span ref={setStatusSlot} />
+      </Stack>
+    </Stack>
   );
 }
 
@@ -45,12 +124,21 @@ function DeleteCommentDialog({ comment, onClose }: { comment: CommentView; onClo
   );
 }
 
-type CommentDialog = {
-  kind: "edit" | "delete" | "start";
-  comment: CommentView;
-} | null;
+type CommentDialog = { kind: "delete" | "start"; comment: CommentView } | null;
 
-function Comment({ comment, onOpen }: { comment: CommentView; onOpen: (dialog: CommentDialog) => void }) {
+function Comment({
+  comment,
+  editing,
+  onEdit,
+  onDoneEditing,
+  onOpen,
+}: {
+  comment: CommentView;
+  editing: boolean;
+  onEdit: () => void;
+  onDoneEditing: () => void;
+  onOpen: (dialog: CommentDialog) => void;
+}) {
   return (
     <div id={`comment-${comment.id}`}>
       <Stack spacing={0.5}>
@@ -62,57 +150,38 @@ function Comment({ comment, onOpen }: { comment: CommentView; onOpen: (dialog: C
             {comment.edited ? `${comment.at} · Edited` : comment.at}
           </Typography>
         </Stack>
-        <div>
-          <Blocks blocks={comment.blocks} />
-        </div>
-        <Stack direction="row" spacing={1}>
-          <Button size="small" variant="text" onClick={() => onOpen({ kind: "edit", comment })}>
-            Edit
-          </Button>
-          <Button size="small" variant="text" color="error" onClick={() => onOpen({ kind: "delete", comment })}>
-            Delete
-          </Button>
-          <Button size="small" variant="text" onClick={() => onOpen({ kind: "start", comment })}>
-            Start exploration…
-          </Button>
-        </Stack>
+        {editing ? (
+          <EditComment comment={comment} onDone={onDoneEditing} />
+        ) : (
+          <>
+            <MentionTargetsContext.Provider value={comment.mentions}>
+              <div>
+                <Blocks blocks={comment.blocks} />
+              </div>
+            </MentionTargetsContext.Provider>
+            <Stack direction="row" spacing={1}>
+              <Button size="small" variant="text" onClick={onEdit}>
+                Edit
+              </Button>
+              <Button size="small" variant="text" color="error" onClick={() => onOpen({ kind: "delete", comment })}>
+                Delete
+              </Button>
+              <Button size="small" variant="text" onClick={() => onOpen({ kind: "start", comment })}>
+                Start exploration…
+              </Button>
+            </Stack>
+          </>
+        )}
       </Stack>
     </div>
   );
 }
 
-/** A plain-text comment box that clears itself after each comment is added. */
-function AddComment() {
-  const fetcher = useFetcher<ActionResult>();
-  const [key, setKey] = useState(0);
-  useEffect(() => {
-    if (fetcher.state === "idle" && fetcher.data?.ok) setKey((k) => k + 1);
-  }, [fetcher.state, fetcher.data]);
-
-  return (
-    <fetcher.Form method="post" key={key}>
-      <Hidden name="intent" value="comment-add" />
-      <Stack spacing={1} alignItems="flex-start">
-        <TextField
-          name="text"
-          label="Add a comment"
-          fullWidth
-          multiline
-          minRows={2}
-          helperText={fieldError(fetcher.data, "text").helperText ?? PARAGRAPH_HINT}
-          error={fieldError(fetcher.data, "text").error}
-        />
-        <Button type="submit" disabled={fetcher.state !== "idle"}>
-          Comment
-        </Button>
-      </Stack>
-    </fetcher.Form>
-  );
-}
-
-/** The task's comments, oldest first, with adding, editing, deleting and starting an exploration from one. */
+/** The task's comments, oldest first, with writing, editing in place, deleting and starting an exploration from one. */
 export function TaskComments({ comments }: { comments: CommentView[] }) {
   const [dialog, setDialog] = useState<CommentDialog>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const revalidator = useRevalidator();
   const close = () => setDialog(null);
 
   return (
@@ -124,13 +193,23 @@ export function TaskComments({ comments }: { comments: CommentView[] }) {
       ) : (
         <Stack spacing={2} divider={<Divider />}>
           {comments.map((comment) => (
-            <Comment key={comment.id} comment={comment} onOpen={setDialog} />
+            <Comment
+              key={comment.id}
+              comment={comment}
+              editing={editingId === comment.id}
+              onEdit={() => setEditingId(comment.id)}
+              onDoneEditing={() => {
+                setEditingId(null);
+                // Show the saved content and the "Edited" marker.
+                void revalidator.revalidate();
+              }}
+              onOpen={setDialog}
+            />
           ))}
         </Stack>
       )}
       <AddComment />
 
-      {dialog?.kind === "edit" && <EditCommentDialog comment={dialog.comment} onClose={close} />}
       {dialog?.kind === "delete" && <DeleteCommentDialog comment={dialog.comment} onClose={close} />}
       {dialog?.kind === "start" && (
         <StartDialog

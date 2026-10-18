@@ -176,3 +176,15 @@ body {
 .page-backlinks:not(:empty) {
   margin-top: 32px;
 }
+
+/* The box a comment is written or edited in. */
+.comment-composer {
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  border-radius: 8px;
+  padding: 8px 12px;
+  min-height: 2.5em;
+}
+
+.comment-composer:focus-within {
+  border-color: var(--editor-link, currentColor);
+}

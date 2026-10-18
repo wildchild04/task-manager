@@ -4,17 +4,18 @@ import { checkPageEdit, editBatchSchema, treeVersion } from "~/domain/blocks/pag
 import { plainText } from "~/domain/blocks/text";
 import type { Batch, TreeNode } from "~/domain/blocks/types";
 import { PROJECT_OWNER_KIND } from "~/domain/projects/types";
+import { TaskError } from "~/domain/tasks/errors";
 
 import type { MentionTargets, ReferenceView, ViewBlock } from "../blocks/view-model";
-import { browsableScope, buildBodyView } from "./page-view.server";
+import { browsableScope, buildBodyView, buildCommentView, mentionTargets } from "./page-view.server";
 
-/** Where an editor runs: a page, a project's home page, or a task's body. */
-export type EditSurface = "page" | "project" | "task";
+/** Where an editor runs: a page, a project's home page, a task's body, or a comment's content. */
+export type EditSurface = "page" | "project" | "task" | "comment";
 
 /** What the editor of one page starts from. Plain data, sent by loaders. */
 export type EditablePage = {
   surface: EditSurface;
-  /** The page's own ID for `page`, the project's or the task's ID otherwise. */
+  /** The page's own ID for `page`; the project's, task's or comment's ID otherwise. */
   id: string;
   /** The page's own content; sub-pages come without theirs. */
   tree: TreeNode;
@@ -45,6 +46,10 @@ function editTarget(services: AppServices, surface: EditSurface, id: string): Ed
       const task = services.tasks.get(id);
       return task && { rootId: task.bodyPageId, title: true };
     }
+    case "comment": {
+      const comment = services.comments.get(id);
+      return comment && { rootId: comment.bodyBlockId, title: false };
+    }
   }
 }
 
@@ -61,7 +66,12 @@ export function editablePage(services: AppServices, surface: EditSurface, id: st
   const target = editTarget(services, surface, id);
   const tree = target && services.blocks.loadTree(target.rootId);
   if (!target || !tree) return undefined;
-  const view = buildBodyView(services.blocks, target.rootId);
+  // A comment's root isn't a page, so its content is built as a comment body.
+  const blocks =
+    surface === "comment"
+      ? buildCommentView(services.blocks, target.rootId)
+      : buildBodyView(services.blocks, target.rootId)?.blocks;
+  const view = blocks && { blocks, mentions: mentionTargets(services.blocks, blocks) };
   return {
     surface,
     id,
@@ -75,7 +85,7 @@ export function editablePage(services: AppServices, surface: EditSurface, id: st
 
 export type EditResult = { ok: true; version: string } | { ok: false; message: string };
 
-const surfaces: readonly string[] = ["page", "project", "task"];
+const surfaces: readonly string[] = ["page", "project", "task", "comment"];
 
 /**
  * Applies an editor batch to the page of a surface, after checking that it
@@ -97,9 +107,12 @@ export function applyEdit(services: AppServices, body: unknown): EditResult {
   if (refusal) return { ok: false, message: refusal };
 
   try {
-    services.blocks.apply(batch);
+    // Comment bodies only change through the comment service, which also marks the comment edited.
+    if (input.surface === "comment") services.comments.edit(input.id, batch);
+    else services.blocks.apply(batch);
   } catch (error) {
     if (error instanceof BatchError) return { ok: false, message: error.error.message };
+    if (error instanceof TaskError) return { ok: false, message: error.message };
     throw error;
   }
   return { ok: true, version: treeVersion(services.blocks.loadTree(target.rootId)!) };
@@ -157,7 +170,11 @@ export function deletePage(services: AppServices, pageId: string): PageDeletion 
 
 /** Whether `pageId` is `ancestorId` or lies anywhere inside it. */
 export function isWithin(services: AppServices, pageId: string, ancestorId: string): boolean {
-  for (let block = services.blocks.getBlock(pageId); block; block = block.parentId ? services.blocks.getBlock(block.parentId) : undefined) {
+  for (
+    let block = services.blocks.getBlock(pageId);
+    block;
+    block = block.parentId ? services.blocks.getBlock(block.parentId) : undefined
+  ) {
     if (block.id === ancestorId) return true;
   }
   return false;

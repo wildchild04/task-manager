@@ -17,7 +17,8 @@ import { useBlocker, useNavigate, useRevalidator } from "react-router";
 import type { Operation } from "~/domain/blocks/types";
 import { behaviorOf, matchSlashCommands, type SlashCommand } from "~/editor/block-types";
 import { Editor } from "~/editor/editor";
-import { caret, caretOrder, getBlock, isCollapsed, type Selection, stateFromTree } from "~/editor/editor-state";
+import { caret, caretOrder, type EditorState, getBlock, isCollapsed, type Selection, stateFromTree } from "~/editor/editor-state";
+import type { CommentBlockInput } from "~/domain/comments/types";
 import { linkAt, linkRangeAt, plain } from "~/editor/rich-text";
 import { type SaveStatus, SaveQueue, type SendResult } from "~/editor/save-queue";
 
@@ -152,6 +153,15 @@ export function normalizeHref(value: string): string {
   const href = value.trim();
   if (/^[a-z][a-z0-9+.-]*:/i.test(href) || href.startsWith("/") || href.startsWith("#")) return href;
   return `https://${href}`;
+}
+
+/** A draft's blocks as a comment's content: the root's children, nested. */
+export function draftBlocks(state: EditorState): CommentBlockInput[] {
+  const toInput = (id: string): CommentBlockInput => {
+    const { type, props, content, children } = state.blocks[id]!;
+    return { id, type, props, content, ...(children.length > 0 ? { children: children.map(toInput) } : {}) };
+  };
+  return state.blocks[state.rootId]!.children.map(toInput);
 }
 
 /** Links to a page or task of the app. */
@@ -334,6 +344,8 @@ export function PageEditor({
   titleVariant = "h1",
   afterTitle,
   statusSlot,
+  draft,
+  emptyText = "Empty page. Click to start writing.",
 }: {
   page: EditablePage;
   titleVariant?: "h1" | "h2";
@@ -341,7 +353,13 @@ export function PageEditor({
   afterTitle?: ReactNode;
   /** Where to show the saving indicator; at the top right of the editor when not given. */
   statusSlot?: HTMLElement | null;
+  /** A draft (a new comment): nothing is saved; the content goes to `onChange`, and Cmd/Ctrl+Enter calls `onSubmit`. */
+  draft?: { onChange: (blocks: CommentBlockInput[]) => void; onSubmit: () => void };
+  /** What an empty page says. */
+  emptyText?: string;
 }) {
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
   const rootRef = useRef<HTMLDivElement>(null);
   // Links inside editable text are plain elements; they take the design system's link colour from the theme.
   const { mode } = useThemeMode();
@@ -397,7 +415,10 @@ export function PageEditor({
         void revalidator.revalidate();
       },
     });
-    editor = new Editor(stateFromTree(page.tree), { onOps: (ops) => queue.enqueue(ops) });
+    editor = new Editor(stateFromTree(page.tree), {
+      // A draft isn't saved: its content goes to the caller instead.
+      onOps: (ops) => (draftRef.current ? draftRef.current.onChange(draftBlocks(editor.state)) : queue.enqueue(ops)),
+    });
     return { editor, queue };
     // One editor per page; newer content from the loader is applied below.
   }, [page.surface, page.id]);
@@ -711,6 +732,11 @@ export function PageEditor({
       }
       let handled = true;
 
+      if (event.key === "Enter" && mod && draftRef.current) {
+        event.preventDefault();
+        draftRef.current.onSubmit();
+        return;
+      }
       if (event.key === "Enter" && !mod) {
         if (event.shiftKey) editor.lineBreak();
         else editor.enter();
@@ -903,7 +929,8 @@ export function PageEditor({
   return (
     <MentionTargetsContext.Provider value={mentionTargets}>
       <div className="page-editor" ref={rootRef} style={{ "--editor-link": linkColor } as CSSProperties}>
-        {statusSlot ? createPortal(statusText, statusSlot) : <div className="editor-status">{statusText}</div>}
+        {/* A draft has nothing to save, so no saving indicator. */}
+        {!draft && (statusSlot ? createPortal(statusText, statusSlot) : <div className="editor-status">{statusText}</div>)}
         {error && (
           <Alert severity="error" role="alert">
             {error}
@@ -926,7 +953,7 @@ export function PageEditor({
                 restoreSelection.current = true;
               }}
             >
-              <Typography color="text.secondary">Empty page. Click to start writing.</Typography>
+              <Typography color="text.secondary">{emptyText}</Typography>
             </button>
           ) : (
             <EditorBlocks state={state} ids={root.children} closed={closed} references={page.references} actions={actions} />

@@ -1,5 +1,9 @@
+import { z } from "zod";
+
 import type { AppServices } from "~/composition";
-import type { Batch } from "~/domain/blocks/types";
+import { richTextSchema } from "~/domain/blocks/schema";
+import { type Batch, isTextType } from "~/domain/blocks/types";
+import type { CommentBlockInput } from "~/domain/comments/types";
 import { choreAttributes, isRecurring, urgencySchema } from "~/domain/chores/schedule";
 import type { TaskKind, TaskSummary } from "~/domain/tasks/types";
 
@@ -95,11 +99,41 @@ function setUrgency(services: AppServices, task: TaskSummary, values: Record<str
   }
 }
 
+/** The blocks of a comment written in the editor, as posted (JSON). */
+const commentBlocksSchema: z.ZodType<CommentBlockInput[]> = z.array(
+  z.lazy(() =>
+    z
+      .object({
+        id: z.string().min(1),
+        type: z.string(),
+        props: z.record(z.string(), z.unknown()).optional(),
+        content: richTextSchema.optional(),
+        children: commentBlocksSchema.optional(),
+      })
+      .strict(),
+  ),
+) as unknown as z.ZodType<CommentBlockInput[]>;
+
+/** Whether a comment has nothing in it: only text blocks without text and without children. */
+function isEmptyComment(blocks: readonly CommentBlockInput[]): boolean {
+  return blocks.every(
+    (block) =>
+      isTextType(block.type) && (block.content ?? []).every((span) => span.text.trim() === "") && !block.children?.length,
+  );
+}
+
 function addComment(services: AppServices, task: TaskSummary, values: Record<string, string>): ActionResult {
-  const blocks = paragraphsFromText(values.text ?? "");
-  if (blocks.length === 0) return invalid(values, { text: "The comment is empty" });
+  let raw: unknown;
   try {
-    return success(services.comments.add({ id: crypto.randomUUID(), taskId: task.id, blocks }).id);
+    raw = JSON.parse(values.blocks ?? "[]");
+  } catch {
+    return invalid(values, {}, "The comment couldn't be read");
+  }
+  const parsed = commentBlocksSchema.safeParse(raw);
+  if (!parsed.success) return invalid(values, {}, "The comment couldn't be read");
+  if (isEmptyComment(parsed.data)) return invalid(values, { text: "The comment is empty" });
+  try {
+    return success(services.comments.add({ id: crypto.randomUUID(), taskId: task.id, blocks: parsed.data }).id);
   } catch (error) {
     return domainError(error, values, "text");
   }
@@ -109,27 +143,6 @@ function addComment(services: AppServices, task: TaskSummary, values: Record<str
 function commentOf(services: AppServices, task: TaskSummary, values: Record<string, string>) {
   const comment = values.commentId ? services.comments.get(values.commentId) : undefined;
   return comment?.taskId === task.id ? comment : undefined;
-}
-
-function editComment(services: AppServices, task: TaskSummary, values: Record<string, string>): ActionResult {
-  const comment = commentOf(services, task, values);
-  if (!comment) return invalid(values, {}, "This comment no longer exists");
-  const blocks = paragraphsFromText(values.text ?? "");
-  if (blocks.length === 0) return invalid(values, { text: "The comment is empty" });
-
-  // Replace the whole content: remove the current top-level blocks, then insert the new paragraphs in order.
-  const batch: Batch[number][] = services.blocks.getChildren(comment.bodyBlockId).map((child) => ({ op: "delete", id: child.id }));
-  let afterId: string | null = null;
-  for (const block of blocks) {
-    batch.push({ op: "insert", block, parentId: comment.bodyBlockId, afterId });
-    afterId = block.id;
-  }
-  try {
-    services.comments.edit(comment.id, batch);
-    return success(comment.id);
-  } catch (error) {
-    return domainError(error, values, "text");
-  }
 }
 
 function deleteComment(services: AppServices, task: TaskSummary, values: Record<string, string>): ActionResult {
@@ -204,7 +217,6 @@ const HANDLERS = {
   transition: applyTransition,
   urgency: setUrgency,
   "comment-add": addComment,
-  "comment-edit": editComment,
   "comment-delete": deleteComment,
   "reference-add": addReference,
   "reference-remove": removeReference,

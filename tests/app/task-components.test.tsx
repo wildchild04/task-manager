@@ -75,13 +75,12 @@ describe("TaskComments", () => {
             at: "14 Oct 2026, 08:00",
             edited: true,
             blocks: [{ kind: "content", id: "p1", type: "paragraph", props: {}, content: [{ text: "Tests fail on CI" }], children: [] }],
-            text: "Tests fail on CI",
-            onlyParagraphs: true,
+            mentions: {},
           },
         ]}
       />
     ));
-    for (const fragment of ['id="comment-c1"', "builder", "14 Oct 2026, 08:00 · Edited", "Tests fail on CI", 'name="intent" value="comment-add"']) {
+    for (const fragment of ['id="comment-c1"', "builder", "14 Oct 2026, 08:00 · Edited", "Tests fail on CI", "Write a comment…", ">Comment<"]) {
       expect(html).toContain(fragment);
     }
   });

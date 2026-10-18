@@ -3,13 +3,12 @@ import { choreAttributes, isRecurring } from "~/domain/chores/schedule";
 import { kinds } from "~/domain/tasks/kinds";
 import type { Actor, LineageNode, TaskSummary } from "~/domain/tasks/types";
 
-import type { PageView, ViewBlock } from "../blocks/view-model";
+import type { MentionTargets, PageView, ViewBlock } from "../blocks/view-model";
 import { describeSchedule, formatDateTime, slugOfKind, stateColor, stateLabel, TASK_LISTS } from "./format";
 import { type Backlink, pageBacklinks } from "./backlinks.server";
 import { targetLink, type TargetLink } from "./links.server";
-import { buildBodyView, buildCommentView } from "./page-view.server";
+import { buildBodyView, buildCommentView, mentionTargets } from "./page-view.server";
 import { type TransitionForm, transitionStyle } from "./task-actions.server";
-import { textOfBody } from "./text.server";
 
 export type TransitionView = { name: string; label: string; form: TransitionForm };
 
@@ -21,10 +20,8 @@ export type CommentView = {
   at: string;
   edited: boolean;
   blocks: ViewBlock[];
-  /** The content as plain text, to prefill the edit form. */
-  text: string;
-  /** False when editing as plain text would flatten other block types. */
-  onlyParagraphs: boolean;
+  /** What the mentions in the comment show and open. */
+  mentions: MentionTargets;
 };
 
 export type LineageView = { id: string; label: string; current: boolean; children: LineageView[] };
@@ -70,6 +67,12 @@ export type TaskOverviewView = {
 };
 
 const COMMENTABLE = ["work", "chore"];
+
+/** A comment's content as views, with what its mentions show. */
+function commentContent(services: AppServices, bodyBlockId: string) {
+  const blocks = buildCommentView(services.blocks, bodyBlockId);
+  return { blocks, mentions: mentionTargets(services.blocks, blocks) };
+}
 
 export const actorName = (actor: Actor) => (actor.kind === "human" ? "You" : actor.name);
 
@@ -139,8 +142,7 @@ export function taskOverviewView(services: AppServices, taskId: string): TaskOve
         author: actorName(comment.author),
         at: formatDateTime(comment.createdAt, timeZone),
         edited: comment.editedAt !== null,
-        blocks: buildCommentView(services.blocks, comment.bodyBlockId),
-        ...textOfBody(services.comments.body(comment.id)),
+        ...commentContent(services, comment.bodyBlockId),
       }))
     : undefined;
 
