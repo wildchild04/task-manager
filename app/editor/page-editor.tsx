@@ -7,7 +7,7 @@ import type { Operation } from "~/domain/blocks/types";
 import { behaviorOf, matchSlashCommands, type SlashCommand } from "~/editor/block-types";
 import { Editor } from "~/editor/editor";
 import { caret, caretOrder, getBlock, isCollapsed, type Selection, stateFromTree } from "~/editor/editor-state";
-import { linkAt, plain } from "~/editor/rich-text";
+import { linkAt, linkRangeAt, plain } from "~/editor/rich-text";
 import { type SaveStatus, SaveQueue, type SendResult } from "~/editor/save-queue";
 
 import type { EditablePage } from "../lib/page-edit.server";
@@ -542,11 +542,20 @@ export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; 
       } else if (mod && key === "e") {
         editor.toggleMark("code");
       } else if (mod && key === "k") {
+        const content = getBlock(editor.state, selection.blockId).content;
         if (!isCollapsed(selection)) {
-          const content = getBlock(editor.state, selection.blockId).content;
           const start = Math.min(selection.anchor, selection.focus);
           const end = Math.max(selection.anchor, selection.focus);
           setLinkFor({ selection, href: linkAt(content, start, end) ?? "" });
+        } else {
+          // With the caret on a link, edit that whole link.
+          const link = linkRangeAt(content, selection.focus);
+          if (link) {
+            const whole = { blockId: selection.blockId, anchor: link.start, focus: link.end };
+            editor.setSelection(whole);
+            writeSelection(root, whole);
+            setLinkFor({ selection: whole, href: link.href });
+          }
         }
       } else {
         handled = false;

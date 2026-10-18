@@ -169,3 +169,21 @@ export function nextWord(value: string, offset: number): number {
   }
   return value.length;
 }
+
+/**
+ * The whole link around a caret at `offset` (touching it from either side):
+ * its range and URL, or `undefined` when the caret isn't on a link.
+ */
+export function linkRangeAt(text: RichText, offset: number): { start: number; end: number; href: string } | undefined {
+  const hrefAt = (index: number) => {
+    const marks = marksOfChar(text, index);
+    return marks?.find(isLink)?.href;
+  };
+  const href = hrefAt(offset) ?? (offset > 0 ? hrefAt(offset - 1) : undefined);
+  if (!href) return undefined;
+  let start = hrefAt(offset) === href ? offset : offset - 1;
+  while (start > 0 && hrefAt(start - 1) === href) start--;
+  let end = start;
+  while (hrefAt(end) === href) end++;
+  return { start, end, href };
+}

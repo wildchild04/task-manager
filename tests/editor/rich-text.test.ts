@@ -60,3 +60,17 @@ describe("rich text editing", () => {
     expect(text.nextWord("hello big world", 5)).toBe(9);
   });
 });
+
+describe("link around the caret", () => {
+  const link = { type: "link" as const, href: "https://x.dev" };
+  const content = [{ text: "see " }, { text: "the ", marks: [link] }, { text: "site", marks: ["bold" as const, link] }, { text: " now" }];
+
+  it("finds the whole link from inside it or touching either end, across differently marked spans", () => {
+    for (const offset of [4, 6, 12]) expect(text.linkRangeAt(content, offset)).toEqual({ start: 4, end: 12, href: "https://x.dev" });
+  });
+
+  it("finds nothing away from links", () => {
+    expect(text.linkRangeAt(content, 2)).toBeUndefined();
+    expect(text.linkRangeAt(content, 14)).toBeUndefined();
+  });
+});
