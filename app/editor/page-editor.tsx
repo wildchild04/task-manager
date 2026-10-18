@@ -82,8 +82,11 @@ function slashMatches(editor: Editor, menu: SlashMenu): { query: string; command
   const shown = rows(matches.slice(page * SLASH_PAGE_SIZE, (page + 1) * SLASH_PAGE_SIZE));
   if (pages === 1) return { query, commands: shown, page, pages };
   const pager = { value: SLASH_NEXT_PAGE, label: `Page ${page + 1} of ${pages}`, description: "Tab next · Shift+Tab back" };
-  return { query, commands: [...shown, pager], page, pages };
+  return { query, commands: [pager, ...shown], page, pages };
 }
+
+/** The first command among a page's rows (the page row comes before them). */
+const firstCommand = (items: readonly SlashItem[]) => items.find((item) => item.command)?.value ?? null;
 
 /** The menu turned `step` pages (wrapping around), with its first command highlighted. */
 function turnPage(editor: Editor, menu: SlashMenu, step: number): SlashMenu {
@@ -91,7 +94,7 @@ function turnPage(editor: Editor, menu: SlashMenu, step: number): SlashMenu {
   if (!matches || matches.pages === 1) return menu;
   const page = (matches.page + step + matches.pages) % matches.pages;
   const turned = { ...menu, page, query: matches.query };
-  return { ...turned, active: slashMatches(editor, turned)?.commands[0]?.value ?? null };
+  return { ...turned, active: firstCommand(slashMatches(editor, turned)?.commands ?? []) };
 }
 
 /** Asks for a link's URL; an empty URL removes the link. */
@@ -230,7 +233,7 @@ export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; 
       if (!menu) return;
       const matches = slashMatches(editor, menu);
       if (!matches) return setSlash(null);
-      const active = matches.commands.some((c) => c.value === menu.active) ? menu.active : (matches.commands[0]?.value ?? null);
+      const active = matches.commands.some((c) => c.value === menu.active) ? menu.active : firstCommand(matches.commands);
       if (active !== menu.active || matches.page !== menu.page || matches.query !== menu.query) {
         setSlash({ ...menu, active, page: matches.page, query: matches.query });
       }
