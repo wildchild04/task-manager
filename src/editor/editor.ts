@@ -7,6 +7,10 @@ import { applyOps, caret, type EditorState, getBlock, invert, isCollapsed, type 
 import { length, plain } from "./rich-text";
 import { History } from "./history";
 
+/** Every toggle of a state, folded. */
+const foldedToggles = (state: EditorState): Set<string> =>
+  new Set(Object.values(state.blocks).filter((block) => block.type === "toggle").map((block) => block.id));
+
 export type EditorOptions = {
   newId?: () => string;
   now?: () => number;
@@ -24,8 +28,11 @@ export class Editor {
   selection: Selection;
   /** Increases on every change, for views subscribing to the editor. */
   revision = 0;
-  /** Toggles that are closed. Local to this view, never saved. */
-  closed: ReadonlySet<string> = new Set();
+  /**
+   * Toggles that are closed. Local to this view, never saved. Toggles start
+   * folded when the page loads; ones created while editing start open.
+   */
+  closed: ReadonlySet<string>;
   private history = new History();
   private readonly listeners = new Set<() => void>();
   private readonly newId: () => string;
@@ -36,6 +43,7 @@ export class Editor {
     private readonly options: EditorOptions = {},
   ) {
     this.state = state;
+    this.closed = foldedToggles(state);
     this.selection = caret(state.rootId, 0);
     this.newId = options.newId ?? (() => crypto.randomUUID());
     this.now = options.now ?? (() => Date.now());
@@ -57,7 +65,10 @@ export class Editor {
 
   /** Replaces the whole state (after loading newer content from the server). Undo history no longer applies to it. */
   reset(state: EditorState): void {
+    // Toggles open before the reset stay open; all others (including new ones) start folded.
+    const open = new Set(Object.values(this.state.blocks).filter((b) => b.type === "toggle" && !this.closed.has(b.id)).map((b) => b.id));
     this.state = state;
+    this.closed = new Set([...foldedToggles(state)].filter((id) => !open.has(id)));
     if (!state.blocks[this.selection.blockId]) this.selection = caret(state.rootId, 0);
     this.history = new History();
     this.notify();

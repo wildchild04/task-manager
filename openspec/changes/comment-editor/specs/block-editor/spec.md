@@ -14,3 +14,18 @@ The editor SHALL edit the title and blocks of: pages opened at `/pages/:pageId` 
 #### Scenario: Draft comment isn't saved
 - **WHEN** text is written in the new-comment editor and the page is reloaded without posting
 - **THEN** no comment was added
+
+### Requirement: Block type functions
+A todo's checkbox SHALL check and uncheck it, and the change SHALL be saved. A toggle's arrow SHALL open and close it, hiding its children while closed; toggles SHALL start folded when a page or comment is opened, toggles created while editing SHALL start open (so Enter goes inside them), and the open state SHALL not be saved. Sub-page and page-reference blocks SHALL open their page when clicked. Dividers, sub-pages and references SHALL never hold the caret.
+
+#### Scenario: Check a todo
+- **WHEN** an unchecked todo's checkbox is clicked
+- **THEN** it is checked, and it is still checked after reloading
+
+#### Scenario: Close a toggle
+- **WHEN** an open toggle's arrow is clicked
+- **THEN** its children are hidden, and the arrow shows it is closed
+
+#### Scenario: Toggles start folded
+- **WHEN** a page with a toggle that has children is opened
+- **THEN** the toggle is folded and its children are hidden until its arrow is clicked

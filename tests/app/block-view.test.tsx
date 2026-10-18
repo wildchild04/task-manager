@@ -55,7 +55,7 @@ describe("block renderers", () => {
       "<ol",
       "numbered-text",
       "toggle-text",
-      "toggle-child",
+      'aria-label="Open toggle"',
       "<blockquote",
       "quote-text",
       "<hr",
@@ -68,6 +68,8 @@ describe("block renderers", () => {
     ]) {
       expect(html).toContain(fragment);
     }
+    // Toggles start folded: their children aren't shown until opened.
+    expect(html).not.toContain("toggle-child");
   });
 
   it("restarts numbering after another block", () => {

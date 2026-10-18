@@ -122,9 +122,9 @@ function TodoRow({ id, checked, text }: { id: string; checked: boolean; text: Re
   );
 }
 
-/** A toggle: its arrow opens and closes it (only for this view); its children hang off a guide line. */
+/** A toggle: folded at first; its arrow opens and closes it (only for this view); its children hang off a guide line. */
 function ToggleBlock({ text, childBlocks }: { text: ReactNode; childBlocks: ViewBlock[] }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   return (
     <div className="editor-block editor-toggle">
       <div className="editor-row">

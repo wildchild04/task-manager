@@ -170,6 +170,7 @@ describe("editor", () => {
 
     it("opens an open toggle's first child, and follows a closed one", () => {
       seed([{ id: "t", type: "toggle", content: [{ text: "More" }], children: [p("c", "Inside")] }]);
+      editor.toggleOpen("t");
       at("t", 4);
       editor.enter();
       expect(outline()).toEqual(["toggle:More", "  paragraph:", "  paragraph:Inside"]);
@@ -453,6 +454,20 @@ describe("editor", () => {
     });
   });
 
+  describe("toggles start folded", () => {
+    it("folds the toggles a page loads with, and opens toggles created while editing", () => {
+      seed([{ id: "t", type: "toggle", content: [{ text: "Loaded" }] }, p("a", "")]);
+      expect(editor.closed.has("t")).toBe(true);
+      at("a", 0);
+      typeText("/tog");
+      editor.slash(0, SLASH_COMMANDS.find((c) => c.value === "toggle")!);
+      expect(editor.closed.has("a")).toBe(false);
+      typeText("New");
+      editor.enter();
+      expect(outline()).toEqual(["toggle:Loaded", "toggle:New", "  paragraph:"]);
+    });
+  });
+
   describe("type functions", () => {
     it("checks a todo", () => {
       seed([{ id: "t", type: "todo", content: [{ text: "Do it" }] }]);
@@ -462,6 +477,7 @@ describe("editor", () => {
 
     it("moves the caret out of a toggle that closes, without saving anything", () => {
       seed([{ id: "t", type: "toggle", content: [{ text: "More" }], children: [p("c", "Inside")] }]);
+      editor.toggleOpen("t");
       at("c", 2);
       editor.toggleOpen("t");
       expect(editor.selection).toEqual(caret("t", 0));
