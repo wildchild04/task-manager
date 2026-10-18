@@ -138,6 +138,21 @@ const PAGE_SUGGESTIONS = 5;
 function LinkDialog({ initial, onDone }: { initial: string; onDone: (href: string | null | undefined) => void }) {
   const [href, setHref] = useState(initial);
   const [active, setActive] = useState(0);
+  // A link to an app page shows as "@Title", with that page highlighted among the suggestions.
+  const [linkedId, setLinkedId] = useState<string | null>(null);
+  useEffect(() => {
+    const id = /^\/pages\/([^/?#]+)$/.exec(initial)?.[1];
+    if (!id) return;
+    fetch(`/api/pages?id=${encodeURIComponent(id)}`)
+      .then((response) => response.json() as Promise<{ pages: PageMatch[] }>)
+      .then(({ pages }) => {
+        const page = pages[0];
+        if (!page) return;
+        setLinkedId(page.id);
+        setHref((current) => (current === initial ? `@${page.title}` : current));
+      })
+      .catch(() => {});
+  }, [initial]);
   const field = useRef<HTMLDivElement>(null);
   // The dialog moves focus into itself when it opens; focus the field just after.
   useEffect(() => {
@@ -148,7 +163,11 @@ function LinkDialog({ initial, onDone }: { initial: string; onDone: (href: strin
   const query = href.startsWith("@") ? href.slice(1) : null;
   const pages = usePageSearch(query)?.slice(0, PAGE_SUGGESTIONS) ?? [];
   const suggesting = query !== null;
-  useEffect(() => setActive(0), [query]);
+  useEffect(() => {
+    const linked = pages.findIndex((page) => page.id === linkedId);
+    setActive(linked >= 0 ? linked : 0);
+    // Re-highlight when the results change (a new query, or the linked page arriving).
+  }, [query, pages.map((page) => page.id).join(","), linkedId]);
 
   const choose = (page: PageMatch) => onDone(`/pages/${page.id}`);
   const save = () => {
