@@ -30,8 +30,18 @@ function lineageItems(node: LineageView): TreeNavigationItem {
 const lineageIds = (node: LineageView): string[] => [node.id, ...node.children.flatMap(lineageIds)];
 
 /** The feature's lineage, fully expanded, with the current task active. */
+/** The task's lineage as a tree, fully expanded at first; branches can be collapsed. */
 export function Lineage({ lineage }: { lineage: LineageView }) {
-  return <TreeNavigation ariaLabel="Lineage" dense items={[lineageItems(lineage)]} expandedIds={lineageIds(lineage)} />;
+  const [expanded, setExpanded] = useState(() => lineageIds(lineage));
+  return (
+    <TreeNavigation
+      ariaLabel="Lineage"
+      dense
+      items={[lineageItems(lineage)]}
+      expandedIds={expanded}
+      onExpandedIdsChange={setExpanded}
+    />
+  );
 }
 
 const KIND_LABELS: Record<string, string> = {
