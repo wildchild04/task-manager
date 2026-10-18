@@ -566,6 +566,28 @@ export function PageEditor({
       edited();
     };
 
+    /**
+     * Opens the inline menu for a `/` (commands) or `@` (pages) just typed at
+     * `start`, if it's at the start of a text block or after a space.
+     */
+    const openMenuAt = (blockId: string, start: number, anchor: DOMRect | null) => {
+      const block = editor.state.blocks[blockId];
+      if (!block || block.id === editor.state.rootId || !behaviorOf(block.type).text) return;
+      const text = plain(block.content);
+      const trigger = text[start];
+      const previous = text[start - 1];
+      if ((trigger !== "/" && trigger !== "@") || (previous !== undefined && !/\s/.test(previous))) return;
+      setSlash({
+        kind: trigger === "/" ? "command" : "page",
+        blockId,
+        start,
+        anchor: anchor ?? caretRect() ?? editableOf(root, blockId)!.getBoundingClientRect(),
+        active: trigger === "/" ? "text" : null,
+        page: 0,
+        query: "",
+      });
+    };
+
     const onSelectionChange = () => {
       if (composing.current) return;
       sync();
@@ -587,27 +609,7 @@ export function PageEditor({
           const anchor = caretRect();
           // A pasted mention placeholder has no page to point at, so it's dropped.
           editor.type(data.replace(/\r\n?/g, "\n").replace(/\uFFFC/g, ""));
-          // `/` (commands) or `@` (pages) at the start of a text block, or after a space, opens the inline menu.
-          const block = editor.state.blocks[before.blockId];
-          const previous = block ? plain(block.content)[Math.min(before.anchor, before.focus) - 1] : undefined;
-          if (
-            (data === "/" || data === "@") &&
-            block &&
-            block.id !== editor.state.rootId &&
-            behaviorOf(block.type).text &&
-            (previous === undefined || /\s/.test(previous))
-          ) {
-            const start = Math.min(before.anchor, before.focus);
-            setSlash({
-              kind: data === "/" ? "command" : "page",
-              blockId: block.id,
-              start,
-              anchor: anchor ?? editableOf(root, block.id)!.getBoundingClientRect(),
-              active: data === "/" ? "text" : null,
-              page: 0,
-              query: "",
-            });
-          }
+          if (data === "/" || data === "@") openMenuAt(before.blockId, Math.min(before.anchor, before.focus), anchor);
           break;
         }
         case "insertParagraph":
@@ -678,6 +680,8 @@ export function PageEditor({
       else if (start !== before.length - end) editor.deleteBackward();
       renderRichText(element, getBlock(editor.state, id).content);
       edited();
+      // Some keyboards (iPadOS with layered or dead keys) deliver `/` and `@` as composed text.
+      if (inserted.endsWith("/") || inserted.endsWith("@")) openMenuAt(id, start + inserted.length - 1, null);
     };
 
     /** Moves the caret to another block without editing. */

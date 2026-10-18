@@ -4,6 +4,7 @@ import { isRouteErrorResponse, Links, Meta, Outlet, Scripts, ScrollRestoration }
 import type { Route } from "./+types/root";
 import "./app.css";
 import { ErrorPage } from "./components/error-page";
+import { InputDebug } from "./components/input-debug";
 import { AppThemeProvider, readThemeCookie } from "./theme-mode";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -32,6 +33,7 @@ export default function App({ loaderData }: Route.ComponentProps) {
   return (
     <AppThemeProvider initialMode={loaderData.themeMode}>
       <Outlet />
+      <InputDebug />
     </AppThemeProvider>
   );
 }
