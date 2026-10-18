@@ -33,6 +33,7 @@ const base: TaskOverviewView = {
   comments: [],
   references: [],
   referencedBy: [],
+  mentionedIn: [],
   referenceCandidates: [],
 };
 

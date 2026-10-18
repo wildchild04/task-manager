@@ -4,10 +4,13 @@ import type { PropsByType, RichText } from "~/domain/blocks/types";
 export type ContentBlockType = Exclude<keyof PropsByType, "page" | "reference" | "comment">;
 
 /** What a page's loader sends to the browser: plain, serializable data. `projectId` is set for project pages. */
-/** The current title of every page mentioned in a view, by page ID; `null` when the page no longer exists. */
-export type MentionTitles = Record<string, string | null>;
+/** What a mention shows and opens: a page, or the task whose description page it is. */
+export type MentionTarget = { title: string; href: string };
 
-export type PageView = { id: string; title: RichText; blocks: ViewBlock[]; mentions: MentionTitles; projectId?: string };
+/** Every page mentioned in a view, by page ID, resolved to what it shows; `null` when it no longer exists. */
+export type MentionTargets = Record<string, MentionTarget | null>;
+
+export type PageView = { id: string; title: RichText; blocks: ViewBlock[]; mentions: MentionTargets; projectId?: string };
 
 export type ViewBlock =
   | {

@@ -3,7 +3,7 @@ import { useState } from "react";
 import { data, Link as RouterLink, redirect } from "react-router";
 
 import { Blocks } from "../blocks/block-view";
-import { MentionTitlesContext } from "../blocks/rich-text";
+import { MentionTargetsContext } from "../blocks/rich-text";
 import { RichText } from "../blocks/rich-text";
 import { plainText } from "../blocks/view-model";
 import { Backlinks } from "../components/backlinks";
@@ -83,9 +83,9 @@ export default function Page({ loaderData }: Route.ComponentProps) {
       {editing ? (
         <PageEditor key={editable.id} page={editable} statusSlot={statusSlot} />
       ) : (
-        <MentionTitlesContext.Provider value={page.mentions}>
+        <MentionTargetsContext.Provider value={page.mentions}>
           <Blocks blocks={page.blocks} />
-        </MentionTitlesContext.Provider>
+        </MentionTargetsContext.Provider>
       )}
       <div className="page-backlinks">
         <Backlinks backlinks={backlinks} />

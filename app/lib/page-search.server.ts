@@ -3,8 +3,13 @@ import { plainText } from "~/domain/blocks/text";
 import type { TreeNode } from "~/domain/blocks/types";
 import type { LibraryNode } from "~/domain/library/library.service";
 
-/** A page to link to: its title and where it lives ("Taskhub › Architecture", "Pages"). */
-export type PageMatch = { id: string; title: string; place: string };
+import { slugOfKind, TASK_LISTS } from "./format";
+
+/**
+ * A page or task to mention or link to: the page a mention points at (a task's
+ * description page for a task), its title, where it lives, and the link it opens.
+ */
+export type PageMatch = { id: string; title: string; place: string; href: string };
 
 /**
  * The workspace's pages as a tree: root pages in order, each with the pages
@@ -29,7 +34,7 @@ export function allPages(services: AppServices): PageMatch[] {
   const pages: PageMatch[] = [];
   const walk = (nodes: readonly LibraryNode[], trail: string[]) => {
     for (const node of nodes) {
-      pages.push({ id: node.id, title: node.title || "Untitled", place: trail.join(" › ") });
+      pages.push({ id: node.id, title: node.title || "Untitled", place: trail.join(" › "), href: `/pages/${node.id}` });
       walk(node.children, [...trail, node.title || "Untitled"]);
     }
   };
@@ -40,13 +45,25 @@ export function allPages(services: AppServices): PageMatch[] {
   return pages;
 }
 
+/** Every task of every project, to mention or link to: its description page and its link. */
+export function allTasks(services: AppServices): PageMatch[] {
+  return services.projects.list().flatMap((project) =>
+    services.tasks.list(project.id).map((task) => ({
+      id: task.bodyPageId,
+      title: task.title || "Untitled",
+      place: `Task · ${TASK_LISTS[slugOfKind(task.kind)].singular} · ${project.title || "Untitled"}`,
+      href: `/tasks/${task.id}`,
+    })),
+  );
+}
+
 /**
- * Pages whose title contains the query (ignoring case), earliest match first,
- * then by title. An empty query lists every page by title.
+ * Pages and tasks whose title contains the query (ignoring case), earliest
+ * match first, then by title. An empty query lists everything by title.
  */
 export function searchPages(services: AppServices, query: string, limit = 50): PageMatch[] {
   const q = query.trim().toLowerCase();
-  return allPages(services)
+  return [...allPages(services), ...allTasks(services)]
     .map((page) => ({ page, at: q ? page.title.toLowerCase().indexOf(q) : 0 }))
     .filter(({ at }) => at >= 0)
     .sort((a, b) => a.at - b.at || a.page.title.localeCompare(b.page.title))

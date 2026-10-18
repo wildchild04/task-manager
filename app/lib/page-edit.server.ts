@@ -5,7 +5,7 @@ import { plainText } from "~/domain/blocks/text";
 import type { Batch, TreeNode } from "~/domain/blocks/types";
 import { PROJECT_OWNER_KIND } from "~/domain/projects/types";
 
-import type { MentionTitles, ReferenceView, ViewBlock } from "../blocks/view-model";
+import type { MentionTargets, ReferenceView, ViewBlock } from "../blocks/view-model";
 import { browsableScope, buildBodyView } from "./page-view.server";
 
 /** Where an editor runs: a page, a project's home page, or a task's body. */
@@ -24,7 +24,7 @@ export type EditablePage = {
   /** How each reference block resolves, as the read-only view shows it. */
   references: Record<string, ReferenceView>;
   /** The current titles of the pages mentioned in the page (`null` for deleted ones). */
-  mentions: MentionTitles;
+  mentions: MentionTargets;
 };
 
 type EditTarget = { rootId: string; title: boolean };

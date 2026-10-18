@@ -5,6 +5,7 @@ import type { Actor, LineageNode, TaskSummary } from "~/domain/tasks/types";
 
 import type { PageView, ViewBlock } from "../blocks/view-model";
 import { describeSchedule, formatDateTime, slugOfKind, stateColor, stateLabel, TASK_LISTS } from "./format";
+import { type Backlink, pageBacklinks } from "./backlinks.server";
 import { targetLink, type TargetLink } from "./links.server";
 import { buildBodyView, buildCommentView } from "./page-view.server";
 import { type TransitionForm, transitionStyle } from "./task-actions.server";
@@ -61,6 +62,8 @@ export type TaskOverviewView = {
   /** Omitted for chores and for a task alone in its lineage. */
   lineage?: LineageView;
   references: ReferenceView[];
+  /** Pages and other tasks that mention or reference this task's description. */
+  mentionedIn: Backlink[];
   referencedBy: { id: string; title: string; kindLabel: string }[];
   /** Tasks of the project this task can still reference. */
   referenceCandidates: { id: string; label: string }[];
@@ -180,6 +183,7 @@ export function taskOverviewView(services: AppServices, taskId: string): TaskOve
     ...(comments ? { comments } : {}),
     ...(lineage && lineage.children.length > 0 ? { lineage: lineageView(lineage, task.id) } : {}),
     references,
+    mentionedIn: pageBacklinks(services, task.bodyPageId),
     referencedBy,
     referenceCandidates,
   };

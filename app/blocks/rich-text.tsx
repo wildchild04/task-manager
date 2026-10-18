@@ -4,7 +4,7 @@ import { Link as RouterLink } from "react-router";
 
 import type { Mark, RichText as RichTextValue } from "~/domain/blocks/types";
 
-import type { MentionTitles } from "./view-model";
+import type { MentionTargets } from "./view-model";
 
 function applyMark(node: ReactNode, mark: Mark, key: number): ReactNode {
   if (typeof mark === "object") {
@@ -28,16 +28,16 @@ function applyMark(node: ReactNode, mark: Mark, key: number): ReactNode {
   }
 }
 
-/** The titles of the pages mentioned in what's being rendered; provided by each page view. */
-export const MentionTitlesContext = createContext<MentionTitles>({});
+/** What the mentions in what's being rendered show and open; provided by each page view. */
+export const MentionTargetsContext = createContext<MentionTargets>({});
 
-/** A mention: the page's current title, linked in the app, or a marker when the page is gone. */
+/** A mention: the page's (or task's) current title, linked in the app, or a marker when it's gone. */
 function Mention({ pageId }: { pageId: string }) {
-  const title = useContext(MentionTitlesContext)[pageId];
-  if (!title) return <span className="mention mention-missing">Missing page</span>;
+  const target = useContext(MentionTargetsContext)[pageId];
+  if (!target) return <span className="mention mention-missing">Missing page</span>;
   return (
-    <Link component={RouterLink} to={`/pages/${pageId}`} variant="standalone">
-      <span className="mention">{title}</span>
+    <Link component={RouterLink} to={target.href} variant="standalone">
+      <span className="mention">{target.title}</span>
     </Link>
   );
 }

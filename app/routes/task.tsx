@@ -3,7 +3,8 @@ import { useState } from "react";
 import { data, Link as RouterLink, redirect } from "react-router";
 
 import { Blocks } from "../blocks/block-view";
-import { MentionTitlesContext } from "../blocks/rich-text";
+import { MentionTargetsContext } from "../blocks/rich-text";
+import { Backlinks } from "../components/backlinks";
 import { NotFound } from "../components/not-found";
 import { PageEditor } from "../editor/page-editor";
 import { editablePage } from "../lib/page-edit.server";
@@ -103,9 +104,9 @@ export default function Task({ loaderData }: Route.ComponentProps) {
           {details}
           {body && body.blocks.length > 0 ? (
             <article>
-              <MentionTitlesContext.Provider value={body.mentions}>
+              <MentionTargetsContext.Provider value={body.mentions}>
                 <Blocks blocks={body.blocks} />
-              </MentionTitlesContext.Provider>
+              </MentionTargetsContext.Provider>
             </article>
           ) : (
             <Typography variant="body2" color="text.secondary">
@@ -127,6 +128,7 @@ export default function Task({ loaderData }: Route.ComponentProps) {
       <Section title="References">
         <References key={task.id} view={view} />
       </Section>
+      <Backlinks backlinks={view.mentionedIn} />
       <Section title="History">
         <History entries={view.history} />
       </Section>

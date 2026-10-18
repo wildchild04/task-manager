@@ -3,8 +3,9 @@ import { plainText } from "~/domain/blocks/text";
 import type { Block, RichText, TreeNode } from "~/domain/blocks/types";
 import type { ProjectService } from "~/domain/projects/project.service";
 import { PROJECT_OWNER_KIND } from "~/domain/projects/types";
+import { TASK_OWNER_KIND } from "~/domain/tasks/types";
 
-import type { ContentBlockType, MentionTitles, PageView, ReferenceView, ViewBlock } from "../blocks/view-model";
+import type { ContentBlockType, MentionTargets, PageView, ReferenceView, ViewBlock } from "../blocks/view-model";
 
 /** How deep references to blocks are expanded inside other references. */
 const MAX_REFERENCE_DEPTH = 5;
@@ -42,17 +43,26 @@ export function buildBodyView(blocks: BlockService, pageId: string): PageView | 
 
 function buildTreeView(blocks: BlockService, page: Block): PageView | undefined {
   const children = buildChildrenView(blocks, page.id);
-  return children && { id: page.id, title: page.content, blocks: children, mentions: mentionTitles(blocks, children) };
+  return children && { id: page.id, title: page.content, blocks: children, mentions: mentionTargets(blocks, children) };
 }
 
-/** The current titles of the pages mentioned anywhere in the views (including inside expanded references). */
-export function mentionTitles(blocks: BlockService, views: readonly ViewBlock[]): MentionTitles {
-  const titles: MentionTitles = {};
+/**
+ * What each page mentioned anywhere in the views (including inside expanded
+ * references) shows: its current title and link. A task's description page
+ * stands for the task, so it links to the task.
+ */
+export function mentionTargets(blocks: BlockService, views: readonly ViewBlock[]): MentionTargets {
+  const titles: MentionTargets = {};
   const add = (content: RichText) => {
     for (const span of content) {
       if (!span.mention || span.mention.pageId in titles) continue;
       const page = blocks.getBlock(span.mention.pageId);
-      titles[span.mention.pageId] = page?.type === "page" ? plainText(page.content) || "Untitled" : null;
+      if (page?.type !== "page") {
+        titles[span.mention.pageId] = null;
+        continue;
+      }
+      const href = page.owner?.kind === TASK_OWNER_KIND ? `/tasks/${page.owner.id}` : `/pages/${page.id}`;
+      titles[span.mention.pageId] = { title: plainText(page.content) || "Untitled", href };
     }
   };
   const visit = (view: ViewBlock) => {
@@ -90,11 +100,21 @@ function buildChildrenView(blocks: BlockService, rootId: string): ViewBlock[] | 
   // A referenced block is not loaded as part of the page tree, so its children are fetched here.
   const viewOfBlock = (block: Block, path: string[], depth: number): ViewBlock => {
     const children = block.type === "page" ? [] : blocks.getChildren(block.id);
-    return viewOf(block, children.map((child) => viewOfBlock(child, path, depth)), path, depth);
+    return viewOf(
+      block,
+      children.map((child) => viewOfBlock(child, path, depth)),
+      path,
+      depth,
+    );
   };
 
   const viewOfNode = (node: TreeNode, path: string[], depth: number): ViewBlock =>
-    viewOf(node.block, (node.children ?? []).map((child) => viewOfNode(child, path, depth)), path, depth);
+    viewOf(
+      node.block,
+      (node.children ?? []).map((child) => viewOfNode(child, path, depth)),
+      path,
+      depth,
+    );
 
   const viewOf = (block: Block, children: ViewBlock[], path: string[], depth: number): ViewBlock => {
     switch (block.type) {

@@ -1,7 +1,7 @@
 import { type Mark, MENTION_TEXT, type RichText } from "~/domain/blocks/types";
 import type { Selection } from "~/editor/editor-state";
 
-import type { MentionTitles } from "../blocks/view-model";
+import type { MentionTarget, MentionTargets } from "../blocks/view-model";
 
 /**
  * The DOM side of the editor: drawing rich text into an editable element and
@@ -22,7 +22,7 @@ const MARK_TAGS: Record<Exclude<Mark, object>, string> = {
  * Replaces an editable element's content with the rich text. React never
  * renders inside it. A selection inside the element is kept at the same offsets.
  */
-export function renderRichText(element: HTMLElement, content: RichText, mentions: MentionTitles = {}): void {
+export function renderRichText(element: HTMLElement, content: RichText, mentions: MentionTargets = {}): void {
   const selection = readSelection();
   const kept = selection?.blockId === element.dataset.blockId ? selection : null;
   const nodes: Node[] = content.map((span) => {
@@ -53,13 +53,13 @@ function setSelectionIn(element: HTMLElement, anchorOffset: number, focusOffset:
  * A mention: a non-editable link whose only text is the placeholder character
  * (hidden), so caret offsets count it as one character; CSS draws the title.
  */
-function mentionElement(pageId: string, title: string | null | undefined): HTMLElement {
-  const element = document.createElement(title ? "a" : "span");
-  element.className = title ? "mention" : "mention mention-missing";
+function mentionElement(pageId: string, target: MentionTarget | null | undefined): HTMLElement {
+  const element = document.createElement(target ? "a" : "span");
+  element.className = target ? "mention" : "mention mention-missing";
   element.contentEditable = "false";
   element.dataset.mentionPageId = pageId;
-  element.dataset.title = title ?? "Missing page";
-  if (title) element.setAttribute("href", `/pages/${pageId}`);
+  element.dataset.title = target?.title ?? "Missing page";
+  if (target) element.setAttribute("href", target.href);
   const placeholder = document.createElement("span");
   placeholder.className = "mention-placeholder";
   placeholder.textContent = MENTION_TEXT;

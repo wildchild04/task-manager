@@ -37,6 +37,15 @@ describe("page backlinks", () => {
     expect(pageBacklinks(services, "pers")).toEqual([]);
   });
 
+  it("lists where a task is mentioned, without the task's own description", () => {
+    const body = services.tasks.get("W")!.bodyPageId;
+    services.blocks.apply([
+      { op: "insert", block: { id: "tm1", type: "paragraph", content: [m(body)] }, parentId: "pers" },
+      { op: "insert", block: { id: "tm2", type: "paragraph", content: [{ text: "Me: " }, m(body)] }, parentId: body },
+    ]);
+    expect(pageBacklinks(services, body)).toEqual([{ kind: "page", id: "pers", title: "Persistence", href: "/pages/pers", count: 1 }]);
+  });
+
   it("skips comments", () => {
     services.comments.add({ id: "c", taskId: "W", blocks: [{ id: "cp", type: "paragraph", content: [m("pers")] }] });
     expect(pageBacklinks(services, "pers")).toEqual([]);

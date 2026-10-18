@@ -21,8 +21,8 @@ import { caret, caretOrder, getBlock, isCollapsed, type Selection, stateFromTree
 import { linkAt, linkRangeAt, plain } from "~/editor/rich-text";
 import { type SaveStatus, SaveQueue, type SendResult } from "~/editor/save-queue";
 
-import { MentionTitlesContext } from "../blocks/rich-text";
-import type { MentionTitles } from "../blocks/view-model";
+import { MentionTargetsContext } from "../blocks/rich-text";
+import type { MentionTargets } from "../blocks/view-model";
 import type { EditablePage } from "../lib/page-edit.server";
 import { useThemeMode } from "../theme-mode";
 import {
@@ -154,7 +154,11 @@ export function normalizeHref(value: string): string {
   return `https://${href}`;
 }
 
-type PageMatch = { id: string; title: string; place: string };
+/** Links to a page or task of the app. */
+const APP_LINK = /^\/(pages|tasks)\/[^/?#]+$/;
+
+/** A page or task to mention or link: the page a mention points at, and the link it opens. */
+type PageMatch = { id: string; title: string; place: string; href: string };
 
 /** Pages matching `query`, fetched as the user types (debounced; stale answers are dropped). */
 function usePageSearch(query: string | null): PageMatch[] | null {
@@ -215,12 +219,11 @@ const PAGE_SUGGESTIONS = 5;
 function LinkDialog({ initial, onDone }: { initial: string; onDone: (href: string | null | undefined) => void }) {
   const [href, setHref] = useState(initial);
   const [active, setActive] = useState(0);
-  // A link to an app page shows as "@Title", with that page highlighted among the suggestions.
+  // A link to an app page or task shows as "@Title", with it highlighted among the suggestions.
   const [linkedId, setLinkedId] = useState<string | null>(null);
   useEffect(() => {
-    const id = /^\/pages\/([^/?#]+)$/.exec(initial)?.[1];
-    if (!id) return;
-    fetch(`/api/pages?id=${encodeURIComponent(id)}`)
+    if (!APP_LINK.test(initial)) return;
+    fetch(`/api/pages?href=${encodeURIComponent(initial)}`)
       .then((response) => response.json() as Promise<{ pages: PageMatch[] }>)
       .then(({ pages }) => {
         const page = pages[0];
@@ -246,7 +249,7 @@ function LinkDialog({ initial, onDone }: { initial: string; onDone: (href: strin
     // Re-highlight when the results change (a new query, or the linked page arriving).
   }, [query, pages.map((page) => page.id).join(","), linkedId]);
 
-  const choose = (page: PageMatch) => onDone(`/pages/${page.id}`);
+  const choose = (page: PageMatch) => onDone(page.href);
   const save = () => {
     if (suggesting) {
       const page = pages[active];
@@ -353,8 +356,8 @@ export function PageEditor({
   const goalX = useRef<number | null>(null);
   const applySlashRef = useRef<((item: SlashItem) => void) | null>(null);
   // Titles of mentioned pages: from the server, plus pages mentioned since it loaded.
-  const [mentionTitles, setMentionTitles] = useState<MentionTitles>(page.mentions);
-  useEffect(() => setMentionTitles((titles) => ({ ...titles, ...page.mentions })), [page.mentions]);
+  const [mentionTargets, setMentionTargets] = useState<MentionTargets>(page.mentions);
+  useEffect(() => setMentionTargets((targets) => ({ ...targets, ...page.mentions })), [page.mentions]);
   // The card shown for a hovered link, and the timers that open and close it.
   const [linkCard, setLinkCardState] = useState<LinkCard | null>(null);
   const linkCardRef = useRef<LinkCard | null>(null);
@@ -428,16 +431,17 @@ export function PageEditor({
         rect: link.getBoundingClientRect(),
         label: link.getAttribute("href") ?? link.href,
       };
-      const pageId = link.origin === window.location.origin ? /^\/pages\/([^/?#]+)$/.exec(link.pathname)?.[1] : undefined;
-      if (link.origin === window.location.origin) card.label = pageId ? (pageNames.get(pageId) ?? "…") : link.pathname;
+      // Links to app pages and tasks show their title and place, looked up once.
+      const appPath = link.origin === window.location.origin && APP_LINK.test(link.pathname) ? link.pathname : undefined;
+      if (link.origin === window.location.origin) card.label = appPath ? (pageNames.get(appPath) ?? "…") : link.pathname;
       setLinkCard(card);
-      if (pageId && !pageNames.has(pageId)) {
-        fetch(`/api/pages?id=${encodeURIComponent(pageId)}`)
+      if (appPath && !pageNames.has(appPath)) {
+        fetch(`/api/pages?href=${encodeURIComponent(appPath)}`)
           .then((response) => response.json() as Promise<{ pages: PageMatch[] }>)
           .then(({ pages }) => {
             const page = pages[0];
-            const name = page ? `${page.title} · ${page.place}` : "A page that no longer exists";
-            pageNames.set(pageId, name);
+            const name = page ? `${page.title} · ${page.place}` : "A page or task that no longer exists";
+            pageNames.set(appPath, name);
             if (linkCardRef.current?.element === link) setLinkCard({ ...linkCardRef.current, label: name });
           })
           .catch(() => {});
@@ -520,9 +524,9 @@ export function PageEditor({
       const menu = slashRef.current;
       if (!menu) return;
       if (item.page) {
-        const { id, title } = item.page;
+        const { id, title, href } = item.page;
         setSlash(null);
-        setMentionTitles((titles) => ({ ...titles, [id]: title }));
+        setMentionTargets((targets) => ({ ...targets, [id]: { title, href } }));
         editor.mention(menu.start, id);
         edited();
         return;
@@ -897,7 +901,7 @@ export function PageEditor({
   const root = state.blocks[state.rootId]!;
 
   return (
-    <MentionTitlesContext.Provider value={mentionTitles}>
+    <MentionTargetsContext.Provider value={mentionTargets}>
       <div className="page-editor" ref={rootRef} style={{ "--editor-link": linkColor } as CSSProperties}>
         {statusSlot ? createPortal(statusText, statusSlot) : <div className="editor-status">{statusText}</div>}
         {error && (
@@ -1004,6 +1008,6 @@ export function PageEditor({
           </Dialog>
         )}
       </div>
-    </MentionTitlesContext.Provider>
+    </MentionTargetsContext.Provider>
   );
 }
