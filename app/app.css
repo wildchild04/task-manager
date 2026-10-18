@@ -127,3 +127,14 @@ body {
 .dialog-fields {
   padding-top: 8px;
 }
+
+/* Links in editable text look like the design system's Link and open on click. */
+.editable a {
+  color: var(--editor-link);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.editable a:hover {
+  text-decoration: underline;
+}

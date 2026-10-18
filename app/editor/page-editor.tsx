@@ -1,4 +1,5 @@
-import { Alert, Dialog, InlineCommandMenu, Stack, TextField, Typography } from "@wildchild/design-system";
+import { Alert, createAppTheme, Dialog, InlineCommandMenu, Stack, TextField, Typography } from "@wildchild/design-system";
+import type { CSSProperties } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useBlocker, useRevalidator } from "react-router";
 
@@ -10,6 +11,7 @@ import { linkAt, plain } from "~/editor/rich-text";
 import { type SaveStatus, SaveQueue, type SendResult } from "~/editor/save-queue";
 
 import type { EditablePage } from "../lib/page-edit.server";
+import { useThemeMode } from "../theme-mode";
 import {
   caretOnEdgeLine,
   caretRect,
@@ -97,6 +99,13 @@ function turnPage(editor: Editor, menu: SlashMenu, step: number): SlashMenu {
   return { ...turned, active: firstCommand(slashMatches(editor, turned)?.commands ?? []) };
 }
 
+/** A URL as typed, made absolute: "google.com" becomes "https://google.com"; app paths and other schemes are kept. */
+export function normalizeHref(value: string): string {
+  const href = value.trim();
+  if (/^[a-z][a-z0-9+.-]*:/i.test(href) || href.startsWith("/") || href.startsWith("#")) return href;
+  return `https://${href}`;
+}
+
 /** Asks for a link's URL; an empty URL removes the link. */
 function LinkDialog({ initial, onDone }: { initial: string; onDone: (href: string | null | undefined) => void }) {
   const [href, setHref] = useState(initial);
@@ -106,7 +115,7 @@ function LinkDialog({ initial, onDone }: { initial: string; onDone: (href: strin
     const timer = setTimeout(() => field.current?.querySelector("input")?.focus(), 0);
     return () => clearTimeout(timer);
   }, []);
-  const save = () => onDone(href.trim() || null);
+  const save = () => onDone(href.trim() ? normalizeHref(href) : null);
   return (
     <Dialog
       open
@@ -145,6 +154,9 @@ function LinkDialog({ initial, onDone }: { initial: string; onDone: (href: strin
  */
 export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; titleVariant?: "h1" | "h2" }) {
   const rootRef = useRef<HTMLDivElement>(null);
+  // Links inside editable text are plain elements; they take the design system's link colour from the theme.
+  const { mode } = useThemeMode();
+  const linkColor = useMemo(() => createAppTheme(mode).palette.primary.main, [mode]);
   const revalidator = useRevalidator();
   const knownVersion = useRef(page.version);
   const restoreSelection = useRef(false);
@@ -505,13 +517,23 @@ export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; 
 
     applySlashRef.current = applySlash;
 
+    // Browsers don't follow links inside editable text; a click opens the link in a new tab.
+    const onClick = (event: MouseEvent) => {
+      const link = (event.target as HTMLElement).closest<HTMLAnchorElement>(".editable a[href]");
+      if (!link || !root.contains(link)) return;
+      event.preventDefault();
+      window.open(link.href, "_blank", "noopener,noreferrer");
+    };
+
     document.addEventListener("selectionchange", onSelectionChange);
+    root.addEventListener("click", onClick);
     root.addEventListener("beforeinput", onBeforeInput);
     root.addEventListener("keydown", onKeyDown);
     root.addEventListener("compositionstart", onCompositionStart);
     root.addEventListener("compositionend", onCompositionEnd);
     return () => {
       document.removeEventListener("selectionchange", onSelectionChange);
+      root.removeEventListener("click", onClick);
       root.removeEventListener("beforeinput", onBeforeInput);
       root.removeEventListener("keydown", onKeyDown);
       root.removeEventListener("compositionstart", onCompositionStart);
@@ -546,7 +568,7 @@ export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; 
   const root = state.blocks[state.rootId]!;
 
   return (
-    <div className="page-editor" ref={rootRef}>
+    <div className="page-editor" ref={rootRef} style={{ "--editor-link": linkColor } as CSSProperties}>
       <div className="editor-status" aria-live="polite">
         <Typography variant="caption" color={status === "failed" || status === "retrying" ? "error" : "text.secondary"}>
           {STATUS_TEXT[status]}
