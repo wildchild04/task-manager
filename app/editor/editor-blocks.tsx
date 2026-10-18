@@ -107,7 +107,7 @@ const EditorBlock = memo(function EditorBlock(props: BlockProps) {
       return (
         <div className="editor-block">
           <div className={block.props.checked ? "editor-row editor-done" : "editor-row"}>
-            <span contentEditable={false} className="editor-gutter">
+            <span contentEditable={false} className="editor-gutter editor-gutter-todo">
               <Checkbox
                 checked={block.props.checked === true}
                 onChange={() => actions.toggleTodo(block.id)}
@@ -126,7 +126,7 @@ const EditorBlock = memo(function EditorBlock(props: BlockProps) {
       return (
         <div className="editor-block editor-toggle">
           <div className="editor-row">
-            <span contentEditable={false} className="editor-gutter">
+            <span contentEditable={false} className="editor-gutter editor-gutter-toggle">
               <IconButton
                 ariaLabel={open ? "Close toggle" : "Open toggle"}
                 icon={open ? "chevron_down" : "chevron_right"}

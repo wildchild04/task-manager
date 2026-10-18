@@ -73,8 +73,17 @@ body {
   flex: none;
   width: 36px;
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   margin-top: -4px;
+}
+
+/* Pull the checkbox and arrow back by their own padding, so their icons line up with the text edge. */
+.editor-gutter-todo > * {
+  transform: translateX(-6px);
+}
+
+.editor-gutter-toggle > * {
+  transform: translateX(-12px);
 }
 
 .editor-gutter-children {
@@ -101,8 +110,8 @@ body {
 }
 
 .editor-toggle > .editor-gutter-children {
-  margin-inline-start: 17px;
-  padding-inline-start: 21px;
+  margin-inline-start: 7px;
+  padding-inline-start: 31px;
   border-inline-start: 2px solid color-mix(in srgb, currentColor 15%, transparent);
 }
 
