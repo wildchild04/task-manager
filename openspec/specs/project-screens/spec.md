@@ -14,25 +14,6 @@ The home route `/` SHALL list all projects, oldest first, each linking to its pr
 - **WHEN** a project is created with an empty title
 - **THEN** no project is created and the dialog shows that a title is required
 
-### Requirement: Project home and dashboard
-`/projects/:projectId` SHALL show the project's title, its home page content (editable, as specified by the `block-editor` capability), and its dashboard: one card per dashboard section in the dashboard's order, each with its title, its count, and its items. Task items SHALL link to the task overview; library items SHALL link to the document. Chore items SHALL show an "Urgent" marker when urgent and their due time in the workspace time zone. A section with no items SHALL show that it is empty. The project home SHALL offer deleting the project with a button at the top right, which opens a confirmation dialog naming the project and saying how many tasks and library documents will be deleted with it; only confirming SHALL delete, after which the browser SHALL go to the home route. An unknown project SHALL show the not-found page with status 404.
-
-#### Scenario: Dashboard cards
-- **WHEN** a project has one work task in progress and no updates
-- **THEN** the project home shows a "Work in progress" card with count 1 linking to that task, and an "Open updates" card showing it is empty
-
-#### Scenario: Urgent chore
-- **WHEN** a project has an overdue chore
-- **THEN** its item in the "Chores" card shows the "Urgent" marker and its due time
-
-#### Scenario: Unknown project
-- **WHEN** `/projects/does-not-exist` is opened
-- **THEN** the not-found page is shown with status 404
-
-#### Scenario: Delete a project
-- **WHEN** the delete button of project "Garden" (with 3 tasks and 1 document) is pressed and confirmed
-- **THEN** the dialog said that 3 tasks and 1 document would be deleted, the browser is on the home route, and "Garden" is no longer listed
-
 ### Requirement: Task lists
 `/projects/:projectId/explorations`, `/updates`, `/work` and `/chores` SHALL each show a table of that kind's tasks in the project, with the task title (linking to the task overview), its state, and when it was last updated; the chores table SHALL also show urgency and due time and use the dashboard's chore order. A state filter SHALL narrow the table:
 
@@ -101,4 +82,27 @@ Rejected input (for example an empty title, an invalid time or a missing field) 
 #### Scenario: Unknown task
 - **WHEN** `/tasks/does-not-exist` is opened
 - **THEN** the not-found page is shown with status 404
+
+### Requirement: Project home
+`/projects/:projectId` SHALL show the project's title, a quick-glance header, and its content in tabs.
+
+The header SHALL show, from the project's dashboard: how much work is to do and in progress, how much was returned (only when some was), how many explorations are open, how many updates are open (only when some are), and how many chores are to do with the next due time, plus how many are urgent (only when some are).
+
+The tabs SHALL be Description (the home page content, editable as specified by the `block-editor` capability, the default), Work, Explorations, Updates, Chores and Library, each but Description labelled with its count when it isn't zero. Work SHALL list the project's work in progress, then returned work, then other work to do; Explorations and Updates their open tasks; Chores the chores to do in the chore order with the "Urgent" marker and due time in the workspace time zone; Library the knowledge library's documents as a tree. Every item SHALL link to its task or document, each task tab SHALL link to its full task list and Library to the library page, and an empty tab SHALL say so. The open tab SHALL be part of the URL (`?tab=`) so a reload or link opens it; switching tabs SHALL keep unsaved edits to the description. The project home SHALL offer deleting the project with a button at the top right, which opens a confirmation dialog naming the project and saying how many tasks and library documents will be deleted with it; only confirming SHALL delete, after which the browser SHALL go to the home route. An unknown project SHALL show the not-found page with status 404.
+
+#### Scenario: Quick glance and tabs
+- **WHEN** a project has one work task in progress, two to do, four open explorations and no updates
+- **THEN** the header shows "2 to do", "1 in progress" and "4 open explorations" without updates; the tabs read Description, Work (3), Explorations (4), Updates, Chores, Library; the Work tab lists the task in progress first, and the Updates tab says it is empty
+
+#### Scenario: Urgent chore
+- **WHEN** a project has an overdue chore
+- **THEN** the header shows "1 urgent", and the chore's item in the Chores tab shows the "Urgent" marker and its due time
+
+#### Scenario: Unknown project
+- **WHEN** `/projects/does-not-exist` is opened
+- **THEN** the not-found page is shown with status 404
+
+#### Scenario: Delete a project
+- **WHEN** the delete button of project "Garden" (with 3 tasks and 1 document) is pressed and confirmed
+- **THEN** the dialog said that 3 tasks and 1 document would be deleted, the browser is on the home route, and "Garden" is no longer listed
 

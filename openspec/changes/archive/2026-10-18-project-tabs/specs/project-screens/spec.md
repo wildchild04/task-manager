@@ -1,6 +1,12 @@
-## MODIFIED Requirements
+## REMOVED Requirements
 
 ### Requirement: Project home and dashboard
+**Reason**: The dashboard cards are replaced by a quick-glance header and section tabs.
+**Migration**: See "Project home"; the dashboard sections still define what each tab lists.
+
+## ADDED Requirements
+
+### Requirement: Project home
 `/projects/:projectId` SHALL show the project's title, a quick-glance header, and its content in tabs.
 
 The header SHALL show, from the project's dashboard: how much work is to do and in progress, how much was returned (only when some was), how many explorations are open, how many updates are open (only when some are), and how many chores are to do with the next due time, plus how many are urgent (only when some are).
