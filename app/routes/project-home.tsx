@@ -3,6 +3,7 @@ import { useState } from "react";
 import { data } from "react-router";
 
 import { Blocks } from "../blocks/block-view";
+import { MentionTitlesContext } from "../blocks/rich-text";
 import { DashboardCard } from "../components/dashboard-card";
 import { NotFound } from "../components/not-found";
 import { PageEditor } from "../editor/page-editor";
@@ -42,7 +43,9 @@ export default function ProjectHome({ loaderData }: Route.ComponentProps) {
         view.home &&
         view.home.blocks.length > 0 && (
           <article>
-            <Blocks blocks={view.home.blocks} />
+            <MentionTitlesContext.Provider value={view.home.mentions}>
+              <Blocks blocks={view.home.blocks} />
+            </MentionTitlesContext.Provider>
           </article>
         )
       )}

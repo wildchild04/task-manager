@@ -82,6 +82,13 @@ function deleteSelection(state: EditorState, selection: Selection): CommandResul
   };
 }
 
+/** Replaces the `@query` text between `start` and the caret with a mention of a page and a space. */
+export function mentionPage(state: EditorState, selection: Selection, start: number, pageId: string): CommandResult {
+  const block = getBlock(state, selection.blockId);
+  const content = text.insertMention(block.content, start, selection.focus, pageId);
+  return { ops: [updateContent(block.id, content)], selection: caret(block.id, start + 2) };
+}
+
 // ----- Marks and links -----
 
 export function toggleMark(state: EditorState, selection: Selection, mark: SimpleMark): CommandResult | null {

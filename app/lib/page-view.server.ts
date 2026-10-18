@@ -1,10 +1,10 @@
 import type { BlockService } from "~/domain/blocks/block.service";
 import { plainText } from "~/domain/blocks/text";
-import type { Block, TreeNode } from "~/domain/blocks/types";
+import type { Block, RichText, TreeNode } from "~/domain/blocks/types";
 import type { ProjectService } from "~/domain/projects/project.service";
 import { PROJECT_OWNER_KIND } from "~/domain/projects/types";
 
-import type { ContentBlockType, PageView, ReferenceView, ViewBlock } from "../blocks/view-model";
+import type { ContentBlockType, MentionTitles, PageView, ReferenceView, ViewBlock } from "../blocks/view-model";
 
 /** How deep references to blocks are expanded inside other references. */
 const MAX_REFERENCE_DEPTH = 5;
@@ -42,7 +42,29 @@ export function buildBodyView(blocks: BlockService, pageId: string): PageView | 
 
 function buildTreeView(blocks: BlockService, page: Block): PageView | undefined {
   const children = buildChildrenView(blocks, page.id);
-  return children && { id: page.id, title: page.content, blocks: children };
+  return children && { id: page.id, title: page.content, blocks: children, mentions: mentionTitles(blocks, children) };
+}
+
+/** The current titles of the pages mentioned anywhere in the views (including inside expanded references). */
+export function mentionTitles(blocks: BlockService, views: readonly ViewBlock[]): MentionTitles {
+  const titles: MentionTitles = {};
+  const add = (content: RichText) => {
+    for (const span of content) {
+      if (!span.mention || span.mention.pageId in titles) continue;
+      const page = blocks.getBlock(span.mention.pageId);
+      titles[span.mention.pageId] = page?.type === "page" ? plainText(page.content) || "Untitled" : null;
+    }
+  };
+  const visit = (view: ViewBlock) => {
+    if (view.kind === "content") {
+      add(view.content);
+      view.children.forEach(visit);
+    } else if (view.kind === "reference" && view.target.status === "block") {
+      visit(view.target.block);
+    }
+  };
+  views.forEach(visit);
+  return titles;
 }
 
 /** A comment's content, rendered like page content. */

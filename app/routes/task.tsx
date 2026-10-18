@@ -3,6 +3,7 @@ import { useState } from "react";
 import { data, Link as RouterLink, redirect } from "react-router";
 
 import { Blocks } from "../blocks/block-view";
+import { MentionTitlesContext } from "../blocks/rich-text";
 import { NotFound } from "../components/not-found";
 import { PageEditor } from "../editor/page-editor";
 import { editablePage } from "../lib/page-edit.server";
@@ -102,7 +103,9 @@ export default function Task({ loaderData }: Route.ComponentProps) {
           {details}
           {body && body.blocks.length > 0 ? (
             <article>
-              <Blocks blocks={body.blocks} />
+              <MentionTitlesContext.Provider value={body.mentions}>
+                <Blocks blocks={body.blocks} />
+              </MentionTitlesContext.Provider>
             </article>
           ) : (
             <Typography variant="body2" color="text.secondary">

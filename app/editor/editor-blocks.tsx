@@ -1,7 +1,8 @@
 import { Checkbox, Divider, IconButton, Typography } from "@wildchild/design-system";
-import { memo, useLayoutEffect, useRef } from "react";
+import { memo, useContext, useLayoutEffect, useRef } from "react";
 
 import { PageLink, ReferenceBlockView } from "../blocks/block-view";
+import { MentionTitlesContext } from "../blocks/rich-text";
 import type { ReferenceView } from "../blocks/view-model";
 import type { EditorBlock, EditorState } from "~/editor/editor-state";
 import { renderRichText } from "./dom-caret";
@@ -21,9 +22,10 @@ export const EditableText = memo(function EditableText({
   ariaLabel?: string;
 }) {
   const ref = useRef<HTMLSpanElement>(null);
+  const mentions = useContext(MentionTitlesContext);
   useLayoutEffect(() => {
-    if (ref.current) renderRichText(ref.current, block.content);
-  }, [block.content]);
+    if (ref.current) renderRichText(ref.current, block.content, mentions);
+  }, [block.content, mentions]);
   return (
     <span
       ref={ref}

@@ -1,4 +1,4 @@
-import type { Mark, RichText, SimpleMark, TextSpan } from "~/domain/blocks/types";
+import { MENTION_TEXT, type Mark, type RichText, type SimpleMark, type TextSpan } from "~/domain/blocks/types";
 
 /**
  * Rich-text editing at plain-text offsets. Spans are flat, so an offset into
@@ -16,8 +16,11 @@ function sameMarks(a: readonly Mark[] | undefined, b: readonly Mark[] | undefine
   return left.length === right.length && left.every((key, i) => key === right[i]);
 }
 
-const span = (text: string, marks: readonly Mark[] | undefined): TextSpan =>
-  marks && marks.length > 0 ? { text, marks: [...marks] } : { text };
+const span = (text: string, marks: readonly Mark[] | undefined, mention?: TextSpan["mention"]): TextSpan => ({
+  text,
+  ...(marks && marks.length > 0 ? { marks: [...marks] } : {}),
+  ...(mention ? { mention } : {}),
+});
 
 export function plain(text: RichText): string {
   return text.map((s) => s.text).join("");
@@ -33,8 +36,9 @@ export function normalize(text: RichText): RichText {
   for (const s of text) {
     if (s.text.length === 0) continue;
     const last = out.at(-1);
-    if (last && sameMarks(last.marks, s.marks)) out[out.length - 1] = span(last.text + s.text, last.marks);
-    else out.push(span(s.text, s.marks));
+    // A mention is one unit: it never merges with its neighbours.
+    if (last && !last.mention && !s.mention && sameMarks(last.marks, s.marks)) out[out.length - 1] = span(last.text + s.text, last.marks);
+    else out.push(span(s.text, s.marks, s.mention));
   }
   return out;
 }
@@ -46,7 +50,7 @@ export function slice(text: RichText, start: number, end = Infinity): RichText {
   for (const s of text) {
     const from = Math.max(start, position);
     const to = Math.min(end, position + s.text.length);
-    if (from < to) out.push(span(s.text.slice(from - position, to - position), s.marks));
+    if (from < to) out.push(span(s.text.slice(from - position, to - position), s.marks, s.mention));
     position += s.text.length;
   }
   return normalize(out);
@@ -77,6 +81,11 @@ export function marksAt(text: RichText, offset: number): Mark[] {
   return before.filter((m) => !isLink(m) || after.some((a) => isLink(a) && a.href === m.href));
 }
 
+/** Inserts a mention of a page, followed by a space, in place of the text between `start` and `end`. */
+export function insertMention(text: RichText, start: number, end: number, pageId: string): RichText {
+  return concat(slice(text, 0, start), [{ text: MENTION_TEXT, mention: { pageId } }, { text: " " }], slice(text, end));
+}
+
 /** Replaces the text between `start` and `end` with `inserted`, which takes the marks of the replaced text or the caret. */
 export function replace(text: RichText, start: number, end: number, inserted: string): RichText {
   const marks = start < end ? (marksOfChar(text, start) ?? []) : marksAt(text, start);
@@ -95,7 +104,7 @@ export function remove(text: RichText, start: number, end: number): RichText {
 function mapMarks(text: RichText, start: number, end: number, change: (marks: readonly Mark[]) => Mark[]): RichText {
   return concat(
     slice(text, 0, start),
-    slice(text, start, end).map((s) => span(s.text, change(s.marks ?? []))),
+    slice(text, start, end).map((s) => span(s.text, change(s.marks ?? []), s.mention)),
     slice(text, end),
   );
 }
@@ -125,10 +134,14 @@ export function linkAt(text: RichText, start: number, end: number): string | und
 /** Sets (or with `null`, removes) the link on a range, replacing any link there. */
 export function setLink(text: RichText, start: number, end: number, href: string | null): RichText {
   if (start >= end) return text;
-  return mapMarks(text, start, end, (marks) => [
-    ...marks.filter((m) => !isLink(m)),
-    ...(href ? [{ type: "link" as const, href }] : []),
-  ]);
+  // Mentions are links already, so they never get a link mark.
+  return concat(
+    slice(text, 0, start),
+    slice(text, start, end).map((s) =>
+      span(s.text, [...(s.marks ?? []).filter((m) => !isLink(m)), ...(href && !s.mention ? [{ type: "link" as const, href }] : [])], s.mention),
+    ),
+    slice(text, end),
+  );
 }
 
 const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });

@@ -398,6 +398,61 @@ describe("editor", () => {
     });
   });
 
+  describe("mentions", () => {
+    const m = (pageId: string) => ({ text: "\uFFFC", mention: { pageId } });
+    const seedWithTarget = (blocks: Seed[]) => {
+      services.blocks.apply([{ op: "insert", block: { id: "arch", type: "page", content: [{ text: "Architecture" }] }, parentId: null }]);
+      seed(blocks);
+    };
+
+    it("turns a typed @query into a mention and a space, as one undo step", () => {
+      seedWithTarget([p("a", "See ")]);
+      at("a", 4);
+      typeText("@arch");
+      clock = 5000;
+      editor.mention(4, "arch");
+      expect(services.blocks.getBlock("a")!.content).toEqual([{ text: "See " }, m("arch"), { text: " " }]);
+      expect(editor.selection).toEqual(caret("a", 6));
+      editor.undo();
+      expect(services.blocks.getBlock("a")!.content).toEqual([{ text: "See @arch" }]);
+      expectInSync();
+    });
+
+    it("deletes a mention whole with Backspace or Delete", () => {
+      seedWithTarget([{ id: "a", type: "paragraph", content: [{ text: "x" }, m("arch"), { text: "y" }] }]);
+      at("a", 2);
+      editor.deleteBackward();
+      expect(services.blocks.getBlock("a")!.content).toEqual([{ text: "xy" }]);
+      editor.undo();
+      at("a", 1);
+      editor.deleteForward();
+      expect(services.blocks.getBlock("a")!.content).toEqual([{ text: "xy" }]);
+      expectInSync();
+    });
+
+    it("undoes deleting a mention on its own, without the typing just before", () => {
+      seedWithTarget([{ id: "a", type: "paragraph", content: [{ text: "x" }, m("arch")] }]);
+      at("a", 2);
+      typeText("yz");
+      editor.deleteBackward();
+      editor.deleteBackward();
+      editor.deleteBackward();
+      expect(services.blocks.getBlock("a")!.content).toEqual([{ text: "x" }]);
+      editor.undo();
+      expect(services.blocks.getBlock("a")!.content).toEqual([{ text: "x" }, m("arch")]);
+    });
+
+    it("keeps a mention through splitting and merging blocks", () => {
+      seedWithTarget([{ id: "a", type: "paragraph", content: [{ text: "x" }, m("arch"), { text: "y" }] }]);
+      at("a", 2);
+      editor.enter();
+      expect(services.blocks.getBlock("a")!.content).toEqual([{ text: "x" }, m("arch")]);
+      editor.deleteBackward();
+      expect(services.blocks.getBlock("a")!.content).toEqual([{ text: "x" }, m("arch"), { text: "y" }]);
+      expectInSync();
+    });
+  });
+
   describe("type functions", () => {
     it("checks a todo", () => {
       seed([{ id: "t", type: "todo", content: [{ text: "Do it" }] }]);

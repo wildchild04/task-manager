@@ -1,10 +1,10 @@
-import type { Operation, SimpleMark } from "~/domain/blocks/types";
+import { MENTION_TEXT, type Operation, type SimpleMark } from "~/domain/blocks/types";
 
 import type { SlashCommand } from "./block-types";
 import * as commands from "./commands";
 import type { CommandResult, DeleteUnit } from "./commands";
 import { applyOps, caret, type EditorState, getBlock, invert, isCollapsed, type Selection } from "./editor-state";
-import { length } from "./rich-text";
+import { length, plain } from "./rich-text";
 import { History } from "./history";
 
 export type EditorOptions = {
@@ -96,16 +96,25 @@ export class Editor {
   }
 
   deleteBackward(unit: DeleteUnit = "character"): boolean {
-    const atEdge = isCollapsed(this.selection) && this.selection.focus === 0;
+    const atEdge = (isCollapsed(this.selection) && this.selection.focus === 0) || this.touchesMention(-1);
     return this.run(commands.deleteBackward(this.state, this.selection, this.context, unit), this.typingKey(atEdge));
   }
 
   deleteForward(unit: DeleteUnit = "character"): boolean {
-    const atEdge = isCollapsed(this.selection) && this.selection.focus >= length(getBlock(this.state, this.selection.blockId).content);
+    const atEdge =
+      (isCollapsed(this.selection) && this.selection.focus >= length(getBlock(this.state, this.selection.blockId).content)) ||
+      this.touchesMention(1);
     return this.run(commands.deleteForward(this.state, this.selection, this.context, unit), this.typingKey(atEdge));
   }
 
-  /** Deleting inside a block merges with typing in it; at its edges it's a structural step of its own. */
+  /** Whether the character just before (-1) or after (1) a collapsed caret is a mention. */
+  private touchesMention(side: -1 | 1): boolean {
+    if (!isCollapsed(this.selection)) return false;
+    const value = plain(getBlock(this.state, this.selection.blockId).content);
+    return value[this.selection.focus + (side === -1 ? -1 : 0)] === MENTION_TEXT;
+  }
+
+  /** Deleting inside a block merges with typing in it; at its edges, or deleting a mention, it's a step of its own. */
   private typingKey(atEdge: boolean): string | undefined {
     return atEdge ? undefined : `type:${this.selection.blockId}`;
   }
@@ -134,6 +143,11 @@ export class Editor {
   slash(start: number, command: SlashCommand): void {
     const { blockId, focus } = this.selection;
     this.run(commands.slashCommand(this.state, blockId, start, focus, command, this.context));
+  }
+
+  /** Turns the `@query` typed from `start` to the caret into a mention of a page. */
+  mention(start: number, pageId: string): void {
+    this.run(commands.mentionPage(this.state, this.selection, start, pageId));
   }
 
   toggleTodo(id: string): void {

@@ -21,6 +21,8 @@ import { caret, caretOrder, getBlock, isCollapsed, type Selection, stateFromTree
 import { linkAt, linkRangeAt, plain } from "~/editor/rich-text";
 import { type SaveStatus, SaveQueue, type SendResult } from "~/editor/save-queue";
 
+import { MentionTitlesContext } from "../blocks/rich-text";
+import type { MentionTitles } from "../blocks/view-model";
 import type { EditablePage } from "../lib/page-edit.server";
 import { useThemeMode } from "../theme-mode";
 import {
@@ -66,34 +68,65 @@ async function sendBatch(page: EditablePage, batch: Operation[]): Promise<SendRe
   }
 }
 
-/** The open slash menu: where its `/` is, where to show it, the highlighted row, and the page (with the filter it's for). */
-type SlashMenu = { blockId: string; start: number; anchor: DOMRect; active: string | null; page: number; query: string };
+/**
+ * The open inline menu: the slash menu (`/`, block commands) or the mention menu
+ * (`@`, pages). Where its trigger is, where to show it, the highlighted row, and
+ * the page of results (with the filter it's for).
+ */
+type SlashMenu = {
+  kind: "command" | "page";
+  blockId: string;
+  start: number;
+  anchor: DOMRect;
+  active: string | null;
+  page: number;
+  query: string;
+};
+
+const TRIGGERS = { command: "/", page: "@" } as const;
 
 /** How many commands the slash menu shows per page. */
 const SLASH_PAGE_SIZE = 5;
 const SLASH_NEXT_PAGE = "next-page";
 
-/** A row of the slash menu: a command, or the row that turns the page. */
-type SlashItem = { value: string; label: string; description?: string; command?: SlashCommand };
+/** A row of the inline menu: a command, a page to mention, or the row that turns the page. */
+type SlashItem = { value: string; label: string; description?: string; command?: SlashCommand; page?: PageMatch };
 
 /**
  * The rows of the slash menu's current page, or `null` when the menu should
  * close. A changed filter starts again from the first page.
  */
-function slashMatches(
-  editor: Editor,
-  menu: SlashMenu,
-): { query: string; commands: SlashItem[]; page: number; pages: number } | null {
+/** The text typed after the menu's trigger, or `null` when the caret has left it (the menu should close). */
+function menuQuery(editor: Editor, menu: SlashMenu): string | null {
   const block = editor.state.blocks[menu.blockId];
   const { selection } = editor;
   if (!block || selection.blockId !== menu.blockId || selection.focus <= menu.start) return null;
   const value = plain(block.content);
-  if (value[menu.start] !== "/") return null;
-  const query = value.slice(menu.start + 1, selection.focus);
-  const matches = matchSlashCommands(query);
-  if (matches.length === 0 && query.endsWith(" ")) return null;
-  const rows = (list: SlashCommand[]): SlashItem[] =>
-    list.map((command) => ({ value: command.value, label: command.label, description: command.description, command }));
+  if (value[menu.start] !== TRIGGERS[menu.kind]) return null;
+  return value.slice(menu.start + 1, selection.focus);
+}
+
+function slashMatches(
+  editor: Editor,
+  menu: SlashMenu,
+  /** For the mention menu: the pages found for the current query, or `null` while searching. */
+  found: readonly PageMatch[] | null = null,
+): { query: string; commands: SlashItem[]; page: number; pages: number } | null {
+  const query = menuQuery(editor, menu);
+  if (query === null) return null;
+  const all: SlashItem[] =
+    menu.kind === "command"
+      ? matchSlashCommands(query).map((command) => ({
+          value: command.value,
+          label: command.label,
+          description: command.description,
+          command,
+        }))
+      : (found ?? []).map((page) => ({ value: page.id, label: page.title, description: page.place, page }));
+  const searching = menu.kind === "page" && found === null;
+  if (all.length === 0 && !searching && query.endsWith(" ")) return null;
+  const matches = all;
+  const rows = (list: SlashItem[]) => list;
   const pages = Math.max(1, Math.ceil(matches.length / SLASH_PAGE_SIZE));
   const page = query === menu.query ? Math.min(menu.page, pages - 1) : 0;
   const shown = rows(matches.slice(page * SLASH_PAGE_SIZE, (page + 1) * SLASH_PAGE_SIZE));
@@ -103,15 +136,15 @@ function slashMatches(
 }
 
 /** The first command among a page's rows (the page row comes before them). */
-const firstCommand = (items: readonly SlashItem[]) => items.find((item) => item.command)?.value ?? null;
+const firstCommand = (items: readonly SlashItem[]) => items.find((item) => item.command || item.page)?.value ?? null;
 
 /** The menu turned `step` pages (wrapping around), with its first command highlighted. */
-function turnPage(editor: Editor, menu: SlashMenu, step: number): SlashMenu {
-  const matches = slashMatches(editor, menu);
+function turnPage(editor: Editor, menu: SlashMenu, step: number, found: readonly PageMatch[] | null): SlashMenu {
+  const matches = slashMatches(editor, menu, found);
   if (!matches || matches.pages === 1) return menu;
   const page = (matches.page + step + matches.pages) % matches.pages;
   const turned = { ...menu, page, query: matches.query };
-  return { ...turned, active: firstCommand(slashMatches(editor, turned)?.commands ?? []) };
+  return { ...turned, active: firstCommand(slashMatches(editor, turned, found)?.commands ?? []) };
 }
 
 /** A URL as typed, made absolute: "google.com" becomes "https://google.com"; app paths and other schemes are kept. */
@@ -319,6 +352,9 @@ export function PageEditor({
   const composing = useRef(false);
   const goalX = useRef<number | null>(null);
   const applySlashRef = useRef<((item: SlashItem) => void) | null>(null);
+  // Titles of mentioned pages: from the server, plus pages mentioned since it loaded.
+  const [mentionTitles, setMentionTitles] = useState<MentionTitles>(page.mentions);
+  useEffect(() => setMentionTitles((titles) => ({ ...titles, ...page.mentions })), [page.mentions]);
   // The card shown for a hovered link, and the timers that open and close it.
   const [linkCard, setLinkCardState] = useState<LinkCard | null>(null);
   const linkCardRef = useRef<LinkCard | null>(null);
@@ -365,6 +401,18 @@ export function PageEditor({
 
   useEffect(() => () => queue.dispose(), [queue]);
 
+  // Pages for the mention menu, searched as the text after `@` changes.
+  const found = usePageSearch(slash?.kind === "page" ? (menuQuery(editor, slash) ?? null) : null);
+  const foundRef = useRef(found);
+  foundRef.current = found;
+  // When results arrive, highlight the first page unless the highlighted one is still there.
+  useEffect(() => {
+    const menu = slashRef.current;
+    if (menu?.kind !== "page") return;
+    const rows = slashMatches(editor, menu, found)?.commands ?? [];
+    if (!rows.some((row) => row.value === menu.active)) setSlash({ ...menu, active: firstCommand(rows) });
+  }, [found, editor, setSlash]);
+
   /** Opens the card for a link element: its whole range in the block, its rectangle and where it goes. */
   const showLinkCard = useCallback(
     (link: HTMLAnchorElement) => {
@@ -373,7 +421,13 @@ export function PageEditor({
       const blockId = block.dataset.blockId!;
       const range = linkRangeAt(getBlock(editor.state, blockId).content, offsetOf(block, link, 0));
       if (!range) return;
-      const card: LinkCard = { element: link, blockId, ...range, rect: link.getBoundingClientRect(), label: link.getAttribute("href") ?? link.href };
+      const card: LinkCard = {
+        element: link,
+        blockId,
+        ...range,
+        rect: link.getBoundingClientRect(),
+        label: link.getAttribute("href") ?? link.href,
+      };
       const pageId = link.origin === window.location.origin ? /^\/pages\/([^/?#]+)$/.exec(link.pathname)?.[1] : undefined;
       if (link.origin === window.location.origin) card.label = pageId ? (pageNames.get(pageId) ?? "…") : link.pathname;
       setLinkCard(card);
@@ -453,7 +507,7 @@ export function PageEditor({
     const refreshSlash = () => {
       const menu = slashRef.current;
       if (!menu) return;
-      const matches = slashMatches(editor, menu);
+      const matches = slashMatches(editor, menu, foundRef.current);
       if (!matches) return setSlash(null);
       const active = matches.commands.some((c) => c.value === menu.active) ? menu.active : firstCommand(matches.commands);
       if (active !== menu.active || matches.page !== menu.page || matches.query !== menu.query) {
@@ -465,8 +519,16 @@ export function PageEditor({
     const applySlash = (item: SlashItem) => {
       const menu = slashRef.current;
       if (!menu) return;
+      if (item.page) {
+        const { id, title } = item.page;
+        setSlash(null);
+        setMentionTitles((titles) => ({ ...titles, [id]: title }));
+        editor.mention(menu.start, id);
+        edited();
+        return;
+      }
       if (!item.command) {
-        setSlash(turnPage(editor, menu, 1));
+        setSlash(turnPage(editor, menu, 1, foundRef.current));
         return;
       }
       setSlash(null);
@@ -493,12 +555,13 @@ export function PageEditor({
           if (!data) break;
           const before = editor.selection;
           const anchor = caretRect();
-          editor.type(data.replace(/\r\n?/g, "\n"));
-          // `/` at the start of a text block, or after a space, opens the slash menu.
+          // A pasted mention placeholder has no page to point at, so it's dropped.
+          editor.type(data.replace(/\r\n?/g, "\n").replace(/\uFFFC/g, ""));
+          // `/` (commands) or `@` (pages) at the start of a text block, or after a space, opens the inline menu.
           const block = editor.state.blocks[before.blockId];
           const previous = block ? plain(block.content)[Math.min(before.anchor, before.focus) - 1] : undefined;
           if (
-            data === "/" &&
+            (data === "/" || data === "@") &&
             block &&
             block.id !== editor.state.rootId &&
             behaviorOf(block.type).text &&
@@ -506,10 +569,11 @@ export function PageEditor({
           ) {
             const start = Math.min(before.anchor, before.focus);
             setSlash({
+              kind: data === "/" ? "command" : "page",
               blockId: block.id,
               start,
               anchor: anchor ?? editableOf(root, block.id)!.getBoundingClientRect(),
-              active: "text",
+              active: data === "/" ? "text" : null,
               page: 0,
               query: "",
             });
@@ -610,7 +674,7 @@ export function PageEditor({
 
       // While the slash menu is open, it gets the navigation keys.
       const menu = slashRef.current;
-      const matches = menu && slashMatches(editor, menu);
+      const matches = menu && slashMatches(editor, menu, foundRef.current);
       if (menu && matches && !mod) {
         const index = matches.commands.findIndex((c) => c.value === menu.active);
         if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -625,7 +689,9 @@ export function PageEditor({
         // Tab and Page Down turn to the next page, Shift+Tab and Page Up back. Tab never nests the block while the menu is open.
         if (event.key === "Tab" || event.key === "PageDown" || event.key === "PageUp") {
           event.preventDefault();
-          setSlash(turnPage(editor, menu, event.key === "PageUp" || (event.key === "Tab" && event.shiftKey) ? -1 : 1));
+          setSlash(
+            turnPage(editor, menu, event.key === "PageUp" || (event.key === "Tab" && event.shiftKey) ? -1 : 1, foundRef.current),
+          );
           return;
         }
         if (event.key === "Enter" && index >= 0) {
@@ -787,7 +853,7 @@ export function PageEditor({
     };
   }, [slash]);
 
-  const slashOptions = slash ? (slashMatches(editor, slash)?.commands ?? []) : [];
+  const slashOptions = slash ? (slashMatches(editor, slash, found)?.commands ?? []) : [];
 
   // ----- Link card actions -----
 
@@ -831,107 +897,113 @@ export function PageEditor({
   const root = state.blocks[state.rootId]!;
 
   return (
-    <div className="page-editor" ref={rootRef} style={{ "--editor-link": linkColor } as CSSProperties}>
-      {statusSlot ? createPortal(statusText, statusSlot) : <div className="editor-status">{statusText}</div>}
-      {error && (
-        <Alert severity="error" role="alert">
-          {error}
-        </Alert>
-      )}
-      {page.title && (
-        <Typography variant={titleVariant}>
-          <EditableText block={root} placeholder="Untitled" ariaLabel="Title" />
-        </Typography>
-      )}
-      {afterTitle}
-      <div className="editor-body">
-        {root.children.length === 0 ? (
-          <button
-            type="button"
-            className="editor-empty"
-            onClick={() => {
-              editor.setSelection(caret(state.rootId, 0));
-              editor.enter();
+    <MentionTitlesContext.Provider value={mentionTitles}>
+      <div className="page-editor" ref={rootRef} style={{ "--editor-link": linkColor } as CSSProperties}>
+        {statusSlot ? createPortal(statusText, statusSlot) : <div className="editor-status">{statusText}</div>}
+        {error && (
+          <Alert severity="error" role="alert">
+            {error}
+          </Alert>
+        )}
+        {page.title && (
+          <Typography variant={titleVariant}>
+            <EditableText block={root} placeholder="Untitled" ariaLabel="Title" />
+          </Typography>
+        )}
+        {afterTitle}
+        <div className="editor-body">
+          {root.children.length === 0 ? (
+            <button
+              type="button"
+              className="editor-empty"
+              onClick={() => {
+                editor.setSelection(caret(state.rootId, 0));
+                editor.enter();
+                restoreSelection.current = true;
+              }}
+            >
+              <Typography color="text.secondary">Empty page. Click to start writing.</Typography>
+            </button>
+          ) : (
+            <EditorBlocks state={state} ids={root.children} closed={closed} references={page.references} actions={actions} />
+          )}
+        </div>
+
+        <InlineCommandMenu
+          id={SLASH_MENU_ID}
+          open={slash !== null}
+          anchorRect={slash?.anchor ?? null}
+          ariaLabel={slash?.kind === "page" ? "Mention a page" : "Turn into"}
+          options={slashOptions.map(({ value, label, description }) => ({
+            value,
+            label,
+            ...(description ? { description } : {}),
+          }))}
+          activeValue={slash?.active ?? null}
+          onActiveValueChange={(value) => slash && setSlash({ ...slash, active: value })}
+          onSelect={(value) => {
+            const item = slashOptions.find((c) => c.value === value);
+            if (item) applySlashRef.current?.(item);
+          }}
+          onDismiss={() => setSlash(null)}
+          emptyText={slash?.kind === "page" ? (found === null ? "Searching…" : "No page matches") : "No matching blocks"}
+        />
+        <HoverCard
+          open={linkCard !== null}
+          anchorRect={linkCard?.rect ?? null}
+          ariaLabel="Link"
+          onPointerEnter={cardTimers.cancelClose}
+          onPointerLeave={() => cardTimers.close(() => setLinkCard(null))}
+          onDismiss={() => setLinkCard(null)}
+        >
+          {linkCard && (
+            // Pressing a button keeps the caret and selection in the text.
+            <div onMouseDown={(event) => event.preventDefault()}>
+              <Stack spacing={1}>
+                <Typography variant="body2" noWrap>
+                  {linkCard.label}
+                </Typography>
+                <Stack direction="row" spacing={1}>
+                  <Button size="small" variant="text" onClick={() => openLink(linkCard)}>
+                    Open
+                  </Button>
+                  <Button size="small" variant="text" onClick={() => editLink(linkCard)}>
+                    Edit
+                  </Button>
+                  <Button size="small" variant="text" color="error" onClick={() => removeLink(linkCard)}>
+                    Remove
+                  </Button>
+                </Stack>
+              </Stack>
+            </div>
+          )}
+        </HoverCard>
+        {linkFor && (
+          <LinkDialog
+            initial={linkFor.href}
+            onDone={(href) => {
+              setLinkFor(null);
+              if (href === undefined) return;
+              editor.setSelection(linkFor.selection);
+              editor.setLink(href);
               restoreSelection.current = true;
             }}
+          />
+        )}
+        {blocker.state === "blocked" && (
+          <Dialog
+            open
+            title="Leave without saving?"
+            onClose={() => blocker.reset()}
+            cancelAction={{ label: "Stay", onClick: () => blocker.reset() }}
+            confirmAction={{ label: "Leave", onClick: () => blocker.proceed() }}
           >
-            <Typography color="text.secondary">Empty page. Click to start writing.</Typography>
-          </button>
-        ) : (
-          <EditorBlocks state={state} ids={root.children} closed={closed} references={page.references} actions={actions} />
+            <Stack spacing={1}>
+              <Typography>Some edits haven't been saved yet. If you leave now they'll be lost.</Typography>
+            </Stack>
+          </Dialog>
         )}
       </div>
-
-      <InlineCommandMenu
-        id={SLASH_MENU_ID}
-        open={slash !== null}
-        anchorRect={slash?.anchor ?? null}
-        ariaLabel="Turn into"
-        options={slashOptions.map(({ value, label, description }) => ({ value, label, ...(description ? { description } : {}) }))}
-        activeValue={slash?.active ?? null}
-        onActiveValueChange={(value) => slash && setSlash({ ...slash, active: value })}
-        onSelect={(value) => {
-          const item = slashOptions.find((c) => c.value === value);
-          if (item) applySlashRef.current?.(item);
-        }}
-        onDismiss={() => setSlash(null)}
-        emptyText="No matching blocks"
-      />
-      <HoverCard
-        open={linkCard !== null}
-        anchorRect={linkCard?.rect ?? null}
-        ariaLabel="Link"
-        onPointerEnter={cardTimers.cancelClose}
-        onPointerLeave={() => cardTimers.close(() => setLinkCard(null))}
-        onDismiss={() => setLinkCard(null)}
-      >
-        {linkCard && (
-          // Pressing a button keeps the caret and selection in the text.
-          <div onMouseDown={(event) => event.preventDefault()}>
-            <Stack spacing={1}>
-              <Typography variant="body2" noWrap>
-                {linkCard.label}
-              </Typography>
-              <Stack direction="row" spacing={1}>
-                <Button size="small" variant="text" onClick={() => openLink(linkCard)}>
-                  Open
-                </Button>
-                <Button size="small" variant="text" onClick={() => editLink(linkCard)}>
-                  Edit
-                </Button>
-                <Button size="small" variant="text" color="error" onClick={() => removeLink(linkCard)}>
-                  Remove
-                </Button>
-              </Stack>
-            </Stack>
-          </div>
-        )}
-      </HoverCard>
-      {linkFor && (
-        <LinkDialog
-          initial={linkFor.href}
-          onDone={(href) => {
-            setLinkFor(null);
-            if (href === undefined) return;
-            editor.setSelection(linkFor.selection);
-            editor.setLink(href);
-            restoreSelection.current = true;
-          }}
-        />
-      )}
-      {blocker.state === "blocked" && (
-        <Dialog
-          open
-          title="Leave without saving?"
-          onClose={() => blocker.reset()}
-          cancelAction={{ label: "Stay", onClick: () => blocker.reset() }}
-          confirmAction={{ label: "Leave", onClick: () => blocker.proceed() }}
-        >
-          <Stack spacing={1}>
-            <Typography>Some edits haven't been saved yet. If you leave now they'll be lost.</Typography>
-          </Stack>
-        </Dialog>
-      )}
-    </div>
+    </MentionTitlesContext.Provider>
   );
 }

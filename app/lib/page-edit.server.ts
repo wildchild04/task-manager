@@ -5,7 +5,7 @@ import { plainText } from "~/domain/blocks/text";
 import type { Batch, TreeNode } from "~/domain/blocks/types";
 import { PROJECT_OWNER_KIND } from "~/domain/projects/types";
 
-import type { ReferenceView, ViewBlock } from "../blocks/view-model";
+import type { MentionTitles, ReferenceView, ViewBlock } from "../blocks/view-model";
 import { browsableScope, buildBodyView } from "./page-view.server";
 
 /** Where an editor runs: a page, a project's home page, or a task's body. */
@@ -23,6 +23,8 @@ export type EditablePage = {
   title: boolean;
   /** How each reference block resolves, as the read-only view shows it. */
   references: Record<string, ReferenceView>;
+  /** The current titles of the pages mentioned in the page (`null` for deleted ones). */
+  mentions: MentionTitles;
 };
 
 type EditTarget = { rootId: string; title: boolean };
@@ -59,13 +61,15 @@ export function editablePage(services: AppServices, surface: EditSurface, id: st
   const target = editTarget(services, surface, id);
   const tree = target && services.blocks.loadTree(target.rootId);
   if (!target || !tree) return undefined;
+  const view = buildBodyView(services.blocks, target.rootId);
   return {
     surface,
     id,
     tree,
     version: treeVersion(tree),
     title: target.title,
-    references: referencesOf(buildBodyView(services.blocks, target.rootId)?.blocks ?? []),
+    references: referencesOf(view?.blocks ?? []),
+    mentions: view?.mentions ?? {},
   };
 }
 

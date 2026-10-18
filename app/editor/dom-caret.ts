@@ -1,5 +1,7 @@
-import type { Mark, RichText } from "~/domain/blocks/types";
+import { type Mark, MENTION_TEXT, type RichText } from "~/domain/blocks/types";
 import type { Selection } from "~/editor/editor-state";
+
+import type { MentionTitles } from "../blocks/view-model";
 
 /**
  * The DOM side of the editor: drawing rich text into an editable element and
@@ -20,11 +22,11 @@ const MARK_TAGS: Record<Exclude<Mark, object>, string> = {
  * Replaces an editable element's content with the rich text. React never
  * renders inside it. A selection inside the element is kept at the same offsets.
  */
-export function renderRichText(element: HTMLElement, content: RichText): void {
+export function renderRichText(element: HTMLElement, content: RichText, mentions: MentionTitles = {}): void {
   const selection = readSelection();
   const kept = selection?.blockId === element.dataset.blockId ? selection : null;
   const nodes: Node[] = content.map((span) => {
-    let node: Node = document.createTextNode(span.text);
+    let node: Node = span.mention ? mentionElement(span.mention.pageId, mentions[span.mention.pageId]) : document.createTextNode(span.text);
     for (const mark of span.marks ?? []) {
       const wrapper =
         typeof mark === "object" ? Object.assign(document.createElement("a"), { href: mark.href }) : document.createElement(MARK_TAGS[mark]);
@@ -45,6 +47,24 @@ function setSelectionIn(element: HTMLElement, anchorOffset: number, focusOffset:
   const anchor = positionOf(element, anchorOffset);
   const focus = positionOf(element, focusOffset);
   window.getSelection()?.setBaseAndExtent(anchor.node, anchor.offset, focus.node, focus.offset);
+}
+
+/**
+ * A mention: a non-editable link whose only text is the placeholder character
+ * (hidden), so caret offsets count it as one character; CSS draws the title.
+ */
+function mentionElement(pageId: string, title: string | null | undefined): HTMLElement {
+  const element = document.createElement(title ? "a" : "span");
+  element.className = title ? "mention" : "mention mention-missing";
+  element.contentEditable = "false";
+  element.dataset.mentionPageId = pageId;
+  element.dataset.title = title ?? "Missing page";
+  if (title) element.setAttribute("href", `/pages/${pageId}`);
+  const placeholder = document.createElement("span");
+  placeholder.className = "mention-placeholder";
+  placeholder.textContent = MENTION_TEXT;
+  element.appendChild(placeholder);
+  return element;
 }
 
 /** The editable element of a block. */
@@ -96,7 +116,15 @@ function positionOf(element: HTMLElement, offset: number): { node: Node; offset:
   let last: Text | null = null;
   for (let node = walker.nextNode() as Text | null; node; node = walker.nextNode() as Text | null) {
     const length = node.nodeValue?.length ?? 0;
-    if (remaining <= length) return { node, offset: remaining };
+    if (remaining <= length) {
+      // Never inside a mention: just before it, or just after.
+      const mention = node.parentElement?.closest<HTMLElement>("[data-mention-page-id]");
+      if (mention?.parentNode) {
+        const index = Array.prototype.indexOf.call(mention.parentNode.childNodes, mention) as number;
+        return { node: mention.parentNode, offset: index + (remaining > 0 ? 1 : 0) };
+      }
+      return { node, offset: remaining };
+    }
     remaining -= length;
     last = node;
   }

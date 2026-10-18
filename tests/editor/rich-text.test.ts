@@ -74,3 +74,27 @@ describe("link around the caret", () => {
     expect(text.linkRangeAt(content, 14)).toBeUndefined();
   });
 });
+
+describe("mentions in rich text", () => {
+  const m = (pageId: string) => ({ text: "￼", mention: { pageId } });
+
+  it("never merges a mention with its neighbours, and slices keep it whole", () => {
+    expect(text.normalize([{ text: "a" }, m("p"), m("q"), { text: "b" }])).toEqual([{ text: "a" }, m("p"), m("q"), { text: "b" }]);
+    expect(text.slice([{ text: "ab" }, m("p"), { text: "c" }], 1, 3)).toEqual([{ text: "b" }, m("p")]);
+  });
+
+  it("inserts a mention and a space in place of the typed query", () => {
+    expect(text.insertMention([{ text: "see @arch now" }], 4, 9, "p")).toEqual([{ text: "see " }, m("p"), { text: "  now" }]);
+  });
+
+  it("marks a mention but never links it", () => {
+    const content = [{ text: "a" }, m("p")];
+    expect(text.toggleMark(content, 0, 2, "bold")).toEqual([{ text: "a", marks: ["bold"] }, { ...m("p"), marks: ["bold"] }]);
+    expect(text.setLink(content, 0, 2, "https://x.dev")).toEqual([{ text: "a", marks: [{ type: "link", href: "https://x.dev" }] }, m("p")]);
+  });
+
+  it("counts a mention as one character", () => {
+    expect(text.previousCharacter("a￼b", 2)).toBe(1);
+    expect(text.length([{ text: "a" }, m("p")])).toBe(2);
+  });
+});

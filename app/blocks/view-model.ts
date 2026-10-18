@@ -4,7 +4,10 @@ import type { PropsByType, RichText } from "~/domain/blocks/types";
 export type ContentBlockType = Exclude<keyof PropsByType, "page" | "reference" | "comment">;
 
 /** What a page's loader sends to the browser: plain, serializable data. `projectId` is set for project pages. */
-export type PageView = { id: string; title: RichText; blocks: ViewBlock[]; projectId?: string };
+/** The current title of every page mentioned in a view, by page ID; `null` when the page no longer exists. */
+export type MentionTitles = Record<string, string | null>;
+
+export type PageView = { id: string; title: RichText; blocks: ViewBlock[]; mentions: MentionTitles; projectId?: string };
 
 export type ViewBlock =
   | {

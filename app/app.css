@@ -141,3 +141,34 @@ body {
 .editable a:hover {
   text-decoration: underline;
 }
+
+/* A mention of a page that no longer exists. */
+.mention-missing {
+  opacity: 0.6;
+  text-decoration: line-through;
+}
+
+/* A mention in the editor: the placeholder character is hidden; the page's title is drawn after it. */
+.editable .mention {
+  color: var(--editor-link);
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.editable .mention::after {
+  content: attr(data-title);
+}
+
+.editable .mention:hover::after {
+  text-decoration: underline;
+}
+
+.editable .mention-placeholder {
+  font-size: 0;
+}
+
+.editable .mention-missing {
+  color: inherit;
+  cursor: default;
+}

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { data, Link as RouterLink, redirect } from "react-router";
 
 import { Blocks } from "../blocks/block-view";
+import { MentionTitlesContext } from "../blocks/rich-text";
 import { RichText } from "../blocks/rich-text";
 import { plainText } from "../blocks/view-model";
 import { DeletePageButton } from "../components/delete-page";
@@ -76,7 +77,13 @@ export default function Page({ loaderData }: Route.ComponentProps) {
           </Typography>
         )}
       </Stack>
-      {editing ? <PageEditor key={editable.id} page={editable} statusSlot={statusSlot} /> : <Blocks blocks={page.blocks} />}
+      {editing ? (
+        <PageEditor key={editable.id} page={editable} statusSlot={statusSlot} />
+      ) : (
+        <MentionTitlesContext.Provider value={page.mentions}>
+          <Blocks blocks={page.blocks} />
+        </MentionTitlesContext.Provider>
+      )}
     </article>
   );
 }
