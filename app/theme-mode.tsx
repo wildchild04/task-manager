@@ -1,4 +1,5 @@
-import { DesignSystemProvider, type ThemeMode } from "@wildchild/design-system";
+import { DesignSystemProvider, type ThemeMode, tokens } from "@wildchild/design-system";
+import type { CSSProperties } from "react";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 const COOKIE_KEY = "ntm_theme_mode";
@@ -17,6 +18,19 @@ export function readThemeCookie(cookieHeader: string | null): ThemeMode | null {
   return value === "light" || value === "dark" ? value : null;
 }
 
+/**
+ * A few of the design system's semantic colours as CSS variables, for app styles
+ * written in CSS (editor boxes) rather than through components.
+ */
+function surfaceVariables(mode: ThemeMode): CSSProperties {
+  const color = tokens.semantic.default[mode].color;
+  return {
+    "--ds-surface-lowest": color.surfaceContainerLowest,
+    "--ds-outline-variant": color.outlineVariant,
+    "--ds-primary": color.primary,
+  } as CSSProperties;
+}
+
 export function AppThemeProvider({ children, initialMode }: { children: React.ReactNode; initialMode: ThemeMode }) {
   const [mode, setMode] = useState<ThemeMode>(initialMode);
 
@@ -28,7 +42,11 @@ export function AppThemeProvider({ children, initialMode }: { children: React.Re
 
   return (
     <ThemeModeContext.Provider value={value}>
-      <DesignSystemProvider mode={mode}>{children}</DesignSystemProvider>
+      <DesignSystemProvider mode={mode}>
+        <div className="theme-vars" style={surfaceVariables(mode)}>
+          {children}
+        </div>
+      </DesignSystemProvider>
     </ThemeModeContext.Provider>
   );
 }
