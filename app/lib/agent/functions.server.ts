@@ -1,0 +1,317 @@
+import { z } from "zod";
+
+import type { AppServices } from "~/composition";
+import { fromMarkdown, type MarkdownReader, type MarkdownWriter, toMarkdown } from "~/domain/blocks/markdown";
+import { plainText } from "~/domain/blocks/text";
+import type { Batch, TreeNode } from "~/domain/blocks/types";
+import { TaskError } from "~/domain/tasks/errors";
+import { kinds } from "~/domain/tasks/kinds";
+import { TASK_KINDS, TASK_OWNER_KIND, type Actor, type TaskSummary } from "~/domain/tasks/types";
+
+import { allPages } from "../page-search.server";
+import { AgentError, cut, limitSchema, maxCharsSchema, offsetSchema, pageOf, parse, resolveId, short } from "./support.server";
+
+/** The changes agents may make to work tasks. Everything else is read-only for them. */
+const AGENT_TRANSITIONS = ["start", "pause", "complete", "return"];
+
+/** An agent acting through the API. */
+export type AgentActor = Extract<Actor, { kind: "agent" }>;
+
+// ----- Lookups -----
+
+const allTasks = (services: AppServices): TaskSummary[] => services.projects.list().flatMap((p) => services.tasks.list(p.id));
+
+function findTask(services: AppServices, id: string): TaskSummary {
+  return services.tasks.get(
+    resolveId(
+      id,
+      allTasks(services).map((t) => t.id),
+      "task",
+    ),
+  )!;
+}
+
+/** The agent holding a work task: whoever started it, while it's in progress. Humans don't hold tasks. */
+function holder(services: AppServices, task: TaskSummary): string | undefined {
+  if (task.kind !== "work" || task.state !== "in_progress") return undefined;
+  const start = services.tasks
+    .history(task.id)
+    .filter((record) => record.name === "start")
+    .at(-1);
+  return start?.actor.kind === "agent" ? start.actor.name : undefined;
+}
+
+/** Refuses changes to a work task held by another agent. */
+function checkHeld(services: AppServices, task: TaskSummary, actor: AgentActor) {
+  const heldBy = holder(services, task);
+  if (heldBy && heldBy !== actor.name) throw new AgentError(409, "claimed", `This task is held by ${heldBy}, who started it`);
+}
+
+/** Refuses changes to anything but work tasks. */
+function checkWork(task: TaskSummary) {
+  if (task.kind !== "work") throw new AgentError(403, "forbidden", `Agents can only change work tasks; this is a ${task.kind}`);
+}
+
+const toAgentError = (error: unknown): never => {
+  if (error instanceof TaskError) {
+    if (error.code === "invalid_transition") throw new AgentError(409, "invalid_transition", error.message);
+    if (error.code === "not_found") throw new AgentError(404, "not_found", error.message);
+    throw new AgentError(422, "validation", error.message);
+  }
+  throw error;
+};
+
+// ----- Markdown -----
+
+function reader(services: AppServices): MarkdownReader {
+  return {
+    mentionTarget: (pageId) => {
+      const page = services.blocks.getBlock(pageId);
+      if (page?.type !== "page") return null;
+      const title = plainText(page.content) || "Untitled";
+      return page.owner?.kind === TASK_OWNER_KIND
+        ? { kind: "task", id: short(page.owner.id), title }
+        : { kind: "page", id: short(page.id), title };
+    },
+    referenceTarget: (targetId) => {
+      const target = services.blocks.getBlock(targetId);
+      if (!target) return null;
+      if (target.type === "page") return { kind: "page", id: short(target.id), title: plainText(target.content) || "Untitled" };
+      return { kind: "block", text: plainText(target.content) };
+    },
+    appLink: (href) => {
+      const app = /^\/(pages|tasks)\/([^/?#]+)$/.exec(href);
+      return app ? `${app[1] === "pages" ? "page" : "task"}:${short(app[2]!)}` : undefined;
+    },
+    pageId: short,
+  };
+}
+
+function writer(services: AppServices): MarkdownWriter {
+  return {
+    findTarget: (kind, id) => {
+      try {
+        if (kind === "task") {
+          const task = findTask(services, id);
+          return { pageId: task.bodyPageId, href: `/tasks/${task.id}` };
+        }
+        const pageId = resolveId(
+          id,
+          allPages(services).map((p) => p.id),
+          "page",
+        );
+        return { pageId, href: `/pages/${pageId}` };
+      } catch {
+        return null;
+      }
+    },
+    newId: () => crypto.randomUUID(),
+  };
+}
+
+const markdownOf = (services: AppServices, tree: TreeNode | undefined) => toMarkdown(tree?.children ?? [], reader(services));
+
+// ----- Reads -----
+
+export function listProjects(services: AppServices) {
+  return { projects: services.projects.list().map((p) => ({ id: short(p.id), title: p.title })) };
+}
+
+const tasksQuery = z.object({
+  project: z.string().optional(),
+  kind: z.enum(TASK_KINDS).optional(),
+  state: z.string().optional(),
+  query: z.string().optional(),
+  limit: limitSchema(10),
+  cursor: z.string().optional(),
+});
+
+export function listTasks(services: AppServices, input: unknown) {
+  const q = parse(tasksQuery, input);
+  const projectId = q.project
+    ? resolveId(
+        q.project,
+        services.projects.list().map((p) => p.id),
+        "project",
+      )
+    : undefined;
+  const needle = q.query?.toLowerCase();
+  const tasks = (projectId ? services.tasks.list(projectId) : allTasks(services))
+    .filter(
+      (t) =>
+        (!q.kind || t.kind === q.kind) &&
+        (!q.state || t.state === q.state) &&
+        (!needle || t.title.toLowerCase().includes(needle)),
+    )
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id));
+  const page = pageOf(tasks, (t) => t.id, q.limit, q.cursor);
+  return {
+    tasks: page.items.map((t) => ({ id: short(t.id), kind: t.kind, state: t.state, title: t.title })),
+    more: page.more,
+    ...(page.cursor ? { cursor: page.cursor } : {}),
+  };
+}
+
+/** The transitions this agent may apply to the task now. */
+function allowedTransitions(services: AppServices, task: TaskSummary, actor: AgentActor): string[] {
+  if (task.kind !== "work") return [];
+  const heldBy = holder(services, task);
+  if (heldBy && heldBy !== actor.name) return [];
+  return Object.entries(kinds.work.transitions)
+    .filter(([name, transition]) => AGENT_TRANSITIONS.includes(name) && transition.from.includes(task.state))
+    .map(([name]) => name);
+}
+
+export function getTask(services: AppServices, actor: AgentActor, id: string) {
+  const task = findTask(services, id);
+  const heldBy = holder(services, task);
+  return {
+    id: short(task.id),
+    kind: task.kind,
+    state: task.state,
+    title: task.title,
+    project: short(task.projectId),
+    ...(heldBy ? { heldBy } : {}),
+    transitions: allowedTransitions(services, task, actor),
+    counts: {
+      comments: services.comments.list(task.id).length,
+      references: services.tasks.relations(task.id, "references").length,
+    },
+  };
+}
+
+const textQuery = (fallback: number) => z.object({ maxChars: maxCharsSchema(fallback), offset: offsetSchema });
+
+export function readDescription(services: AppServices, id: string, input: unknown) {
+  const q = parse(textQuery(2000), input);
+  const task = findTask(services, id);
+  return cut(markdownOf(services, services.blocks.loadTree(task.bodyPageId)), q.maxChars, q.offset);
+}
+
+const commentsQuery = z.object({ limit: limitSchema(5), cursor: z.string().optional(), maxChars: maxCharsSchema(1000) });
+
+export function listComments(services: AppServices, id: string, input: unknown) {
+  const q = parse(commentsQuery, input);
+  const task = findTask(services, id);
+  const comments = services.comments
+    .list(task.id)
+    .slice()
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id));
+  const page = pageOf(comments, (c) => c.id, q.limit, q.cursor);
+  return {
+    comments: page.items.map((c) => ({
+      id: short(c.id),
+      author: c.author.kind === "agent" ? c.author.name : "human",
+      markdown: cut(markdownOf(services, services.comments.body(c.id)), q.maxChars).markdown,
+    })),
+    more: page.more,
+    ...(page.cursor ? { cursor: page.cursor } : {}),
+  };
+}
+
+export function listReferences(services: AppServices, id: string, input: unknown) {
+  const q = parse(z.object({ limit: limitSchema(10) }), input);
+  const task = findTask(services, id);
+  const relations = services.tasks.relations(task.id, "references");
+  return {
+    references: relations
+      .slice(0, q.limit)
+      .map(({ target }) =>
+        target.status === "ok"
+          ? { kind: target.kind, id: short(target.id), title: target.title }
+          : { kind: target.kind, id: short(target.id), missing: true },
+      ),
+    more: relations.length > q.limit,
+  };
+}
+
+export function searchPages(services: AppServices, input: unknown) {
+  const q = parse(z.object({ query: z.string().default(""), limit: limitSchema(10) }), input);
+  const needle = q.query.trim().toLowerCase();
+  const pages = allPages(services).filter((p) => p.title.toLowerCase().includes(needle));
+  return {
+    pages: pages.slice(0, q.limit).map((p) => ({ id: short(p.id), title: p.title, place: p.place })),
+    more: pages.length > q.limit,
+  };
+}
+
+export function readPage(services: AppServices, id: string, input: unknown) {
+  const q = parse(textQuery(2000), input);
+  const pageId = resolveId(
+    id,
+    allPages(services).map((p) => p.id),
+    "page",
+  );
+  const page = services.blocks.getBlock(pageId)!;
+  return {
+    title: plainText(page.content) || "Untitled",
+    ...cut(markdownOf(services, services.blocks.loadTree(pageId)), q.maxChars, q.offset),
+  };
+}
+
+// ----- Writes -----
+
+const transitionBody = z.object({ name: z.string().min(1), reason: z.string().optional() });
+
+export function transition(services: AppServices, actor: AgentActor, id: string, input: unknown) {
+  const body = parse(transitionBody, input);
+  const task = findTask(services, id);
+  checkWork(task);
+  if (!AGENT_TRANSITIONS.includes(body.name)) throw new AgentError(403, "forbidden", `Agents can't ${body.name} work`);
+  if (body.name !== "start") checkHeld(services, task, actor);
+  if (body.name === "return" && !body.reason?.trim()) throw new AgentError(422, "validation", "A return needs a reason");
+  try {
+    const result = services.tasks.transition(task.id, body.name, {
+      actor,
+      ...(body.name === "return" ? { input: { reason: body.reason } } : {}),
+    });
+    return { ok: true as const, state: result.state };
+  } catch (error) {
+    return toAgentError(error);
+  }
+}
+
+const markdownBody = z.object({ markdown: z.string() });
+
+export function comment(services: AppServices, actor: AgentActor, id: string, input: unknown) {
+  const { markdown } = parse(markdownBody, input);
+  const task = findTask(services, id);
+  checkWork(task);
+  checkHeld(services, task, actor);
+  const blocks = fromMarkdown(markdown, writer(services));
+  if (blocks.length === 0) throw new AgentError(422, "validation", "The comment is empty");
+  try {
+    return {
+      ok: true as const,
+      id: short(services.comments.add({ id: crypto.randomUUID(), taskId: task.id, author: actor, blocks }).id),
+    };
+  } catch (error) {
+    return toAgentError(error);
+  }
+}
+
+export function appendDescription(services: AppServices, actor: AgentActor, id: string, input: unknown) {
+  const { markdown } = parse(markdownBody, input);
+  const task = findTask(services, id);
+  checkWork(task);
+  checkHeld(services, task, actor);
+  const blocks = fromMarkdown(markdown, writer(services));
+  if (blocks.length === 0) throw new AgentError(422, "validation", "Nothing to add");
+  // Insert each new block (and its children) after the description's last block.
+  const ops: Batch[number][] = [];
+  const add = (list: typeof blocks, parentId: string, afterId: string | null) => {
+    let previous = afterId;
+    for (const { children, ...block } of list) {
+      ops.push({ op: "insert", block, parentId, afterId: previous });
+      if (children?.length) add(children, block.id, null);
+      previous = block.id;
+    }
+  };
+  add(blocks, task.bodyPageId, services.blocks.getChildren(task.bodyPageId).at(-1)?.id ?? null);
+  try {
+    services.blocks.apply(ops);
+    return { ok: true as const };
+  } catch (error) {
+    throw new AgentError(422, "validation", error instanceof Error ? error.message : "The description couldn't be changed");
+  }
+}

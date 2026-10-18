@@ -159,7 +159,9 @@ export function fromInlineMarkdown(text: string, writer: MarkdownWriter, marks: 
       case "link": {
         const app = /^(page|task):(.+)$/.exec(match[2]!);
         const href = app ? writer.findTarget(app[1] as "page" | "task", app[2]!)?.href : match[2];
-        out.push(...(href ? fromInlineMarkdown(match[1]!, writer, withMark(marks, { type: "link", href })) : [span(match[0], marks)]));
+        out.push(
+          ...(href ? fromInlineMarkdown(match[1]!, writer, withMark(marks, { type: "link", href })) : [span(match[0], marks)]),
+        );
         break;
       }
       default:
@@ -180,7 +182,8 @@ function mergeSpans(spans: TextSpan[]): RichText {
   for (const s of spans) {
     if (s.text === "") continue;
     const last = out.at(-1);
-    if (last && !last.mention && !s.mention && sameMarks(last.marks, s.marks)) out[out.length - 1] = { ...last, text: last.text + s.text };
+    if (last && !last.mention && !s.mention && sameMarks(last.marks, s.marks))
+      out[out.length - 1] = { ...last, text: last.text + s.text };
     else out.push(s);
   }
   return out;
@@ -229,7 +232,13 @@ export function fromMarkdown(markdown: string, writer: MarkdownWriter): Markdown
     }
     const top = stack.at(-1);
     // A plain line right after a paragraph or quote line at the same depth continues it.
-    if (continuing && top && top.depth === line.depth && (line.type === "paragraph" || line.type === top.type) && (top.type === "paragraph" || top.type === "quote")) {
+    if (
+      continuing &&
+      top &&
+      top.depth === line.depth &&
+      (line.type === "paragraph" || line.type === top.type) &&
+      (top.type === "paragraph" || top.type === "quote")
+    ) {
       top.text += `\n${line.text}`;
       continue;
     }

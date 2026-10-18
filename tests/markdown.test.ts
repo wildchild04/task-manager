@@ -3,7 +3,13 @@ import { describe, expect, it } from "vitest";
 import { fromMarkdown, type MarkdownReader, type MarkdownWriter, toMarkdown } from "~/domain/blocks/markdown";
 import type { Block, BlockType, RichText, TreeNode } from "~/domain/blocks/types";
 
-const node = (id: string, type: BlockType, content: RichText = [], props: Record<string, unknown> = {}, children: TreeNode[] = []): TreeNode => ({
+const node = (
+  id: string,
+  type: BlockType,
+  content: RichText = [],
+  props: Record<string, unknown> = {},
+  children: TreeNode[] = [],
+): TreeNode => ({
   block: { id, type, props, content, parentId: null, owner: null, createdAt: "", updatedAt: "" } as Block,
   children,
 });
@@ -12,16 +18,30 @@ const m = (pageId: string) => ({ text: "￼", mention: { pageId } });
 
 const reader: MarkdownReader = {
   mentionTarget: (pageId) =>
-    pageId === "task-body" ? { kind: "task", id: "1a2b3c4d", title: "Add login" } : pageId === "arch" ? { kind: "page", id: "arch", title: "Architecture" } : null,
-  referenceTarget: (id) => (id === "arch" ? { kind: "page", id: "arch", title: "Architecture" } : id === "b1" ? { kind: "block", text: "Quoted line" } : null),
-  appLink: (href) => (href.startsWith("/pages/") ? `page:${href.slice(7)}` : href.startsWith("/tasks/") ? `task:${href.slice(7)}` : undefined),
+    pageId === "task-body"
+      ? { kind: "task", id: "1a2b3c4d", title: "Add login" }
+      : pageId === "arch"
+        ? { kind: "page", id: "arch", title: "Architecture" }
+        : null,
+  referenceTarget: (id) =>
+    id === "arch"
+      ? { kind: "page", id: "arch", title: "Architecture" }
+      : id === "b1"
+        ? { kind: "block", text: "Quoted line" }
+        : null,
+  appLink: (href) =>
+    href.startsWith("/pages/") ? `page:${href.slice(7)}` : href.startsWith("/tasks/") ? `task:${href.slice(7)}` : undefined,
   pageId: (id) => id,
 };
 
 let ids = 0;
 const writer: MarkdownWriter = {
   findTarget: (kind, id) =>
-    kind === "task" && id === "1a2b3c4d" ? { pageId: "task-body", href: "/tasks/1a2b3c4dfull" } : kind === "page" && id === "arch" ? { pageId: "arch", href: "/pages/arch" } : null,
+    kind === "task" && id === "1a2b3c4d"
+      ? { pageId: "task-body", href: "/tasks/1a2b3c4dfull" }
+      : kind === "page" && id === "arch"
+        ? { pageId: "arch", href: "/pages/arch" }
+        : null,
   newId: () => `n${++ids}`,
 };
 
@@ -30,7 +50,14 @@ describe("blocks to Markdown", () => {
     const md = toMarkdown(
       [
         node("h", "heading", [t("Title")], { level: 2 }),
-        node("p", "paragraph", [t("Plain "), t("bold", ["bold"]), t(" and "), t("code", ["code"]), t(" "), t("site", [{ type: "link", href: "https://x.dev" }])]),
+        node("p", "paragraph", [
+          t("Plain "),
+          t("bold", ["bold"]),
+          t(" and "),
+          t("code", ["code"]),
+          t(" "),
+          t("site", [{ type: "link", href: "https://x.dev" }]),
+        ]),
         node("b1", "bulleted_list_item", [t("one")], {}, [node("b2", "bulleted_list_item", [t("nested")])]),
         node("n1", "numbered_list_item", [t("first")]),
         node("n2", "numbered_list_item", [t("second")]),
@@ -42,7 +69,14 @@ describe("blocks to Markdown", () => {
         node("r1", "reference", [], { targetId: "arch" }),
         node("r2", "reference", [], { targetId: "b1" }),
         node("r3", "reference", [], { targetId: "gone" }),
-        node("mm", "paragraph", [t("See "), m("task-body"), t(" and "), m("gone"), t(" "), t("doc", [{ type: "link", href: "/pages/arch" }])]),
+        node("mm", "paragraph", [
+          t("See "),
+          m("task-body"),
+          t(" and "),
+          m("gone"),
+          t(" "),
+          t("doc", [{ type: "link", href: "/pages/arch" }]),
+        ]),
       ],
       reader,
     );
@@ -77,7 +111,10 @@ describe("blocks to Markdown", () => {
 describe("Markdown to blocks", () => {
   it("reads block types, joined paragraph lines, nesting and marks", () => {
     ids = 0;
-    const blocks = fromMarkdown("# Plan\n\nLine one\nline two\n\n- a\n  - a1\n1. n\n- [ ] open\n- [x] closed\n> q\n\n---\n\n*it* ~~st~~ <u>un</u>", writer);
+    const blocks = fromMarkdown(
+      "# Plan\n\nLine one\nline two\n\n- a\n  - a1\n1. n\n- [ ] open\n- [x] closed\n> q\n\n---\n\n*it* ~~st~~ <u>un</u>",
+      writer,
+    );
     expect(blocks.map((b) => [b.type, b.props, b.content, b.children?.map((c) => [c.type, c.content])])).toEqual([
       ["heading", { level: 1 }, [{ text: "Plan" }], undefined],
       ["paragraph", {}, [{ text: "Line one\nline two" }], undefined],
@@ -92,7 +129,10 @@ describe("Markdown to blocks", () => {
   });
 
   it("resolves mentions and app links, keeping unknown ones as plain text", () => {
-    const [p] = fromMarkdown("@[Add login](task:1a2b3c4d) @[Nope](task:ffffffff) [doc](page:arch) [x](page:nope) [web](https://x.dev)", writer);
+    const [p] = fromMarkdown(
+      "@[Add login](task:1a2b3c4d) @[Nope](task:ffffffff) [doc](page:arch) [x](page:nope) [web](https://x.dev)",
+      writer,
+    );
     expect(p!.content).toEqual([
       m("task-body"),
       t(" @[Nope](task:ffffffff) "),

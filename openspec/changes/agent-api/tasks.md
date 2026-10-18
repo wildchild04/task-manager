@@ -5,10 +5,10 @@
 
 ## 2. Agent API
 
-- [ ] 2.1 Request pipeline: token and name, actor, zod parsing, error mapping; ID prefixes; caps and cursors; tests
-- [ ] 2.2 Read functions: projects, tasks, task, description, comments, references, pages, page; tests for fields and caps
-- [ ] 2.3 Write functions with permissions and claiming: transition, comment, description; tests for every scenario
-- [ ] 2.4 Routes under `/api/agent/*`; `AGENT_TOKEN` documented in `.env.example`
+- [x] 2.1 Request pipeline: token and name, actor, zod parsing, error mapping; ID prefixes; caps and cursors; tests
+- [x] 2.2 Read functions: projects, tasks, task, description, comments, references, pages, page; tests for fields and caps
+- [x] 2.3 Write functions with permissions and claiming: transition, comment, description; tests for every scenario
+- [x] 2.4 Routes under `/api/agent/*`; `AGENT_TOKEN` documented in `.env.example`
 
 ## 3. MCP server
 

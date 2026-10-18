@@ -4,3 +4,4 @@ data/
 *.sqlite-*
 .react-router/
 build/
+.env
