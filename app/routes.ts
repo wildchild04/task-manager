@@ -5,6 +5,7 @@ export default [
   route("api/agent/*", "routes/api.agent.ts"),
   route("api/pages", "routes/api.pages.ts"),
   route("api/comments/:commentId/editable", "routes/api.comment-editable.ts"),
+  route("new", "routes/create.ts"),
   layout("routes/shell.tsx", [
     index("routes/home.tsx"),
     route("projects/:projectId", "routes/project-home.tsx"),

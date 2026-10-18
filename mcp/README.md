@@ -22,7 +22,7 @@ A stdio [MCP](https://modelcontextprotocol.io) server that lets AI agents work t
      -- npx tsx /absolute/path/to/notion-task-manager/mcp/server.ts
    ```
 
-   `AGENT_NAME` is how the agent appears in task history and comments. Give each agent its own name; a task an agent starts is held by that agent until it's completed, paused or returned.
+   `APP_URL` is the app's address including its base path when it's served under one (e.g. `https://home.example/task-manager`). `AGENT_NAME` is how the agent appears in task history and comments. Give each agent its own name; a task an agent starts is held by that agent until it's completed, paused or returned.
 
 Run it by hand with `npm run mcp` (the three variables must be set).
 

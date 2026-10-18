@@ -9,6 +9,7 @@ import { services } from "../lib/services.server";
 import { type ProjectSection, shellView } from "../lib/shell.server";
 import { useThemeMode } from "../theme-mode";
 import type { Route } from "./+types/shell";
+import { withBase } from "../lib/base-path";
 
 export function loader({ request }: Route.LoaderArgs) {
   return shellView(services, new URL(request.url).pathname);
@@ -80,7 +81,7 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
     event.preventDefault();
     void navigate(href);
   };
-  const item = (label: string, href: string, active: boolean) => ({ label, href, active, onClick: go(href) });
+  const item = (label: string, href: string, active: boolean) => ({ label, href: withBase(href), active, onClick: go(href) });
 
   const navigation = (
     <Stack spacing={2}>

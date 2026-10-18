@@ -6,13 +6,13 @@ import { fieldError, FormDialog, lastValue } from "./form-dialog";
 import { Hidden } from "./task-actions";
 
 /**
- * Creates a top-level workspace page from anywhere: posts to the home route's
- * action, which opens the new page once it's created.
+ * Creates a top-level workspace page from anywhere: posts to `/new`, which
+ * opens the new page once it's created.
  */
 export function NewPageDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const fetcher = useFetcher<ActionResult>();
   return (
-    <FormDialog open={open} title="New page" confirmLabel="Create" fetcher={fetcher} onClose={onClose} action="/?index">
+    <FormDialog open={open} title="New page" confirmLabel="Create" fetcher={fetcher} onClose={onClose} action="/new">
       <Hidden name="intent" value="create-page" />
       <TextField
         name="title"

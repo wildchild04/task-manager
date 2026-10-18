@@ -5,11 +5,12 @@ import { Link as RouterLink } from "react-router";
 import type { Mark, RichText as RichTextValue } from "~/domain/blocks/types";
 
 import type { MentionTargets } from "./view-model";
+import { withBase } from "../lib/base-path";
 
 function applyMark(node: ReactNode, mark: Mark, key: number): ReactNode {
   if (typeof mark === "object") {
     return (
-      <Link key={key} href={mark.href}>
+      <Link key={key} href={withBase(mark.href)}>
         {node}
       </Link>
     );

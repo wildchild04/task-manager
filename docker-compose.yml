@@ -4,6 +4,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # Where Caddy serves the app; rebuild after changing it.
+        APP_BASE_PATH: ${APP_BASE_PATH:-/task-manager}
       ssh:
         - default
     image: notion-task-manager:latest

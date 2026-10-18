@@ -38,6 +38,7 @@ import {
   writeSelection,
 } from "./dom-caret";
 import { EditableText, EditorBlocks } from "./editor-blocks";
+import { withBase, withoutBase } from "../lib/base-path";
 
 const SLASH_MENU_ID = "slash-menu";
 
@@ -52,7 +53,7 @@ const STATUS_TEXT: Record<SaveStatus, string> = {
 /** Sends one batch to the edit endpoint. Refusals don't retry; network problems do. */
 async function sendBatch(page: EditablePage, batch: Operation[]): Promise<SendResult & { version?: string }> {
   try {
-    const response = await fetch("/api/edits", {
+    const response = await fetch(withBase("/api/edits"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ surface: page.surface, id: page.id, batch }),
@@ -177,7 +178,7 @@ function usePageSearch(query: string | null): PageMatch[] | null {
     if (query === null) return setPages(null);
     const controller = new AbortController();
     const timer = setTimeout(() => {
-      fetch(`/api/pages?q=${encodeURIComponent(query)}`, { signal: controller.signal })
+      fetch(withBase(`/api/pages?q=${encodeURIComponent(query)}`), { signal: controller.signal })
         .then((response) => response.json() as Promise<{ pages: PageMatch[] }>)
         .then((body) => setPages(body.pages))
         .catch(() => {});
@@ -233,7 +234,7 @@ function LinkDialog({ initial, onDone }: { initial: string; onDone: (href: strin
   const [linkedId, setLinkedId] = useState<string | null>(null);
   useEffect(() => {
     if (!APP_LINK.test(initial)) return;
-    fetch(`/api/pages?href=${encodeURIComponent(initial)}`)
+    fetch(withBase(`/api/pages?href=${encodeURIComponent(initial)}`))
       .then((response) => response.json() as Promise<{ pages: PageMatch[] }>)
       .then(({ pages }) => {
         const page = pages[0];
@@ -453,14 +454,15 @@ export function PageEditor({
         blockId,
         ...range,
         rect: link.getBoundingClientRect(),
-        label: link.getAttribute("href") ?? link.href,
+        label: withoutBase(link.getAttribute("href") ?? link.href),
       };
       // Links to app pages and tasks show their title and place, looked up once.
-      const appPath = link.origin === window.location.origin && APP_LINK.test(link.pathname) ? link.pathname : undefined;
-      if (link.origin === window.location.origin) card.label = appPath ? (pageNames.get(appPath) ?? "…") : link.pathname;
+      const path = withoutBase(link.pathname);
+      const appPath = link.origin === window.location.origin && APP_LINK.test(path) ? path : undefined;
+      if (link.origin === window.location.origin) card.label = appPath ? (pageNames.get(appPath) ?? "…") : path;
       setLinkCard(card);
       if (appPath && !pageNames.has(appPath)) {
-        fetch(`/api/pages?href=${encodeURIComponent(appPath)}`)
+        fetch(withBase(`/api/pages?href=${encodeURIComponent(appPath)}`))
           .then((response) => response.json() as Promise<{ pages: PageMatch[] }>)
           .then(({ pages }) => {
             const page = pages[0];
@@ -827,7 +829,7 @@ export function PageEditor({
       const link = (event.target as HTMLElement).closest<HTMLAnchorElement>(".editable a[href]");
       if (!link || !root.contains(link)) return;
       event.preventDefault();
-      if (link.origin === window.location.origin) void navigateRef.current(link.pathname + link.search + link.hash);
+      if (link.origin === window.location.origin) void navigateRef.current(withoutBase(link.pathname) + link.search + link.hash);
       else window.open(link.href, "_blank", "noopener,noreferrer");
     };
 
@@ -893,7 +895,7 @@ export function PageEditor({
   const openLink = (card: LinkCard) => {
     setLinkCard(null);
     const link = card.element;
-    if (link.origin === window.location.origin) void navigate(link.pathname + link.search + link.hash);
+    if (link.origin === window.location.origin) void navigate(withoutBase(link.pathname) + link.search + link.hash);
     else window.open(link.href, "_blank", "noopener,noreferrer");
   };
   const editLink = (card: LinkCard) => {

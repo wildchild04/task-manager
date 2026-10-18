@@ -14,6 +14,7 @@ import type { CommentView } from "../lib/task-overview.server";
 import { useHydrated } from "../lib/use-hydrated";
 import { FormDialog } from "./form-dialog";
 import { Hidden, StartDialog } from "./task-actions";
+import { withBase } from "../lib/base-path";
 
 /** A fresh draft: a comment root with one empty paragraph, ready to type in. */
 function draftPage(): EditablePage {
@@ -87,7 +88,7 @@ function EditComment({ comment, onDone }: { comment: CommentView; onDone: () => 
   const [failed, setFailed] = useState(false);
   const [statusSlot, setStatusSlot] = useState<HTMLElement | null>(null);
   useEffect(() => {
-    fetch(`/api/comments/${encodeURIComponent(comment.id)}/editable`)
+    fetch(withBase(`/api/comments/${encodeURIComponent(comment.id)}/editable`))
       .then((response) => (response.ok ? (response.json() as Promise<EditablePage>) : Promise.reject(new Error("not found"))))
       .then(setEditable)
       .catch(() => setFailed(true));
@@ -189,7 +190,7 @@ export function TaskComments({ comments }: { comments: CommentView[] }) {
   const close = () => setDialog(null);
   // Checking a todo in a posted comment is an edit of the comment, saved at once.
   const toggleTodo = (commentId: string, blockId: string, checked: boolean) => {
-    void fetch("/api/edits", {
+    void fetch(withBase("/api/edits"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ surface: "comment", id: commentId, batch: [{ op: "update", id: blockId, props: { checked } }] }),

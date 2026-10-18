@@ -19,13 +19,18 @@ RUN --mount=type=ssh npm ci --omit=dev --no-audit --no-fund \
   && npm cache clean --force
 
 FROM base AS build-env
+# The path the reverse proxy serves the app under; compiled into the bundles.
+ARG APP_BASE_PATH=/task-manager
+ENV APP_BASE_PATH=${APP_BASE_PATH}
 COPY . .
 COPY --from=development-dependencies-env /app/node_modules ./node_modules
 RUN npm run build
 
 FROM node:${NODE_VERSION}-bookworm-slim AS runtime
+ARG APP_BASE_PATH=/task-manager
 WORKDIR /app
 ENV NODE_ENV=production \
+  APP_BASE_PATH=${APP_BASE_PATH} \
   PORT=3000 \
   DATABASE_PATH=/app/data/app.sqlite
 
@@ -36,5 +41,5 @@ COPY db/migrations ./db/migrations
 
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD ["node", "-e", "fetch('http://localhost:3000/').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+  CMD ["node", "-e", "fetch('http://localhost:3000' + process.env.APP_BASE_PATH.replace(/\\/?$/, '/')).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
 CMD ["node_modules/@react-router/serve/dist/cli.js", "./build/server/index.js"]

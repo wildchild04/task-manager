@@ -5,13 +5,13 @@ import type { ActionResult } from "../lib/forms.server";
 import { fieldError, FormDialog, lastValue } from "./form-dialog";
 
 /**
- * Creates a project from anywhere: posts to the home route's action, which
+ * Creates a project from anywhere: posts to `/new`, which
  * opens the new project once it's created.
  */
 export function NewProjectDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const fetcher = useFetcher<ActionResult>();
   return (
-    <FormDialog open={open} title="New project" confirmLabel="Create" fetcher={fetcher} onClose={onClose} action="/?index">
+    <FormDialog open={open} title="New project" confirmLabel="Create" fetcher={fetcher} onClose={onClose} action="/new">
       <TextField
         name="title"
         label="Title"

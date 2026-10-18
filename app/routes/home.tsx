@@ -11,15 +11,13 @@ import {
   Typography,
 } from "@wildchild/design-system";
 import { useState } from "react";
-import { Link as RouterLink, redirect, useNavigate } from "react-router";
+import { Link as RouterLink, useNavigate } from "react-router";
 
 import { NewPageDialog } from "../components/new-page-dialog";
 import { NewProjectDialog } from "../components/new-project-dialog";
 import { PageTree } from "../components/page-tree";
 import { type AttentionItem, homeView, type ProjectCard, type RecentItem } from "../lib/home.server";
-import { createProjectAction } from "../lib/projects.server";
 import { services } from "../lib/services.server";
-import { createWorkspacePageAction } from "../lib/workspace-pages.server";
 import type { Route } from "./+types/home";
 
 export function meta() {
@@ -28,17 +26,6 @@ export function meta() {
 
 export function loader() {
   return homeView(services);
-}
-
-/** Creates a project, or (`intent=create-page`) a workspace page, and opens it. */
-export async function action({ request }: Route.ActionArgs) {
-  const form = await request.formData();
-  if (form.get("intent") === "create-page") {
-    const result = createWorkspacePageAction(services, form);
-    return result.ok ? redirect(`/pages/${result.id}`) : result;
-  }
-  const result = createProjectAction(services, form);
-  return result.ok ? redirect(`/projects/${result.id}`) : result;
 }
 
 const titleLink = (title: string, href: string) => (

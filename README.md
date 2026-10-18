@@ -23,10 +23,22 @@ just agent-token      # optional: enables the agent API, stored in .env
 just docker-redeploy  # build and (re)start
 ```
 
-The app is at `http://localhost:3002`. Its SQLite database lives in `./data` (mounted at `/app/data`); migrations run on startup. Compose reads `TIME_ZONE` (default `America/Mexico_City`) and `AGENT_TOKEN` from `.env`; see `.env.docker.example`.
+The app is at `http://localhost:3002/task-manager/`. Its SQLite database lives in `./data` (mounted at `/app/data`); migrations run on startup. Compose reads `TIME_ZONE` (default `America/Mexico_City`) and `AGENT_TOKEN` from `.env`; see `.env.docker.example`.
 
-The app expects to be served at the root of its host (links stored in pages are absolute paths), so put a proxy in front of the port rather than under a sub-path.
+### Behind a reverse proxy
+
+The app is built to live under `APP_BASE_PATH` (default `/task-manager`; set it in `.env` and rebuild to change it). The proxy must forward the path with its prefix, so in Caddy use `handle`, not the prefix-stripping `handle_path`:
+
+```caddyfile
+example.home {
+	handle /task-manager* {
+		reverse_proxy localhost:3002
+	}
+}
+```
+
+For local development `npm run dev` stays at the root; `APP_BASE_PATH=/task-manager npm run build && npm start` runs a production build under the prefix.
 
 ## Agents
 
-See [`mcp/README.md`](mcp/README.md). Point `APP_URL` at the running app (for Docker, `http://localhost:3002`).
+See [`mcp/README.md`](mcp/README.md). Point `APP_URL` at the running app including its base path (for Docker, `http://localhost:3002/task-manager`, or the proxy's URL).

@@ -2,6 +2,7 @@ import { type Mark, MENTION_TEXT, type RichText } from "~/domain/blocks/types";
 import type { Selection } from "~/editor/editor-state";
 
 import type { MentionTarget, MentionTargets } from "../blocks/view-model";
+import { withBase } from "../lib/base-path";
 
 /**
  * The DOM side of the editor: drawing rich text into an editable element and
@@ -26,10 +27,14 @@ export function renderRichText(element: HTMLElement, content: RichText, mentions
   const selection = readSelection();
   const kept = selection?.blockId === element.dataset.blockId ? selection : null;
   const nodes: Node[] = content.map((span) => {
-    let node: Node = span.mention ? mentionElement(span.mention.pageId, mentions[span.mention.pageId]) : document.createTextNode(span.text);
+    let node: Node = span.mention
+      ? mentionElement(span.mention.pageId, mentions[span.mention.pageId])
+      : document.createTextNode(span.text);
     for (const mark of span.marks ?? []) {
       const wrapper =
-        typeof mark === "object" ? Object.assign(document.createElement("a"), { href: mark.href }) : document.createElement(MARK_TAGS[mark]);
+        typeof mark === "object"
+          ? Object.assign(document.createElement("a"), { href: withBase(mark.href) })
+          : document.createElement(MARK_TAGS[mark]);
       wrapper.appendChild(node);
       node = wrapper;
     }
@@ -59,7 +64,7 @@ function mentionElement(pageId: string, target: MentionTarget | null | undefined
   element.contentEditable = "false";
   element.dataset.mentionPageId = pageId;
   element.dataset.title = target?.title ?? "Missing page";
-  if (target) element.setAttribute("href", target.href);
+  if (target) element.setAttribute("href", withBase(target.href));
   const placeholder = document.createElement("span");
   placeholder.className = "mention-placeholder";
   placeholder.textContent = MENTION_TEXT;
