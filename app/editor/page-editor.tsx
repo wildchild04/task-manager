@@ -631,7 +631,7 @@ export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; 
     const onMouseOver = (event: MouseEvent) => {
       const link = (event.target as HTMLElement).closest<HTMLAnchorElement>(".editable a[href]");
       if (!link || !root.contains(link) || link.title) return;
-      const hint = "Click to open · Ctrl+K to edit";
+      const hint = "Click to open - Select and Ctrl+K to edit";
       const pageId = link.origin === window.location.origin ? /^\/pages\/([^/?#]+)$/.exec(link.pathname)?.[1] : undefined;
       if (!pageId) {
         link.title = `${link.href} · ${hint}`;
