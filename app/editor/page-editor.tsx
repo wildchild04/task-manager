@@ -375,7 +375,16 @@ export function PageEditor({ page, titleVariant = "h1" }: { page: EditablePage; 
           }
           return;
         }
-        if ((event.key === "Enter" || event.key === "Tab") && index >= 0) {
+        // Tab shows every command (keeping the highlight); it never nests the block while the menu is open.
+        if (event.key === "Tab") {
+          event.preventDefault();
+          if (!menu.expanded && matches.commands.some((c) => c.value === SLASH_MORE)) {
+            const active = menu.active === SLASH_MORE ? (matches.commands[SLASH_VISIBLE - 1]?.value ?? null) : menu.active;
+            setSlash({ ...menu, expanded: true, active });
+          }
+          return;
+        }
+        if (event.key === "Enter" && index >= 0) {
           event.preventDefault();
           applySlash(matches.commands[index]!);
           return;
