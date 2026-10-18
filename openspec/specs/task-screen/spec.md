@@ -70,19 +70,27 @@ The task page SHALL list the task's applied transitions, newest first, each with
 - **THEN** the history shows a return by "builder" from in progress to to do, with the note "Tests fail on CI"
 
 ### Requirement: Comments on the task page
-Work and chore pages SHALL show the task's comments oldest first, each with its author ("You" or the agent's name), its time, an "Edited" marker once edited, and its content rendered like page content. Each comment SHALL be addressable at `#comment-<id>`. The page SHALL offer adding a comment as plain text, where each paragraph (text separated by a blank line) becomes a paragraph block; an empty comment SHALL be rejected. Each comment SHALL offer editing, which replaces its content with the new text's paragraphs and marks it edited, and deleting after a confirmation. Exploration and update pages SHALL not show comments.
+Work and chore pages SHALL show the task's comments oldest first, each with its author ("You" or the agent's name), its time, an "Edited" marker once edited, and its content rendered like page content (including marks, links and mentions). Each comment SHALL be addressable at `#comment-<id>`. The page SHALL offer writing a new comment with the block editor (every block type except pages, marks, links, `@` mentions, the slash menu and markdown shortcuts), posted with a "Comment" button or Cmd/Ctrl+Enter; nothing is saved until it is posted, and an empty comment SHALL be rejected. Each comment SHALL offer editing it in place with the same editor, saving as it is edited and marking it edited, until "Done"; and deleting after a confirmation. The todos of a posted comment SHALL be checkable without editing it, each change saved at once and marking the comment edited, and its toggles SHALL open and close; every block type SHALL look and line up as it does in the editor. Exploration and update pages SHALL not show comments.
 
 #### Scenario: Add a comment
-- **WHEN** the comment "First line\n\nSecond paragraph" is added to a work task
-- **THEN** the work task's comments end with a comment by "You" with two paragraphs, "First line" and "Second paragraph"
+- **WHEN** a comment with a paragraph "First line" and a bulleted item "Second point" is written and posted on a work task
+- **THEN** the work task's comments end with a comment by "You" with that paragraph and that bulleted item, and the new-comment editor is empty again
 
 #### Scenario: Empty comment
-- **WHEN** an empty comment is submitted
-- **THEN** no comment is added and the form shows that the comment is empty
+- **WHEN** an empty comment is posted
+- **THEN** no comment is added and the editor shows that the comment is empty
 
 #### Scenario: Edit a comment
-- **WHEN** a comment is edited to "Updated text"
-- **THEN** its content is the single paragraph "Updated text" and it shows as edited
+- **WHEN** a comment's text is changed in place to "Updated text" and "Done" is pressed
+- **THEN** its content is "Updated text", it shows as edited, and it is read-only again
+
+#### Scenario: Check a todo in a posted comment
+- **WHEN** a posted comment's unchecked todo "Done" is clicked
+- **THEN** it is checked, still checked after reloading, and the comment shows as edited
+
+#### Scenario: Mention in a comment
+- **WHEN** a comment mentioning the document "Architecture" is posted
+- **THEN** the comment shows "Architecture" linking to that document
 
 #### Scenario: Delete a comment
 - **WHEN** a comment is deleted and the deletion confirmed
