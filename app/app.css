@@ -37,7 +37,8 @@ body {
 
 .editable {
   display: block;
-  min-height: 1.5em;
+  /* One line of the block's own text, so headings aren't taller than when read-only. */
+  min-height: 1lh;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   outline: none;
@@ -91,7 +92,8 @@ body {
   padding-inline-start: 40px;
 }
 
-.editor-done .editable {
+.editor-done .editable,
+.editor-done .block-text {
   text-decoration: line-through;
   opacity: 0.6;
 }

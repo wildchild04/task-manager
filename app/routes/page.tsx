@@ -75,7 +75,7 @@ export default function Page({ loaderData }: Route.ComponentProps) {
           </Stack>
         </Stack>
         {!(editing && editable.title) && (
-          <Typography variant="h1" gutterBottom>
+          <Typography variant="h1">
             {page.title.length > 0 ? <RichText value={page.title} /> : "Untitled"}
           </Typography>
         )}

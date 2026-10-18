@@ -1,4 +1,4 @@
-import { Alert, Checkbox, Divider, Icon, Link, Stack, Typography } from "@wildchild/design-system";
+import { Alert, Checkbox, Divider, IconButton, Link, Typography } from "@wildchild/design-system";
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 import { Link as RouterLink } from "react-router";
 
@@ -20,10 +20,11 @@ export function PageLink({ id, title }: { id: string; title: RichTextValue }) {
   );
 }
 
-function Children({ blocks }: { blocks: ViewBlock[] }) {
+/** Nested blocks; under a todo or toggle (`gutter`) they line up with its text. */
+function Children({ blocks, gutter }: { blocks: ViewBlock[]; gutter?: boolean }) {
   if (blocks.length === 0) return null;
   return (
-    <div className="block-children">
+    <div className={gutter ? "block-children editor-gutter-children" : "block-children"}>
       <Blocks blocks={blocks} />
     </div>
   );
@@ -37,82 +38,109 @@ const headingVariants = { 1: "h2", 2: "h3", 3: "h4" } as const;
  */
 export const TodoToggleContext = createContext<((id: string, checked: boolean) => void) | null>(null);
 
-/** A todo's checkbox; it shows a click at once, before the saved content comes back. */
-function TodoCheckbox({ id, label, checked }: { id: string; label: ReactNode; checked: boolean }) {
+
+/**
+ * One content block, read-only. The markup and classes match the editor's
+ * block components, so a page looks the same before and after the editor
+ * takes over, and toggles and todos behave the same way.
+ */
+function ContentBlockView({ block }: { block: ContentBlock }) {
+  const text = <RichText value={block.content} />;
+  const children = <Children blocks={block.children} />;
+  switch (block.type) {
+    case "paragraph":
+      return (
+        <div className="editor-block">
+          <Typography>{text}</Typography>
+          {children}
+        </div>
+      );
+    case "heading":
+      return (
+        <div className="editor-block">
+          <Typography variant={headingVariants[block.props.level as 1 | 2 | 3]}>{text}</Typography>
+          {children}
+        </div>
+      );
+    case "todo": {
+      const checked = block.props.checked === true;
+      return (
+        <div className="editor-block">
+          <TodoRow id={block.id} checked={checked} text={text} />
+          <Children blocks={block.children} gutter />
+        </div>
+      );
+    }
+    case "toggle":
+      return <ToggleBlock text={text} childBlocks={block.children} />;
+    case "quote":
+      return (
+        <div className="editor-block">
+          <Typography variant="blockquote">{text}</Typography>
+          {children}
+        </div>
+      );
+    case "divider":
+      return (
+        <div className="editor-block">
+          <Divider />
+        </div>
+      );
+    case "bulleted_list_item":
+    case "numbered_list_item":
+      return (
+        <li className="editor-block">
+          <Typography>{text}</Typography>
+          {children}
+        </li>
+      );
+  }
+}
+
+/** A todo: its checkbox in the gutter, its text, struck through when done. */
+function TodoRow({ id, checked, text }: { id: string; checked: boolean; text: ReactNode }) {
   const toggle = useContext(TodoToggleContext);
   const [shown, setShown] = useState(checked);
   useEffect(() => setShown(checked), [checked]);
   return (
-    <Checkbox
-      label={label}
-      checked={shown}
-      disabled={!toggle}
-      onChange={(next) => {
-        setShown(next);
-        toggle?.(id, next);
-      }}
-    />
+    <div className={shown ? "editor-row editor-done" : "editor-row"}>
+      <span className="editor-gutter editor-gutter-todo">
+        <Checkbox
+          checked={shown}
+          disabled={!toggle}
+          ariaLabel={shown ? "Uncheck" : "Check"}
+          onChange={(next) => {
+            setShown(next);
+            toggle?.(id, next);
+          }}
+        />
+      </span>
+      <Typography>
+        <span className="block-text">{text}</span>
+      </Typography>
+    </div>
   );
 }
 
-function ContentBlockView({ block }: { block: ContentBlock }) {
-  const text = <RichText value={block.content} />;
-  switch (block.type) {
-    case "paragraph":
-      return (
-        <>
-          <Typography gutterBottom>{text}</Typography>
-          <Children blocks={block.children} />
-        </>
-      );
-    case "heading":
-      return (
-        <>
-          <Typography variant={headingVariants[block.props.level as 1 | 2 | 3]} gutterBottom>
-            {text}
-          </Typography>
-          <Children blocks={block.children} />
-        </>
-      );
-    case "todo":
-      return (
-        <>
-          <div className="block-todo">
-            <TodoCheckbox id={block.id} label={text} checked={block.props.checked === true} />
-          </div>
-          <Children blocks={block.children} />
-        </>
-      );
-    case "toggle":
-      return (
-        <>
-          <Stack direction="row" spacing={0.5} alignItems="center">
-            <Icon name="chevron_down" size="small" />
-            <Typography>{text}</Typography>
-          </Stack>
-          <Children blocks={block.children} />
-        </>
-      );
-    case "quote":
-      return (
-        <>
-          <Typography variant="blockquote" gutterBottom>
-            {text}
-          </Typography>
-          <Children blocks={block.children} />
-        </>
-      );
-    case "divider":
-      return <Divider />;
-    case "bulleted_list_item":
-    case "numbered_list_item":
-      return (
-        <li>
-          <Typography>{text}</Typography>
-          <Children blocks={block.children} />
-        </li>
-      );
-  }
+/** A toggle: its arrow opens and closes it (only for this view); its children hang off a guide line. */
+function ToggleBlock({ text, childBlocks }: { text: ReactNode; childBlocks: ViewBlock[] }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="editor-block editor-toggle">
+      <div className="editor-row">
+        <span className="editor-gutter editor-gutter-toggle">
+          <IconButton
+            ariaLabel={open ? "Close toggle" : "Open toggle"}
+            icon={open ? "chevron_down" : "chevron_right"}
+            size="small"
+            onClick={() => setOpen(!open)}
+          />
+        </span>
+        <Typography>{text}</Typography>
+      </div>
+      {open && <Children blocks={childBlocks} gutter />}
+    </div>
+  );
 }
 
 export function ReferenceBlockView({ target }: { target: ReferenceView }) {
@@ -139,9 +167,17 @@ export function ReferenceBlockView({ target }: { target: ReferenceView }) {
 function BlockView({ block }: { block: ViewBlock }) {
   switch (block.kind) {
     case "subpage":
-      return <PageLink id={block.id} title={block.title} />;
+      return (
+        <div className="editor-block">
+          <PageLink id={block.id} title={block.title} />
+        </div>
+      );
     case "reference":
-      return <ReferenceBlockView target={block.target} />;
+      return (
+        <div className="editor-block">
+          <ReferenceBlockView target={block.target} />
+        </div>
+      );
     case "content":
       return <ContentBlockView block={block} />;
   }
