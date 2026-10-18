@@ -84,6 +84,8 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
 
   const navigation = (
     <Stack spacing={2}>
+      {/* No home icon in the design system yet (requested); a plain item until it ships. */}
+      <PageNavigation ariaLabel="Home" items={[item("Home", "/", pathname === "/")]} />
       <Group
         label="Projects"
         href="/"
