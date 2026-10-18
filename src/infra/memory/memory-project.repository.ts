@@ -17,6 +17,12 @@ export class MemoryProjectRepository implements ProjectRepository {
     return [...this.projects.values()];
   }
 
+  delete(id: string): void {
+    const projects = new Map(this.projects);
+    projects.delete(id);
+    this.projects = projects;
+  }
+
   snapshot(): Map<string, Project> {
     return this.projects;
   }

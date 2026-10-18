@@ -17,6 +17,7 @@ export class SqliteProjectRepository implements ProjectRepository {
       ),
       get: db.prepare<[string], Project>(`SELECT ${selectColumns} FROM projects WHERE id = ?`),
       list: db.prepare<[], Project>(`SELECT ${selectColumns} FROM projects ORDER BY created_at, rowid`),
+      delete: db.prepare("DELETE FROM projects WHERE id = ?"),
     };
   }
 
@@ -31,4 +32,8 @@ export class SqliteProjectRepository implements ProjectRepository {
   list(): Project[] {
     return this.statements.list.all();
   }
+  delete(id: string): void {
+    this.statements.delete.run(id);
+  }
+
 }

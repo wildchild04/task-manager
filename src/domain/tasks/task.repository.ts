@@ -17,6 +17,8 @@ export interface TaskRepository {
   insertRelation(relation: Relation): void;
   getRelation(id: string): Relation | undefined;
   deleteRelation(id: string): void;
+  /** Removes a task with its transition history and the relations from it. Relations to it are kept. */
+  delete(id: string): void;
   /** Relations from a task, oldest first. */
   outgoing(taskId: string, type?: RelationType): Relation[];
   /** Relations pointing at an entity, oldest first. */

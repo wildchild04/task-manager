@@ -5,4 +5,5 @@ export interface ProjectRepository {
   get(id: string): Project | undefined;
   /** All projects, oldest first. */
   list(): Project[];
+  delete(id: string): void;
 }

@@ -72,3 +72,18 @@ export function projectHomeView(services: AppServices, projectId: string): Proje
     dashboard: dashboard.map((section) => card(section, services.tasks.timeZone)),
   };
 }
+
+/** What deleting a project removes, for its confirmation: its title and how many tasks and library documents go with it. */
+export type ProjectDeletion = { title: string; tasks: number; documents: number };
+
+export function projectDeletion(services: AppServices, projectId: string): ProjectDeletion | undefined {
+  const project = services.projects.get(projectId);
+  if (!project) return undefined;
+  const count = (nodes: readonly { children: readonly unknown[] }[]): number =>
+    nodes.reduce((sum, node) => sum + 1 + count(node.children as { children: readonly unknown[] }[]), 0);
+  return {
+    title: project.title || "Untitled",
+    tasks: services.tasks.list(projectId).length,
+    documents: count(services.library.getLibraryTree(projectId) ?? []),
+  };
+}

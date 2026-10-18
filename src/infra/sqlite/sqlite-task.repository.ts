@@ -94,6 +94,9 @@ export class SqliteTaskRepository implements TaskRepository {
       ),
       getRelation: db.prepare<[string], RelationRow>("SELECT * FROM task_relations WHERE id = ?"),
       deleteRelation: db.prepare("DELETE FROM task_relations WHERE id = ?"),
+      deleteTransitions: db.prepare("DELETE FROM task_transitions WHERE task_id = ?"),
+      deleteOutgoing: db.prepare("DELETE FROM task_relations WHERE from_task_id = ?"),
+      deleteTask: db.prepare("DELETE FROM tasks WHERE id = ?"),
       outgoing: db.prepare<[{ taskId: string; type: string | null }], RelationRow>(
         `SELECT * FROM task_relations WHERE from_task_id = @taskId AND (@type IS NULL OR type = @type)
          ORDER BY created_at, rowid`,
@@ -165,6 +168,14 @@ export class SqliteTaskRepository implements TaskRepository {
   deleteRelation(id: string): void {
     this.s.deleteRelation.run(id);
   }
+
+  delete(id: string): void {
+    // History and relations first: they reference the task.
+    this.s.deleteTransitions.run(id);
+    this.s.deleteOutgoing.run(id);
+    this.s.deleteTask.run(id);
+  }
+
 
   outgoing(taskId: string, type?: RelationType): Relation[] {
     return this.s.outgoing.all({ taskId, type: type ?? null }).map(toRelation);

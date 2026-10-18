@@ -2,11 +2,13 @@ import { plainText } from "../blocks/text";
 import type { ProtectionHook } from "../blocks/validate";
 import type { UnitOfWork } from "../unit-of-work";
 import type { Project, ProjectSummary } from "./types";
+import { COMMENT_OWNER_KIND } from "../comments/types";
+import { TASK_OWNER_KIND } from "../tasks/types";
 import { PROJECT_OWNER_KIND } from "./types";
 
 export class ProjectError extends Error {
   constructor(
-    readonly code: "duplicate_id" | "validation",
+    readonly code: "duplicate_id" | "validation" | "not_found",
     message: string,
   ) {
     super(message);
@@ -49,6 +51,37 @@ export class ProjectService {
       projects.insert(project);
     });
     return this.summarize(project);
+  }
+
+  /**
+   * Deletes the project and everything it holds, in one unit of work: each
+   * task's comments, body page, history and relations from it, then the home
+   * page and the library (with every page in it), then the project. Pointers
+   * from elsewhere (references, mentions) are kept and resolve as missing.
+   */
+  delete(id: string): void {
+    this.uow.run((repos) => {
+      const project = repos.projects.get(id);
+      if (!project) throw new ProjectError("not_found", `Project ${id} does not exist`);
+      // The owning domains' protection stops ordinary edits from removing these roots; this removes them on purpose.
+      const bypass = { bypassProtectionFor: [PROJECT_OWNER_KIND, TASK_OWNER_KIND, COMMENT_OWNER_KIND] };
+      for (const task of repos.tasks.list(id)) {
+        for (const comment of repos.comments.listByTask(task.id)) {
+          repos.blocks.apply([{ op: "delete", id: comment.bodyBlockId }], bypass);
+          repos.comments.delete(comment.id);
+        }
+        repos.blocks.apply([{ op: "delete", id: task.bodyPageId }], bypass);
+        repos.tasks.delete(task.id);
+      }
+      repos.blocks.apply(
+        [
+          { op: "delete", id: project.homePageId },
+          { op: "delete", id: project.libraryRootId },
+        ],
+        bypass,
+      );
+      repos.projects.delete(id);
+    });
   }
 
   get(id: string): ProjectSummary | undefined {

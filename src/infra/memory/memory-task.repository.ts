@@ -63,6 +63,13 @@ export class MemoryTaskRepository implements TaskRepository {
     this.state = { ...this.state, relations };
   }
 
+  delete(id: string): void {
+    const tasks = new Map(this.state.tasks);
+    tasks.delete(id);
+    const relations = new Map([...this.state.relations].filter(([, relation]) => relation.fromTaskId !== id));
+    this.state = { tasks, transitions: this.state.transitions.filter((record) => record.taskId !== id), relations };
+  }
+
   outgoing(taskId: string, type?: RelationType): Relation[] {
     return [...this.state.relations.values()].filter(
       (r) => r.fromTaskId === taskId && (type === undefined || r.type === type),

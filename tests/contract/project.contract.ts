@@ -94,6 +94,44 @@ export function projectContract(name: string, factory: ServicesFactory) {
         expect(services.blocks.listRootPages()).toEqual([]);
       });
 
+      it("deletes a project with its tasks, comments, history, home page and library", () => {
+        services.projects.create({ id: "A", title: "Garden" });
+        services.blocks.apply([doc("A", "doc", "Plan")]);
+        services.tasks.create({ id: "W", projectId: "A", kind: "work", title: "Dig" });
+        services.tasks.create({ id: "E", projectId: "A", kind: "exploration", title: "Idea" });
+        services.tasks.addReference("W", { kind: "task", id: "E" });
+        services.tasks.transition("W", "start");
+        services.comments.add({ id: "c", taskId: "W", blocks: [{ id: "cp", type: "paragraph", content: text("Hi") }] });
+        const project = services.projects.get("A")!;
+        const bodies = ["W", "E"].map((id) => services.tasks.get(id)!.bodyPageId);
+
+        services.projects.delete("A");
+
+        expect(services.projects.get("A")).toBeUndefined();
+        expect(services.projects.list().map((p) => p.id)).not.toContain("A");
+        expect(services.tasks.get("W")).toBeUndefined();
+        expect(services.tasks.get("E")).toBeUndefined();
+        expect(services.tasks.history("W")).toEqual([]);
+        expect(services.tasks.relations("W")).toEqual([]);
+        expect(services.comments.get("c")).toBeUndefined();
+        for (const id of [project.homePageId, project.libraryRootId, "doc", "cp", ...bodies]) expect(services.blocks.getBlock(id)).toBeUndefined();
+      });
+
+      it("keeps references from other projects, resolving as missing", () => {
+        services.projects.create({ id: "A", title: "Garden" });
+        services.projects.create({ id: "B", title: "Kitchen" });
+        services.tasks.create({ id: "WA", projectId: "A", kind: "work", title: "Dig" });
+        services.tasks.create({ id: "WB", projectId: "B", kind: "work", title: "Cook" });
+        services.tasks.addReference("WB", { kind: "task", id: "WA" });
+        services.projects.delete("A");
+        expect(services.tasks.get("WB")).toBeDefined();
+        expect(services.tasks.relations("WB", "references")[0]!.target).toEqual({ status: "missing", kind: "task", id: "WA" });
+      });
+
+      it("refuses deleting an unknown project", () => {
+        expect(catchError(() => services.projects.delete("nope"))).toMatchObject({ code: "not_found" });
+      });
+
       it("lists projects oldest first with their titles", () => {
         services.projects.create({ id: "A", title: "First" });
         services.projects.create({ id: "B", title: "Second" });
