@@ -8,6 +8,7 @@ import { choreAttributes, isRecurring, urgencySchema } from "~/domain/chores/sch
 import type { TaskKind, TaskSummary } from "~/domain/tasks/types";
 
 import { type ActionResult, domainError, formValues, invalid } from "./forms.server";
+import { scheduleFromForm } from "./task-lists.server";
 import { paragraphsFromText } from "./text.server";
 
 /** How the task page asks for a transition's input. */
@@ -122,6 +123,19 @@ function isEmptyComment(blocks: readonly CommentBlockInput[]): boolean {
   );
 }
 
+/** Changes a to-do chore's configured schedule (or clears it), recomputing its due time. */
+function setSchedule(services: AppServices, task: TaskSummary, values: Record<string, string>): ActionResult {
+  if (task.kind !== "chore") return invalid(values, {}, "Only chores have a schedule");
+  const { schedule, errors } = scheduleFromForm(values);
+  if (Object.keys(errors).length > 0) return invalid(values, errors);
+  try {
+    services.chores.setSchedule(task.id, schedule ?? null);
+    return success(task.id);
+  } catch (error) {
+    return domainError(error, values, null);
+  }
+}
+
 function addComment(services: AppServices, task: TaskSummary, values: Record<string, string>): ActionResult {
   let raw: unknown;
   try {
@@ -216,6 +230,7 @@ function startUpdate(services: AppServices, task: TaskSummary, values: Record<st
 const HANDLERS = {
   transition: applyTransition,
   urgency: setUrgency,
+  schedule: setSchedule,
   "comment-add": addComment,
   "comment-delete": deleteComment,
   "reference-add": addReference,

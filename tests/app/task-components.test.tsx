@@ -48,18 +48,8 @@ describe("TransitionBar", () => {
     expect(html).not.toContain("Start update…");
   });
 
-  it("offers the urgency switch and starting an update when they apply", () => {
-    const html = render(() => (
-      <TransitionBar
-        view={{
-          ...base,
-          canStartUpdate: true,
-          chore: { urgent: false, urgency: "normal", urgencyAction: { urgency: "urgent", label: "Mark urgent" }, follower: { offered: true, default: true } },
-        }}
-      />
-    ));
-    expect(html).toMatch(/name="urgency" value="urgent"/);
-    expect(html).toContain("Mark urgent");
+  it("offers starting an update when the work is done", () => {
+    const html = render(() => <TransitionBar view={{ ...base, canStartUpdate: true }} />);
     expect(html).toContain("Start update…");
   });
 });

@@ -168,12 +168,36 @@ describe("task screen", () => {
 
     it("marks one occurrence urgent, keeping the configuration", () => {
       create("C", "chore", "Water plants", weekly);
-      expect(view("C").chore!.urgencyAction).toEqual({ urgency: "urgent", label: "Mark urgent" });
+      expect(view("C").chore).toMatchObject({ urgency: "normal", editable: true });
       post("C", { intent: "urgency", urgency: "urgent" });
-      expect(view("C").chore).toMatchObject({ urgent: true, urgencyAction: { urgency: "normal", label: "Mark normal" } });
+      expect(view("C").chore).toMatchObject({ urgent: true, urgency: "urgent" });
       transition("C", "complete", { next: "yes" });
       expect(series()[1]!.attributes.urgency).toBe("normal");
-      expect(view("C").chore!.urgencyAction).toBeUndefined();
+      expect(view("C").chore!.editable).toBe(false);
+    });
+
+    it("gives the schedule as form values, and changes it from the schedule form", () => {
+      create("C", "chore", "Water plants");
+      expect(view("C").chore!.scheduleValues).toEqual({ scheduleType: "none" });
+      expect(post("C", { intent: "schedule", scheduleType: "frequency", every: "weekly", weekday: "1", time: "09:00" })).toMatchObject({ ok: true });
+      expect(view("C").chore).toMatchObject({
+        schedule: "Every Monday at 09:00",
+        due: "19 Oct 2026, 09:00",
+        scheduleValues: { scheduleType: "frequency", every: "weekly", weekday: "1", time: "09:00" },
+      });
+      transition("C", "complete", { next: "yes" });
+      expect(series()[1]!.attributes.dueAt).toBe("2026-10-26T09:00:00.000Z");
+    });
+
+    it("rejects an invalid schedule, and clears it", () => {
+      create("C", "chore", "Water plants", weekly);
+      expect(post("C", { intent: "schedule", scheduleType: "time", time: "25:00" })).toMatchObject({
+        ok: false,
+        fieldErrors: { time: "Choose a time" },
+      });
+      expect(view("C").chore!.schedule).toBe("Every Monday at 09:00");
+      post("C", { intent: "schedule", scheduleType: "none" });
+      expect(view("C").chore).not.toHaveProperty("schedule");
     });
   });
 

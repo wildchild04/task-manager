@@ -192,3 +192,8 @@ body {
 .comment-composer:focus-within {
   border-color: var(--ds-primary);
 }
+
+/* A chore's urgency and schedule end the task's action row. */
+.chore-controls {
+  margin-left: auto;
+}

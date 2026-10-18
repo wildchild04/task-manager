@@ -5,8 +5,8 @@ A task page stacks everything: description, comments, lineage, references, menti
 ## What Changes
 
 - **Tabs**: the task page keeps its header (title, chips, actions) and shows its sections as tabs: Description first, then Comments, Lineage, References (with "Mentioned in"), History, depending on the kind. The open tab is in the URL; comment links open the Comments tab.
-- **Chore header**: urgency becomes a dropdown (Normal / Urgent) and the schedule becomes a chip ("Every Monday at 09:00 · due 20 Oct 2026, 09:00", or "No schedule"); the Schedule card and the "Mark urgent / Mark normal" button go away.
-- **Editing a chore's schedule**: the chip opens a dialog with every schedule option, prefilled; saving changes the configured schedule and recomputes the due time.
+- **Chore header**: urgency becomes a dropdown (Normal / Urgent) and the schedule becomes a button at the end of the action row, with urgency ("Every Monday at 09:00 · due 20 Oct 2026, 09:00", or "No schedule"); the Schedule card and the "Mark urgent / Mark normal" button go away.
+- **Editing a chore's schedule**: the button opens a dialog with every schedule option, prefilled; saving changes the configured schedule and recomputes the due time.
 
 ## Capabilities
 

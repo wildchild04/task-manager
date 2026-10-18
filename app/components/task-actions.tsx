@@ -147,7 +147,8 @@ type OpenDialog = "promote" | "return" | "complete-chore" | "cancel-chore" | "st
  * starting an exploration or update from it. Transitions without input post
  * directly; the others open a dialog.
  */
-export function TransitionBar({ view }: { view: TaskOverviewView }) {
+/** The task's actions; `extra` (a chore's urgency and schedule) ends the row. */
+export function TransitionBar({ view, extra }: { view: TaskOverviewView; extra?: React.ReactNode }) {
   const fetcher = useFetcher<ActionResult>();
   const [dialog, setDialog] = useState<OpenDialog>(null);
   const close = () => setDialog(null);
@@ -179,20 +180,6 @@ export function TransitionBar({ view }: { view: TaskOverviewView }) {
     <Stack spacing={1}>
       <Stack direction="row" spacing={1} useFlexGap wrap="wrap" alignItems="center">
         {view.transitions.map(button)}
-        {view.chore?.urgencyAction && (
-          <fetcher.Form method="post">
-            <Hidden name="intent" value="urgency" />
-            <Hidden name="urgency" value={view.chore.urgencyAction.urgency} />
-            <Button
-              type="submit"
-              variant="outlined"
-              color={view.chore.urgencyAction.urgency === "urgent" ? "error" : "primary"}
-              disabled={busy}
-            >
-              {view.chore.urgencyAction.label}
-            </Button>
-          </fetcher.Form>
-        )}
         {view.canStartUpdate && (
           <Button variant="text" onClick={() => setDialog("start-update")}>
             Start update…
@@ -201,6 +188,7 @@ export function TransitionBar({ view }: { view: TaskOverviewView }) {
         <Button variant="text" onClick={() => setDialog("start-exploration")}>
           Start exploration…
         </Button>
+        {extra}
       </Stack>
       {error && (
         <Alert severity="error" role="alert">

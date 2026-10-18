@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Chore urgency from the task page
-A chore in `todo` SHALL show its urgency as a dropdown (Normal, Urgent) in its header; choosing a value SHALL save it at once. Changing it SHALL change only this occurrence's urgency; the base urgency and schedule SHALL stay as configured. A chore that is done or cancelled SHALL show its urgency without the dropdown.
+A chore in `todo` SHALL show its urgency as a dropdown (Normal, Urgent) at the end of its action row; choosing a value SHALL save it at once. Changing it SHALL change only this occurrence's urgency; the base urgency and schedule SHALL stay as configured. A chore that is done or cancelled SHALL show its urgency without the dropdown.
 
 #### Scenario: Mark urgent
 - **WHEN** "Urgent" is chosen in the urgency dropdown of a normal weekly chore
@@ -33,11 +33,11 @@ Comments and References tabs SHALL show how many items they hold (References cou
 - **THEN** its tabs are Description, Comments, References and History, and its schedule is in the header
 
 ### Requirement: Editing a chore's schedule
-Clicking a chore's schedule chip, while the chore is in to do, SHALL open a dialog with every schedule option (no schedule, at a time, on a date, daily/weekly/monthly at a time, every X, timer), prefilled with the current schedule. Saving SHALL change the chore's configured schedule (carried to its following chores) and recompute its due time from now; invalid input SHALL be shown next to its field without losing what was entered.
+Clicking a chore's schedule button, while the chore is in to do, SHALL open a dialog with every schedule option (no schedule, at a time, on a date, daily/weekly/monthly at a time, every X, timer), prefilled with the current schedule. Saving SHALL change the chore's configured schedule (carried to its following chores) and recompute its due time from now; invalid input SHALL be shown next to its field without losing what was entered.
 
 #### Scenario: Change to weekly
-- **WHEN** a chore without a schedule is given "weekly on Monday at 09:00" from its schedule chip
-- **THEN** the chip shows "Every Monday at 09:00" with the next Monday's due time, and completing the chore creates a following chore due the Monday after
+- **WHEN** a chore without a schedule is given "weekly on Monday at 09:00" from its schedule button
+- **THEN** the button shows "Every Monday at 09:00" with the next Monday's due time, and completing the chore creates a following chore due the Monday after
 
 #### Scenario: Invalid time
 - **WHEN** the schedule dialog is saved with time "25:00"

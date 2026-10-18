@@ -1,5 +1,5 @@
 import type { AppServices } from "~/composition";
-import { choreAttributes, isRecurring } from "~/domain/chores/schedule";
+import { choreAttributes, isRecurring, type Schedule } from "~/domain/chores/schedule";
 import { kinds } from "~/domain/tasks/kinds";
 import type { Actor, LineageNode, TaskSummary } from "~/domain/tasks/types";
 
@@ -45,8 +45,10 @@ export type TaskOverviewView = {
     urgency: string;
     schedule?: string;
     due?: string;
-    /** The urgency the "Mark …" button sets, offered while the chore is to do. */
-    urgencyAction?: { urgency: "urgent" | "normal"; label: string };
+    /** Whether urgency and schedule can be changed (the chore is to do). */
+    editable: boolean;
+    /** The configured schedule as the schedule form's values, to prefill it. */
+    scheduleValues: Record<string, string>;
     /** Whether completing may create a following chore, and the default answer. */
     follower: { offered: boolean; default: boolean };
   };
@@ -90,6 +92,14 @@ function lineageView(node: LineageNode, currentId: string): LineageView {
   };
 }
 
+/** A schedule as the chore form's field values (the inverse of `scheduleFromForm`). */
+export function scheduleValues(schedule: Schedule | undefined): Record<string, string> {
+  if (!schedule) return { scheduleType: "none" };
+  const values: Record<string, string> = { scheduleType: schedule.type };
+  for (const [key, value] of Object.entries(schedule)) if (key !== "type") values[key] = String(value);
+  return values;
+}
+
 function choreView(services: AppServices, task: TaskSummary): TaskOverviewView["chore"] {
   const timeZone = services.tasks.timeZone;
   const { urgency, schedule, dueAt } = choreAttributes(task);
@@ -99,12 +109,8 @@ function choreView(services: AppServices, task: TaskSummary): TaskOverviewView["
     urgency,
     ...(schedule ? { schedule: describeSchedule(schedule) } : {}),
     ...(dueAt ? { due: formatDateTime(dueAt, timeZone) } : {}),
-    ...(todo
-      ? {
-          urgencyAction:
-            urgency === "urgent" ? { urgency: "normal", label: "Mark normal" } : { urgency: "urgent", label: "Mark urgent" },
-        }
-      : {}),
+    editable: todo,
+    scheduleValues: scheduleValues(schedule),
     // A chore due on a specific date can't repeat with the same schedule.
     follower: { offered: schedule?.type !== "date", default: isRecurring(schedule) },
   };

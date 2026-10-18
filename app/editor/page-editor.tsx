@@ -346,6 +346,7 @@ export function PageEditor({
   statusSlot,
   draft,
   emptyText = "Empty page. Click to start writing.",
+  hideBody = false,
 }: {
   page: EditablePage;
   titleVariant?: "h1" | "h2";
@@ -357,6 +358,8 @@ export function PageEditor({
   draft?: { onChange: (blocks: CommentBlockInput[]) => void; onSubmit: () => void };
   /** What an empty page says. */
   emptyText?: string;
+  /** Hides the blocks (another tab is open) without unmounting, so unsaved edits and undo history survive. */
+  hideBody?: boolean;
 }) {
   const draftRef = useRef(draft);
   draftRef.current = draft;
@@ -942,7 +945,7 @@ export function PageEditor({
           </Typography>
         )}
         {afterTitle}
-        <div className="editor-body">
+        <div className="editor-body" hidden={hideBody}>
           {root.children.length === 0 ? (
             <button
               type="button"
