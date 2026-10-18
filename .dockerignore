@@ -1,0 +1,13 @@
+.react-router
+build
+data
+node_modules
+*.sqlite
+*.sqlite-*
+.env
+.env.*
+.git
+.claude
+openspec
+tests
+README.md

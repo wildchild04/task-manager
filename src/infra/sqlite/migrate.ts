@@ -1,10 +1,16 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type Database from "better-sqlite3";
 
-export const defaultMigrationsDir = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
+/**
+ * `db/migrations`: next to the source when run from it (dev, tests, scripts),
+ * else under the working directory (the built server, which `npm start` and
+ * the Docker image run from the app's root).
+ */
+const fromSource = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
+export const defaultMigrationsDir = existsSync(fromSource) ? fromSource : resolve("db/migrations");
 
 /**
  * Applies numbered `NNN_name.sql` migrations that have not run yet, in order,
