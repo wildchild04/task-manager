@@ -42,30 +42,19 @@ export const TodoToggleContext = createContext<((id: string, checked: boolean) =
 /** Approves or rejects a suggestion; where it's missing (before the editor takes over), the buttons are disabled. */
 export type SuggestionDecide = (intent: "approve" | "reject", id: string) => void;
 
-/**
- * What suggestion boxes need from the page around them: the targets to mark,
- * and how to decide (with `busy` while a decision is on its way).
- */
+/** What suggestion boxes need from the page around them: how to decide (with `busy` while a decision is on its way). */
 export const SuggestionsContext = createContext<{
-  marked: ReadonlySet<string>;
   /** The suggestions by block ID, for the editor, whose blocks don't carry their views. */
   byId?: Readonly<Record<string, SuggestionBlockView>>;
   decide?: SuggestionDecide;
   busy?: boolean;
-}>({ marked: new Set() });
-
-/** A block's text, highlighted when a pending suggestion would replace or delete the block. */
-export function MarkedText({ id, children }: { id: string; children: ReactNode }) {
-  const { marked } = useContext(SuggestionsContext);
-  return marked.has(id) ? <span className="suggestion-target">{children}</span> : <>{children}</>;
-}
+}>({});
 
 const SUGGESTION_LABELS = { insert: "Suggests adding", replace: "Suggests replacing", delete: "Suggests deleting" } as const;
 
 /** An agent's suggestion: who and what, its note, what it would remove (struck through), what it proposes, and the decision. */
 export function SuggestionBox({ suggestion }: { suggestion: SuggestionBlockView }) {
-  const context = useContext(SuggestionsContext);
-  const { decide, busy } = context;
+  const { decide, busy } = useContext(SuggestionsContext);
   const { id, author, action, note, outdated, removed, blocks } = suggestion;
   const label = SUGGESTION_LABELS[action];
   return (
@@ -106,12 +95,9 @@ export function SuggestionBox({ suggestion }: { suggestion: SuggestionBlockView 
           <Typography variant="caption" color="text.secondary">
             Removed
           </Typography>
-          {/* The copy isn't the target itself, so it isn't marked as one. */}
-          <SuggestionsContext.Provider value={{ ...context, marked: new Set() }}>
-            <div className="suggestion-removed-content">
-              <Blocks blocks={[removed]} />
-            </div>
-          </SuggestionsContext.Provider>
+          <div className="suggestion-removed-content">
+            <Blocks blocks={[removed]} />
+          </div>
         </div>
       )}
       {blocks.length > 0 && (
@@ -132,11 +118,7 @@ export function SuggestionBox({ suggestion }: { suggestion: SuggestionBlockView 
  * takes over, and toggles and todos behave the same way.
  */
 function ContentBlockView({ block }: { block: ContentBlock }) {
-  const text = (
-    <MarkedText id={block.id}>
-      <RichText value={block.content} />
-    </MarkedText>
-  );
+  const text = <RichText value={block.content} />;
   const children = <Children blocks={block.children} />;
   switch (block.type) {
     case "paragraph":

@@ -75,11 +75,11 @@ A page with more than one pending suggestion SHALL offer **Approve all** and **R
 - **THEN** two are approved, the outdated one stays pending, and the page reports "2 approved, 1 outdated"
 
 ### Requirement: Reviewing suggestions on a page
-On every page and task description that shows content, a suggestion SHALL be shown in place as one enclosed, highlighted (yellow) region showing its author, its action ("Suggests adding", "Suggests replacing", "Suggests deleting"), its note, "Outdated" when it is, and **Approve** (not shown when outdated) and **Reject**. Inside the region, the proposed blocks SHALL be shown as an addition (labelled "Proposed", tinted green) and, for a replace or delete, a struck-through copy of the target's current content as a deletion (labelled "Removed", tinted red), so old and new are told apart by label as well as colour; the target SHALL be marked at its own position. The page SHALL show how many suggestions are pending.
+On every page and task description that shows content, a suggestion SHALL be shown in place as one enclosed, highlighted (yellow) region showing its author, its action ("Suggests adding", "Suggests replacing", "Suggests deleting"), its note, "Outdated" when it is, and **Approve** (not shown when outdated) and **Reject**. Inside the region, the proposed blocks SHALL be shown as an addition (labelled "Proposed", tinted green) and, for a replace or delete, a struck-through copy of the target's current content as a deletion (labelled "Removed", tinted red), so old and new are told apart by label as well as colour. The target itself SHALL look as it always does: the region already shows what would change. The page SHALL show how many suggestions are pending.
 
 #### Scenario: A replace on the page
 - **WHEN** a page with a pending replace suggestion from "builder" is opened
-- **THEN** the target paragraph is marked, and a yellow region after it shows "builder", "Suggests replacing", the old text struck through under "Removed" in red, the new blocks under "Proposed" in green, and Approve and Reject
+- **THEN** the target paragraph looks as usual, and a yellow region after it shows "builder", "Suggests replacing", the old text struck through under "Removed" in red, the new blocks under "Proposed" in green, and Approve and Reject
 
 #### Scenario: Approve from the page
 - **WHEN** Approve is chosen on an insert suggestion

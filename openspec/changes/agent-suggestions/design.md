@@ -35,7 +35,7 @@ Block props: `{ action: "insert" | "replace" | "delete", targetId?: string }` (`
 - **replace** / **delete**: the suggestion is placed right after its target, in the same parent. Approving puts the replacement blocks at the *target's* position (wherever it is then) and removes the target; the target's children move under the first replacement block (a replace is of one block, not its subtree). Delete removes the target and its subtree.
 - Targets and positions must be in the page's own content: not in a sub-page's content, not inside a suggestion, not a sub-page or a suggestion themselves.
 
-Rendering: a pending replace or delete shows a struck-through copy of the target's current content inside the box ("Replaces" / "Deletes"), and the target itself carries a yellow marker at its position. The box stays where it was placed even if the target moves later.
+Rendering: a pending replace or delete shows a struck-through copy of the target's current content inside the box (under "Removed"). The target itself isn't marked: an early version tinted and underlined it, which read as a stray line and suggested the block was already changing; the box alone says what would change. The box stays where it was placed even if the target moves later.
 
 ### 3. Outdated is computed, not stored
 

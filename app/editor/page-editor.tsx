@@ -541,7 +541,6 @@ export function PageEditor({
     return {
       views,
       byId: page.suggestions,
-      marked: new Set(views.flatMap((s) => (s.targetId ? [s.targetId] : []))),
       decide: (intent: "approve" | "reject", id: string) => void sendDecision({ intent, id }),
     };
   }, [page.suggestions, sendDecision]);

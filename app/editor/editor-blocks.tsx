@@ -23,14 +23,13 @@ export const EditableText = memo(function EditableText({
 }) {
   const ref = useRef<HTMLSpanElement>(null);
   const mentions = useContext(MentionTargetsContext);
-  const marked = useContext(SuggestionsContext).marked.has(block.id);
   useLayoutEffect(() => {
     if (ref.current) renderRichText(ref.current, block.content, mentions);
   }, [block.content, mentions]);
   return (
     <span
       ref={ref}
-      className={marked ? "editable suggestion-target" : "editable"}
+      className="editable"
       contentEditable
       suppressContentEditableWarning
       role="textbox"
