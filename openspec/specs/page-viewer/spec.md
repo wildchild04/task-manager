@@ -17,6 +17,7 @@ TBD - created by archiving change app-scaffold. Update Purpose after archive.
 | `divider` | divider |
 | `page` (nested) | link to the sub-page |
 | `reference` | the resolved target (see below) |
+| `suggestion` | the highlighted review region of the agent-suggestions capability, with its proposed blocks rendered inside it |
 
 Children of any block SHALL be rendered nested under it.
 
@@ -70,7 +71,7 @@ The viewer SHALL open workspace pages, a project's home page, the project's know
 - **THEN** the document is shown with the breadcrumb P › Knowledge library › Architecture › Persistence, where P links to the project home, "Knowledge library" to the library page and "Architecture" to its page
 
 ### Requirement: Where a page is mentioned
-A page opened at `/pages/:pageId` SHALL list, under its content, the places that mention it inline or reference it with a reference block: each other page (with its title, linking to it) and each task whose description does so (with its title and kind, linking to the task). A place SHALL be listed once, with the number of mentions and references when there is more than one. Mentions and references inside the page itself SHALL NOT be listed, and the section SHALL NOT be shown when nothing points at the page.
+A page opened at `/pages/:pageId` SHALL list, under its content, the places that mention it inline or reference it with a reference block: each other page (with its title, linking to it) and each task whose description does so (with its title and kind, linking to the task). A place SHALL be listed once, with the number of mentions and references when there is more than one. Mentions and references inside the page itself, and those inside pending suggestions, SHALL NOT be listed, and the section SHALL NOT be shown when nothing points at the page.
 
 #### Scenario: Mentioned by a document and a task
 - **WHEN** document "Persistence" mentions "Architecture" twice, and work task "Add login" references it with a reference block
@@ -79,4 +80,8 @@ A page opened at `/pages/:pageId` SHALL list, under its content, the places that
 #### Scenario: Nothing points at the page
 - **WHEN** no other page or task mentions or references a page
 - **THEN** the page shows no "Mentioned in" section
+
+#### Scenario: Mention inside a pending suggestion
+- **WHEN** the only mention of "Architecture" is inside a pending suggestion on "Persistence", and the suggestion is then approved
+- **THEN** "Architecture" shows no "Mentioned in" section before the approval, and lists "Persistence" after it
 

@@ -32,6 +32,9 @@ Each block type SHALL declare, in one place, whether it holds text and what Ente
 | divider | no | — | — | — |
 | sub-page | no (shows its title) | — | — | — |
 | reference | no (shows its target) | — | — | — |
+| suggestion | no (shows the proposed change, see agent-suggestions) | — | — | — |
+
+A suggestion and the blocks inside it SHALL never hold the caret; the caret moves past a suggestion as it does past a divider, Tab SHALL NOT nest a block into a suggestion, and Backspace at the start of the block after a suggestion SHALL move the caret to the end of the previous text block without removing the suggestion.
 
 #### Scenario: Leaving a list
 - **WHEN** Enter is pressed in an empty bulleted list item
@@ -40,6 +43,10 @@ Each block type SHALL declare, in one place, whether it holds text and what Ente
 #### Scenario: Heading continues as a paragraph
 - **WHEN** Enter is pressed at the end of a heading
 - **THEN** a new paragraph follows the heading and holds the caret
+
+#### Scenario: Backspace after a suggestion
+- **WHEN** Backspace is pressed at the start of a paragraph that follows a suggestion
+- **THEN** the suggestion is still there, and the caret is at the end of the text block before it
 
 ### Requirement: Editing text and marks
 Typing, deleting and replacing selected text SHALL change the block's rich text at the caret, keeping the marks of the text around it. Cmd/Ctrl+B, I, U, Shift+S and E SHALL toggle bold, italic, underline, strikethrough and inline code on the selected text; Cmd/Ctrl+K SHALL ask for a URL (focused, saved with Enter) and add a link to the selected text (with the caret on a link and nothing selected, it SHALL edit that whole link, prefilled with its URL), or remove it when the URL is left empty; a URL without a scheme SHALL get `https://`. Typing `@` in that field SHALL list the workspace's pages, library documents and tasks matching the text after it, with their place, and choosing one SHALL link the text to it (`/pages/:pageId` or `/tasks/:taskId`). Editing a link to a page or task SHALL show it as `@` and its title, with it highlighted, never its ID. Clicking a link in the editor SHALL open an app page in the same tab and any other URL in a new tab. Resting the pointer on a link SHALL show a card under it with where the link goes (the URL; the title and place for a page or task of the app; or that it no longer exists) and the actions Open (as clicking the link), Edit (the link dialog for the whole link) and Remove (removes the link and keeps its text, as one undo step). The card SHALL stay open while the pointer is over the link or the card, close shortly after it leaves both, and close on Escape, an outside click, or typing; it SHALL never take focus from the text. Text typed at the end of a marked span SHALL continue with the same marks, except links.
@@ -180,7 +187,7 @@ Every edit SHALL show at once and be saved in the background as a batch of block
 - **THEN** the page asks whether to leave and lose the edit, and stays if asked to
 
 ### Requirement: Edits stay inside the edited page
-The server SHALL accept an edit batch only if every block it touches is in the edited page's own content, outside any sub-page's content; it SHALL reject a batch that deletes a sub-page, deletes or changes the type of the page block itself, or inserts a page or comment block. A rejected batch SHALL change nothing.
+The server SHALL accept an edit batch only if every block it touches is in the edited page's own content, outside any sub-page's content; it SHALL reject a batch that deletes a sub-page, deletes or changes the type of the page block itself, or inserts a page, comment or suggestion block. It SHALL also reject a batch that inserts into, updates or deletes a suggestion, that updates, moves or deletes a block inside one, or that deletes a block containing a suggestion; suggestions change only by being approved or rejected. Moving a suggestion as a whole (its proposed blocks go with it), moving a block that contains one, and editing or deleting a suggestion's target, SHALL be allowed. A rejected batch SHALL change nothing.
 
 #### Scenario: Batch outside the page
 - **WHEN** an edit batch for page A updates a block of page B
@@ -189,6 +196,18 @@ The server SHALL accept an edit batch only if every block it touches is in the e
 #### Scenario: Deleting a sub-page through an edit
 - **WHEN** an edit batch deletes a sub-page block
 - **THEN** the server rejects it and the sub-page still exists
+
+#### Scenario: Changing a suggestion through an edit
+- **WHEN** an edit batch updates the content of a block inside a suggestion
+- **THEN** the server rejects it and the suggestion is unchanged
+
+#### Scenario: Outdenting past a suggestion
+- **WHEN** Shift+Tab is pressed in a nested list item whose following sibling is a suggestion
+- **THEN** the item moves out and the suggestion, unchanged, becomes its child
+
+#### Scenario: Editing a suggestion's target
+- **WHEN** an edit batch changes the text of a block that a pending replace suggestion targets
+- **THEN** the edit is saved and the suggestion becomes outdated
 
 ### Requirement: Mentioning pages with @
 Typing `@` in a text block other than the title, at its start or after a space, SHALL open a menu at the caret listing workspace pages, library documents and tasks whose title matches the text typed after `@`, each with its place (its project and parent page; for a task, "Task", its kind and its project) to tell same-named entries apart. It SHALL page five at a time and use the slash menu's keys (↑ ↓ to move, Tab/Shift+Tab or Page Down/Up to turn the page, Enter to choose, Escape to close keeping the text); clicking a page SHALL choose it. Choosing a page or task SHALL replace the `@` and the typed text with a mention of it followed by a space, as one undo step. The menu SHALL close when the caret leaves the typed text or the `@` is deleted, and SHALL say when no page matches.

@@ -126,3 +126,14 @@ The tabs SHALL be Description (the home page content, editable as specified by t
 - **WHEN** the delete button of project "Garden" (with 3 tasks and 1 document) is pressed and confirmed
 - **THEN** the dialog said that 3 tasks and 1 document would be deleted, the browser is on the home route, and "Garden" is no longer listed
 
+### Requirement: Suggestions waiting for review
+The home dashboard SHALL show a "Waiting for review" section listing each page and task with pending suggestions: its title and place, linking to it, the number of pending suggestions, and the agents that made them, the place with the oldest pending suggestion first. The section SHALL NOT be shown when no suggestion is pending.
+
+#### Scenario: Two places waiting
+- **WHEN** "builder" has two pending suggestions on the exploration "Block editor v1" and "planner" one on the page "Roadmap", made later
+- **THEN** the home dashboard lists "Block editor v1" (2, builder) first and "Roadmap" (1, planner) second, each linking to it
+
+#### Scenario: Nothing pending
+- **WHEN** every suggestion has been approved or rejected
+- **THEN** the home dashboard shows no "Waiting for review" section
+
