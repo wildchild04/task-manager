@@ -110,6 +110,33 @@ describe("home dashboard", () => {
     ]);
   });
 
+  it("lists pages and tasks with suggestions waiting, the oldest first, with counts and agents", () => {
+    const explore = task("E", "A", "exploration", "Block editor v1");
+    services.blocks.apply([
+      { op: "insert", block: { id: "road", type: "page", content: [{ text: "Roadmap" }] }, parentId: null },
+    ]);
+    const para = (id: string) => [{ id, type: "paragraph" as const, content: [{ text: id }] }];
+    const suggest = (pageId: string, id: string, author: string) =>
+      services.suggestions.suggest({ pageId, action: "insert", blocks: para(id), author });
+    expect(homeView(services, clock).review).toEqual([]);
+    suggest(explore.bodyPageId, "s1", "builder");
+    clock = "2026-10-14T08:01:00.000Z";
+    suggest("road", "s2", "planner");
+    clock = "2026-10-14T08:02:00.000Z";
+    suggest(explore.bodyPageId, "s3", "builder");
+    expect(homeView(services, clock).review).toEqual([
+      {
+        id: explore.bodyPageId,
+        title: "Block editor v1",
+        place: "Task · exploration · Garden",
+        href: "/tasks/E",
+        count: 2,
+        agents: ["builder"],
+      },
+      { id: "road", title: "Roadmap", place: "Pages", href: "/pages/road", count: 1, agents: ["planner"] },
+    ]);
+  });
+
   it("includes the workspace page tree", () => {
     services.blocks.apply([{ op: "insert", block: { id: "wp", type: "page", content: [{ text: "Welcome" }] }, parentId: null }]);
     expect(homeView(services, clock).pages).toEqual([{ id: "wp", title: "Welcome", children: [] }]);

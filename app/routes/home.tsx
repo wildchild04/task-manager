@@ -16,7 +16,7 @@ import { Link as RouterLink, useNavigate } from "react-router";
 import { NewPageDialog } from "../components/new-page-dialog";
 import { NewProjectDialog } from "../components/new-project-dialog";
 import { PageTree } from "../components/page-tree";
-import { type AttentionItem, homeView, type ProjectCard, type RecentItem } from "../lib/home.server";
+import { type AttentionItem, homeView, type ProjectCard, type RecentItem, type ReviewItem } from "../lib/home.server";
 import { services } from "../lib/services.server";
 import type { Route } from "./+types/home";
 
@@ -64,6 +64,24 @@ function NeedsAttention({ items, more }: { items: AttentionItem[]; more: number 
 }
 
 const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** Pages and tasks where agents' suggestions wait for a decision; shown only when there are some. */
+function WaitingForReview({ items }: { items: ReviewItem[] }) {
+  if (items.length === 0) return null;
+  return (
+    <Card variant="outlined" title="Waiting for review">
+      <List
+        dense
+        items={items.map((item) => ({
+          id: item.id,
+          primary: titleLink(item.title, item.href),
+          secondary: `${item.place} · ${item.agents.join(", ")}`,
+          action: <Chip label={count(item.count, "suggestion")} color="warning" size="small" variant="outlined" />,
+        }))}
+      />
+    </Card>
+  );
+}
 
 function Projects({ projects, onNew }: { projects: ProjectCard[]; onNew: () => void }) {
   const navigate = useNavigate();
@@ -125,7 +143,7 @@ function RecentlyEdited({ items }: { items: RecentItem[] }) {
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { attention, projects, pages, recent } = loaderData;
+  const { review, attention, projects, pages, recent } = loaderData;
   const [creating, setCreating] = useState<"page" | "project" | null>(null);
 
   return (
@@ -142,6 +160,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
       <ResponsivePanelGrid columns={{ xs: 1, md: 2 }}>
         <Stack spacing={3}>
+          <WaitingForReview items={review} />
           <NeedsAttention items={attention.items} more={attention.more} />
           <Stack spacing={1}>
             <Typography variant="h5">Projects</Typography>

@@ -21,7 +21,11 @@ export type ProjectCard = { id: string; title: string; activeWork: number; openI
 
 export type RecentItem = { kind: "page" | "task"; id: string; title: string; place: string; href: string; edited: string };
 
+/** A page or task with agents' suggestions waiting for review. */
+export type ReviewItem = { id: string; title: string; place: string; href: string; count: number; agents: string[] };
+
 export type HomeView = {
+  review: ReviewItem[];
   attention: { items: AttentionItem[]; more: number };
   projects: ProjectCard[];
   pages: LibraryNode[];
@@ -140,8 +144,31 @@ function recent(services: AppServices, now: string): RecentItem[] {
 }
 
 /** The home dashboard: what needs attention across projects, the projects, the workspace pages, and recent edits. */
+/** Pages and tasks with pending suggestions, the one with the oldest first, with how many and from which agents. */
+function review(services: AppServices): ReviewItem[] {
+  const places = new Map([...allPages(services), ...allTasks(services)].map((place) => [place.id, place]));
+  const items = new Map<string, ReviewItem>();
+  for (const suggestion of services.suggestions.listPending()) {
+    const place = places.get(suggestion.pageId);
+    if (!place) continue;
+    const item = items.get(place.id) ?? {
+      id: place.id,
+      title: place.title,
+      place: place.place,
+      href: place.href,
+      count: 0,
+      agents: [],
+    };
+    item.count += 1;
+    if (!item.agents.includes(suggestion.author)) item.agents.push(suggestion.author);
+    items.set(place.id, item);
+  }
+  return [...items.values()];
+}
+
 export function homeView(services: AppServices, now: string = new Date().toISOString()): HomeView {
   return {
+    review: review(services),
     attention: attention(services, now),
     projects: projectCards(services, now),
     pages: workspacePageTree(services),
