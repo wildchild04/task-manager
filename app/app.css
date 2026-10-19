@@ -250,3 +250,10 @@ body {
   gap: 4px 8px;
   margin: 8px 0;
 }
+
+/* A notification: its place on the first line, why on the second. */
+.notification-row {
+  display: flex;
+  flex-direction: column;
+  white-space: normal;
+}

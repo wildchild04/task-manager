@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { homeView, relativeTime } from "../../app/lib/home.server";
+import { homeView, notificationsView, relativeTime } from "../../app/lib/home.server";
 import { type AppServices, createInMemoryServices } from "~/composition";
 
 describe("home dashboard", () => {
@@ -135,6 +135,47 @@ describe("home dashboard", () => {
       },
       { id: "road", title: "Roadmap", place: "Pages", href: "/pages/road", count: 1, agents: ["planner"] },
     ]);
+  });
+
+  describe("notifications", () => {
+    const suggestOn = (pageId: string, id: string, author = "claude") =>
+      services.suggestions.suggest({
+        pageId,
+        action: "insert",
+        blocks: [{ id, type: "paragraph", content: [{ text: id }] }],
+        author,
+      });
+
+    it("lists suggestions waiting, then overdue and urgent chores, then returned work, but not work in progress", () => {
+      services.blocks.apply([
+        { op: "insert", block: { id: "road", type: "page", content: [{ text: "Roadmap" }] }, parentId: null },
+      ]);
+      suggestOn("road", "s1");
+      suggestOn("road", "s2", "builder");
+      task("C", "A", "chore", "Water plants", { schedule: { type: "time", time: "09:00" } }); // due 09:00 today
+      task("R", "B", "work", "Fix oven");
+      services.tasks.transition("R", "start", { actor: builder });
+      services.tasks.transition("R", "return", { actor: builder, input: { reason: "No parts" } });
+      task("P", "B", "work", "Paint");
+      services.tasks.transition("P", "start", { actor: builder });
+
+      clock = "2026-10-14T10:00:00.000Z";
+      expect(notificationsView(services, clock)).toEqual([
+        { id: "road", title: "Roadmap", detail: "2 suggestions · claude, builder", href: "/pages/road" },
+        { id: "C", title: "Water plants", detail: expect.stringMatching(/^Overdue/), href: "/tasks/C" },
+        { id: "R", title: "Fix oven", detail: "Returned by builder", href: "/tasks/R" },
+      ]);
+    });
+
+    it("clears once the suggestion is decided", () => {
+      const explore = task("E", "A", "exploration", "Block editor v1");
+      const { id } = suggestOn(explore.bodyPageId, "s1");
+      expect(notificationsView(services, clock)).toEqual([
+        { id: explore.bodyPageId, title: "Block editor v1", detail: "1 suggestion · claude", href: "/tasks/E" },
+      ]);
+      services.suggestions.approve(id);
+      expect(notificationsView(services, clock)).toEqual([]);
+    });
   });
 
   it("includes the workspace page tree", () => {

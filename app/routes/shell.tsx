@@ -3,6 +3,7 @@ import { type MouseEvent, useEffect, useState } from "react";
 import { Link as RouterLink, Outlet, type ShouldRevalidateFunctionArgs, useLocation, useNavigate } from "react-router";
 
 import { NewPageDialog } from "../components/new-page-dialog";
+import { NotificationBell } from "../components/notification-bell";
 import { NewProjectDialog } from "../components/new-project-dialog";
 import { PageTree } from "../components/page-tree";
 import { services } from "../lib/services.server";
@@ -64,7 +65,7 @@ function Group({
 }
 
 export default function Shell({ loaderData }: Route.ComponentProps) {
-  const { projects, current, pages } = loaderData;
+  const { projects, current, pages, notifications } = loaderData;
   const { mode, setMode } = useThemeMode();
   const navigate = useNavigate();
   const [creatingProject, setCreatingProject] = useState(false);
@@ -139,7 +140,12 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
       title="Workspace"
       navigation={navigation}
       navigationLabel="Workspace navigation"
-      actions={<ThemeToggle mode={mode} onModeChange={setMode} ariaLabel="Toggle dark mode" />}
+      actions={
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <NotificationBell items={notifications} />
+          <ThemeToggle mode={mode} onModeChange={setMode} ariaLabel="Toggle dark mode" />
+        </Stack>
+      }
     >
       {/* Rendered once, outside the navigation (which is drawn twice: sidebar and mobile drawer). */}
       <NewProjectDialog open={creatingProject} onClose={() => setCreatingProject(false)} />

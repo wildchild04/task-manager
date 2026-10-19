@@ -65,7 +65,8 @@ function lastAgent(services: AppServices, task: TaskSummary, name: string): stri
   return record?.actor.kind === "agent" ? record.actor.name : undefined;
 }
 
-function attention(services: AppServices, now: string): HomeView["attention"] {
+/** What needs or involves the human, by kind: urgent and overdue chores (most pressing first), returned work, work in progress. */
+function attentionGroups(services: AppServices, now: string) {
   const timeZone = services.tasks.timeZone;
   const urgent: (AttentionItem & { overdue: boolean; due: number })[] = [];
   const returned: AttentionItem[] = [];
@@ -105,11 +106,16 @@ function attention(services: AppServices, now: string): HomeView["attention"] {
 
   urgent.sort((a, b) => Number(b.overdue) - Number(a.overdue) || a.due - b.due);
   inProgress.sort((a, b) => b.updated.localeCompare(a.updated));
-  const all: AttentionItem[] = [
-    ...urgent.map(({ overdue: _o, due: _d, ...item }) => item),
-    ...returned,
-    ...inProgress.map(({ updated: _u, ...item }) => item),
-  ];
+  return {
+    urgent: urgent.map(({ overdue: _o, due: _d, ...item }): AttentionItem => item),
+    returned,
+    inProgress: inProgress.map(({ updated: _u, ...item }): AttentionItem => item),
+  };
+}
+
+function attention(services: AppServices, now: string): HomeView["attention"] {
+  const { urgent, returned, inProgress } = attentionGroups(services, now);
+  const all = [...urgent, ...returned, ...inProgress];
   return { items: all.slice(0, ATTENTION_LIMIT), more: Math.max(0, all.length - ATTENTION_LIMIT) };
 }
 
@@ -143,7 +149,6 @@ function recent(services: AppServices, now: string): RecentItem[] {
     .map(({ kind, id, title, place, href, at }) => ({ kind, id, title, place, href, edited: relativeTime(at, now, timeZone) }));
 }
 
-/** The home dashboard: what needs attention across projects, the projects, the workspace pages, and recent edits. */
 /** Pages and tasks with pending suggestions, the one with the oldest first, with how many and from which agents. */
 function review(services: AppServices): ReviewItem[] {
   const places = new Map([...allPages(services), ...allTasks(services)].map((place) => [place.id, place]));
@@ -166,6 +171,7 @@ function review(services: AppServices): ReviewItem[] {
   return [...items.values()];
 }
 
+/** The home dashboard: what needs attention across projects, the projects, the workspace pages, and recent edits. */
 export function homeView(services: AppServices, now: string = new Date().toISOString()): HomeView {
   return {
     review: review(services),
@@ -174,4 +180,27 @@ export function homeView(services: AppServices, now: string = new Date().toISOSt
     pages: workspacePageTree(services),
     recent: recent(services, now),
   };
+}
+
+/** One place that needs the human, for the notification bell: its title, why, and where it opens. */
+export type NotificationItem = { id: string; title: string; detail: string; href: string };
+
+const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
+
+/**
+ * What waits for the human, as the bell lists it: suggestions to review
+ * (oldest first), then overdue and urgent chores, then work returned by an
+ * agent. The same builders as the home dashboard, without work in progress.
+ */
+export function notificationsView(services: AppServices, now: string = new Date().toISOString()): NotificationItem[] {
+  const { urgent, returned } = attentionGroups(services, now);
+  return [
+    ...review(services).map((item) => ({
+      id: item.id,
+      title: item.title,
+      detail: `${plural(item.count, "suggestion")} · ${item.agents.join(", ")}`,
+      href: item.href,
+    })),
+    ...[...urgent, ...returned].map((item) => ({ id: item.id, title: item.title, detail: item.reason, href: item.href })),
+  ];
 }

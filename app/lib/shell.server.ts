@@ -2,6 +2,7 @@ import type { AppServices } from "~/composition";
 import type { LibraryNode } from "~/domain/library/library.service";
 
 import { isTaskListSlug, slugOfKind, type TaskListSlug } from "./format";
+import { type NotificationItem, notificationsView } from "./home.server";
 import { workspacePageTree } from "./page-search.server";
 
 export type ProjectSection = "home" | TaskListSlug | "library";
@@ -21,6 +22,8 @@ export type ShellView = {
   } | null;
   /** The workspace's pages as a tree. */
   pages: LibraryNode[];
+  /** What waits for the human, for the notification bell. */
+  notifications: NotificationItem[];
 };
 
 /** Works out which project and section the URL belongs to. */
@@ -58,5 +61,6 @@ export function shellView(services: AppServices, pathname: string): ShellView {
     projects: services.projects.list().map((p) => ({ id: p.id, title: p.title || "Untitled" })),
     current: currentProject(services, pathname),
     pages: workspacePageTree(services),
+    notifications: notificationsView(services),
   };
 }
