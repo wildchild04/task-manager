@@ -18,7 +18,7 @@ import { useHydrated } from "../lib/use-hydrated";
 import type { Route } from "./+types/page";
 
 export function loader({ params }: Route.LoaderArgs) {
-  const page = buildPageView(services.blocks, params.pageId);
+  const page = buildPageView(services.blocks, params.pageId, services.suggestions);
   if (!page) return data({ page: null, trail: [], editable: null, deletion: null, backlinks: [] }, { status: 404 });
   return {
     page,

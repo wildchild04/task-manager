@@ -54,6 +54,7 @@ export const BLOCK_TYPES: Readonly<Partial<Record<BlockType, BlockTypeBehavior>>
   divider: nonText("divider"),
   reference: nonText("reference"),
   page: nonText("page"),
+  suggestion: nonText("suggestion"),
 };
 
 /** A block type's behavior; unknown types behave as non-text blocks. */

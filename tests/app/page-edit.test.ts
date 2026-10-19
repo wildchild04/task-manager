@@ -87,6 +87,12 @@ describe("page edits", () => {
       });
     });
 
+    it("moves a suggestion as a whole", () => {
+      expect(edit([{ op: "move", id: "sg", parentId: "doc", afterId: null }])).toMatchObject({ ok: true });
+      expect(services.blocks.getChildren("doc")[0]!.id).toBe("sg");
+      expect(services.blocks.getChildren("sg").map((b) => b.id)).toEqual(["n"]);
+    });
+
     it("lets the target be edited, which outdates the suggestion", () => {
       expect(edit([{ op: "update", id: "a", content: [{ text: "Changed" }] }])).toMatchObject({ ok: true });
       expect(services.suggestions.get("sg")?.state).toBe("outdated");

@@ -40,9 +40,9 @@ export type PageEditOptions = {
  * the blocks under it, but not inside sub-pages. Sub-pages can be moved
  * within the page but never deleted (also not along with a block containing
  * one), retyped or retitled from here; no page, comment or suggestion blocks
- * are created; suggestions and the blocks inside them aren't touched (they
- * change only by being approved or rejected), nor deleted along with a block
- * containing one; the root only changes its title, when allowed. Returns the reason a batch
+ * are created; suggestions and the blocks inside them aren't changed or
+ * deleted (they change only by being approved or rejected), also not along
+ * with a block containing one, though a suggestion may move as a whole; the root only changes its title, when allowed. Returns the reason a batch
  * is refused, or `undefined` when it may be applied.
  */
 export function checkPageEdit(tree: TreeNode, batch: Batch, options: PageEditOptions = {}): string | undefined {
@@ -100,7 +100,8 @@ export function checkPageEdit(tree: TreeNode, batch: Batch, options: PageEditOpt
       case "move": {
         if (!parent.has(op.id) || op.id === rootId) return "Edits must stay inside the page";
         if (op.parentId === null || !canHoldChildren(op.parentId)) return "Edits must stay inside the page";
-        if (isSuggested(op.id) || isSuggested(op.parentId)) return SUGGESTED;
+        // A suggestion moves as a whole (with Shift+Tab or a merge); what's inside it stays put.
+        if ((isSuggested(op.id) && type.get(op.id) !== "suggestion") || isSuggested(op.parentId)) return SUGGESTED;
         parent.set(op.id, op.parentId);
         break;
       }

@@ -33,6 +33,7 @@ export class SaveQueue {
   private current: SaveStatus = "saved";
   private readonly delayMs: number;
   private readonly retryMs: readonly number[];
+  private idleWaiters: (() => void)[] = [];
 
   constructor(private readonly options: SaveQueueOptions) {
     this.delayMs = options.delayMs ?? 600;
@@ -92,6 +93,7 @@ export class SaveQueue {
       this.failures = 0;
       if (this.pending.length > 0) this.flush();
       else this.setStatus("saved");
+      this.notifyIdle();
       return;
     }
     if (result.retry) {
@@ -106,6 +108,23 @@ export class SaveQueue {
     this.failures = 0;
     this.setStatus("failed");
     this.options.onRejected?.(result.message);
+    this.notifyIdle();
+  }
+
+  /**
+   * Resolves once nothing is waiting to be saved: everything was saved, or
+   * the server rejected it. Call `flush` first to send typing at once.
+   */
+  idle(): Promise<void> {
+    if (!this.dirty) return Promise.resolve();
+    return new Promise((resolve) => this.idleWaiters.push(resolve));
+  }
+
+  private notifyIdle() {
+    if (this.dirty) return;
+    const waiters = this.idleWaiters;
+    this.idleWaiters = [];
+    waiters.forEach((resolve) => resolve());
   }
 
   /** Stops timers (when the editor unmounts). */

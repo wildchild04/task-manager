@@ -25,7 +25,17 @@ function draftPage(): EditablePage {
   });
   const root = node(crypto.randomUUID(), "comment", null);
   root.children = [node(crypto.randomUUID(), "paragraph", root.block.id)];
-  return { surface: "comment", id: "draft", tree: root, version: "draft", title: false, references: {}, mentions: {} };
+  return {
+    surface: "comment",
+    id: "draft",
+    pageId: root.block.id,
+    tree: root,
+    version: "draft",
+    title: false,
+    references: {},
+    mentions: {},
+    suggestions: {},
+  };
 }
 
 /**

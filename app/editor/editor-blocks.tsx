@@ -1,7 +1,7 @@
 import { Checkbox, Divider, IconButton, Typography } from "@wildchild/design-system";
 import { memo, useContext, useLayoutEffect, useRef } from "react";
 
-import { PageLink, ReferenceBlockView } from "../blocks/block-view";
+import { PageLink, ReferenceBlockView, SuggestionBox, SuggestionsContext } from "../blocks/block-view";
 import { MentionTargetsContext } from "../blocks/rich-text";
 import type { ReferenceView } from "../blocks/view-model";
 import type { EditorBlock, EditorState } from "~/editor/editor-state";
@@ -23,13 +23,14 @@ export const EditableText = memo(function EditableText({
 }) {
   const ref = useRef<HTMLSpanElement>(null);
   const mentions = useContext(MentionTargetsContext);
+  const marked = useContext(SuggestionsContext).marked.has(block.id);
   useLayoutEffect(() => {
     if (ref.current) renderRichText(ref.current, block.content, mentions);
   }, [block.content, mentions]);
   return (
     <span
       ref={ref}
-      className="editable"
+      className={marked ? "editable suggestion-target" : "editable"}
       contentEditable
       suppressContentEditableWarning
       role="textbox"
@@ -171,10 +172,22 @@ const EditorBlock = memo(function EditorBlock(props: BlockProps) {
           <ReferenceBlockView target={references[block.id] ?? { status: "missing" }} />
         </div>
       );
+    case "suggestion":
+      return <SuggestionBlock id={block.id} />;
     default:
       return null;
   }
 });
+
+/** A suggestion in the editor: its box, drawn from the page's suggestion views; its blocks are never edited here. */
+function SuggestionBlock({ id }: { id: string }) {
+  const suggestion = useContext(SuggestionsContext).byId?.[id];
+  return (
+    <div className="editor-block" contentEditable={false}>
+      {suggestion && <SuggestionBox suggestion={suggestion} />}
+    </div>
+  );
+}
 
 const listTags = { bulleted_list_item: "ul", numbered_list_item: "ol" } as const;
 type ListType = keyof typeof listTags;

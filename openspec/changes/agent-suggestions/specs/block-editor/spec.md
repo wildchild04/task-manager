@@ -31,7 +31,7 @@ A suggestion and the blocks inside it SHALL never hold the caret; the caret move
 - **THEN** the suggestion is still there, and the caret is at the end of the text block before it
 
 ### Requirement: Edits stay inside the edited page
-The server SHALL accept an edit batch only if every block it touches is in the edited page's own content, outside any sub-page's content; it SHALL reject a batch that deletes a sub-page, deletes or changes the type of the page block itself, or inserts a page, comment or suggestion block. It SHALL also reject a batch that inserts into, updates, moves or deletes a suggestion or any block inside one, or deletes a block containing a suggestion; suggestions change only by being approved or rejected. Moving a block that contains a suggestion, and editing or deleting a suggestion's target, SHALL be allowed. A rejected batch SHALL change nothing.
+The server SHALL accept an edit batch only if every block it touches is in the edited page's own content, outside any sub-page's content; it SHALL reject a batch that deletes a sub-page, deletes or changes the type of the page block itself, or inserts a page, comment or suggestion block. It SHALL also reject a batch that inserts into, updates or deletes a suggestion, that updates, moves or deletes a block inside one, or that deletes a block containing a suggestion; suggestions change only by being approved or rejected. Moving a suggestion as a whole (its proposed blocks go with it), moving a block that contains one, and editing or deleting a suggestion's target, SHALL be allowed. A rejected batch SHALL change nothing.
 
 #### Scenario: Batch outside the page
 - **WHEN** an edit batch for page A updates a block of page B
@@ -44,6 +44,10 @@ The server SHALL accept an edit batch only if every block it touches is in the e
 #### Scenario: Changing a suggestion through an edit
 - **WHEN** an edit batch updates the content of a block inside a suggestion
 - **THEN** the server rejects it and the suggestion is unchanged
+
+#### Scenario: Outdenting past a suggestion
+- **WHEN** Shift+Tab is pressed in a nested list item whose following sibling is a suggestion
+- **THEN** the item moves out and the suggestion, unchanged, becomes its child
 
 #### Scenario: Editing a suggestion's target
 - **WHEN** an edit batch changes the text of a block that a pending replace suggestion targets

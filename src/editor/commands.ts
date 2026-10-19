@@ -227,8 +227,8 @@ function backspaceAtStart(state: EditorState, id: string, context: CommandContex
   if (before.type === "reference" || before.type === "divider") {
     return { ops: [{ op: "delete", id: previous }], selection: caret(id, 0) };
   }
-  if (before.type === "page") {
-    // Sub-pages are never deleted by Backspace: step over it.
+  if (before.type === "page" || before.type === "suggestion") {
+    // Sub-pages and suggestions are never deleted by Backspace: step over them.
     const target = previousTextBlock(state, id, context.closed);
     return { ops: [], selection: caret(target, text.length(getBlock(state, target).content)) };
   }
@@ -243,7 +243,7 @@ function deleteAtEnd(state: EditorState, id: string, context: CommandContext): C
   const after = getBlock(state, next);
   const length = text.length(getBlock(state, id).content);
   if (after.type === "reference" || after.type === "divider") return { ops: [{ op: "delete", id: next }], selection: caret(id, length) };
-  if (after.type === "page") return null;
+  if (after.type === "page" || after.type === "suggestion") return null;
   return merge(state, id, next);
 }
 

@@ -101,3 +101,37 @@ describe("block renderers", () => {
     expect(html).toMatch(/href="https:\/\/example.com"[^>]*>.*<em>link-text<\/em>/s);
   });
 });
+
+describe("suggestion boxes", () => {
+  const suggestion = (fields: Partial<Extract<ViewBlock, { kind: "suggestion" }>>): ViewBlock => ({
+    kind: "suggestion",
+    id: "s",
+    author: "builder",
+    action: "insert",
+    note: null,
+    outdated: false,
+    targetId: null,
+    blocks: [content("n", "paragraph", "proposed-text")],
+    removed: null,
+    ...fields,
+  });
+
+  it("shows the author, the action, the note, the proposed blocks and the decision", () => {
+    const html = render([suggestion({ note: "From the audit" })]);
+    for (const text of ["builder", "Suggests adding", "From the audit", "proposed-text", "Reject", "Approve"]) expect(html).toContain(text);
+    expect(html).toContain('role="group"');
+    // Before the editor takes over, there's nothing to decide with.
+    expect(html).toMatch(/disabled=""><span[^>]*><\/span>Approve/);
+  });
+
+  it("shows a replace's old block struck through, and an outdated one without Approve", () => {
+    const html = render([
+      suggestion({ action: "replace", targetId: "p", removed: content("p", "paragraph", "old-text"), outdated: true }),
+    ]);
+    expect(html).toContain("Suggests replacing");
+    expect(html).toMatch(/class="suggestion-removed"[^>]*aria-label="Removed"[\s\S]*old-text/);
+    expect(html).toContain("Outdated");
+    expect(html).toMatch(/<\/span>Reject</);
+    expect(html).not.toMatch(/<\/span>Approve</);
+  });
+});

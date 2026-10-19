@@ -22,6 +22,7 @@ import type { CommentBlockInput } from "~/domain/comments/types";
 import { linkAt, linkRangeAt, plain } from "~/editor/rich-text";
 import { type SaveStatus, SaveQueue, type SendResult } from "~/editor/save-queue";
 
+import { SuggestionsContext } from "../blocks/block-view";
 import { MentionTargetsContext } from "../blocks/rich-text";
 import type { MentionTargets } from "../blocks/view-model";
 import type { EditablePage } from "../lib/page-edit.server";
@@ -392,6 +393,9 @@ export function PageEditor({
   const [status, setStatus] = useState<SaveStatus>("saved");
   const [error, setError] = useState<string | null>(null);
   const [linkFor, setLinkFor] = useState<{ selection: Selection; href: string } | null>(null);
+  // While a suggestion decision is on its way; then what it did, with Undo until the next edit.
+  const [deciding, setDeciding] = useState(false);
+  const [decided, setDecided] = useState<{ message: string; undo?: string; failed?: boolean } | null>(null);
   // The open slash menu: where its `/` is, where to show it, and the highlighted command.
   const [slash, setSlashState] = useState<SlashMenu | null>(null);
   const slashRef = useRef<SlashMenu | null>(null);
@@ -421,7 +425,12 @@ export function PageEditor({
     });
     editor = new Editor(stateFromTree(page.tree), {
       // A draft isn't saved: its content goes to the caller instead.
-      onOps: (ops) => (draftRef.current ? draftRef.current.onChange(draftBlocks(editor.state)) : queue.enqueue(ops)),
+      onOps: (ops) => {
+        // An edit ends the chance to undo the last suggestion decision.
+        setDecided(null);
+        if (draftRef.current) draftRef.current.onChange(draftBlocks(editor.state));
+        else queue.enqueue(ops);
+      },
     });
     return { editor, queue };
     // One editor per page; newer content from the loader is applied below.
@@ -496,6 +505,46 @@ export function PageEditor({
     restoreSelection.current = false;
     writeSelection(rootRef.current, editor.selection);
   });
+
+  // ----- Suggestions -----
+
+  /** Sends a decision once every edit is saved, then takes the page as the server has it. */
+  const sendDecision = useCallback(
+    async (body: Record<string, string>) => {
+      setDeciding(true);
+      queue.flush();
+      await queue.idle();
+      let result: { ok: boolean; message: string; undo?: string };
+      try {
+        const response = await fetch(withBase("/api/suggestions"), {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        result = (await response.json()) as typeof result;
+      } catch {
+        result = { ok: false, message: "The server couldn't be reached; try again" };
+      }
+      knownVersion.current = "";
+      await revalidator.revalidate();
+      setDeciding(false);
+      setDecided(
+        result.ok
+          ? { message: result.message, ...(result.undo ? { undo: result.undo } : {}) }
+          : { message: result.message, failed: true },
+      );
+    },
+    [queue, revalidator],
+  );
+  const suggestions = useMemo(() => {
+    const views = Object.values(page.suggestions);
+    return {
+      views,
+      byId: page.suggestions,
+      marked: new Set(views.flatMap((s) => (s.targetId ? [s.targetId] : []))),
+      decide: (intent: "approve" | "reject", id: string) => void sendDecision({ intent, id }),
+    };
+  }, [page.suggestions, sendDecision]);
 
   // ----- Leaving with unsaved edits -----
 
@@ -937,113 +986,163 @@ export function PageEditor({
 
   return (
     <MentionTargetsContext.Provider value={mentionTargets}>
-      <div className="page-editor" ref={rootRef} style={{ "--editor-link": linkColor } as CSSProperties}>
-        {/* A draft has nothing to save, so no saving indicator. */}
-        {!draft && (statusSlot ? createPortal(statusText, statusSlot) : <div className="editor-status">{statusText}</div>)}
-        {error && (
-          <Alert severity="error" role="alert">
-            {error}
-          </Alert>
-        )}
-        {page.title && (
-          <Typography variant={titleVariant}>
-            <EditableText block={root} placeholder="Untitled" ariaLabel="Title" />
-          </Typography>
-        )}
-        {afterTitle}
-        <div className="editor-body" hidden={hideBody}>
-          {root.children.length === 0 ? (
-            <button
-              type="button"
-              className="editor-empty"
-              onClick={() => {
-                editor.setSelection(caret(state.rootId, 0));
-                editor.enter();
-                restoreSelection.current = true;
-              }}
-            >
-              <Typography color="text.secondary">{emptyText}</Typography>
-            </button>
-          ) : (
-            <EditorBlocks state={state} ids={root.children} closed={closed} references={page.references} actions={actions} />
+      <SuggestionsContext.Provider value={{ ...suggestions, busy: deciding }}>
+        <div className="page-editor" ref={rootRef} style={{ "--editor-link": linkColor } as CSSProperties}>
+          {/* A draft has nothing to save, so no saving indicator. */}
+          {!draft && (statusSlot ? createPortal(statusText, statusSlot) : <div className="editor-status">{statusText}</div>)}
+          {error && (
+            <Alert severity="error" role="alert">
+              {error}
+            </Alert>
           )}
-        </div>
-
-        <InlineCommandMenu
-          id={SLASH_MENU_ID}
-          open={slash !== null}
-          anchorRect={slash?.anchor ?? null}
-          ariaLabel={slash?.kind === "page" ? "Mention a page" : "Turn into"}
-          options={slashOptions.map(({ value, label, description }) => ({
-            value,
-            label,
-            ...(description ? { description } : {}),
-          }))}
-          activeValue={slash?.active ?? null}
-          onActiveValueChange={(value) => slash && setSlash({ ...slash, active: value })}
-          onSelect={(value) => {
-            const item = slashOptions.find((c) => c.value === value);
-            if (item) applySlashRef.current?.(item);
-          }}
-          onDismiss={() => setSlash(null)}
-          emptyText={slash?.kind === "page" ? (found === null ? "Searching…" : "No page matches") : "No matching blocks"}
-        />
-        <HoverCard
-          open={linkCard !== null}
-          anchorRect={linkCard?.rect ?? null}
-          ariaLabel="Link"
-          onPointerEnter={cardTimers.cancelClose}
-          onPointerLeave={() => cardTimers.close(() => setLinkCard(null))}
-          onDismiss={() => setLinkCard(null)}
-        >
-          {linkCard && (
-            // Pressing a button keeps the caret and selection in the text.
-            <div onMouseDown={(event) => event.preventDefault()}>
-              <Stack spacing={1}>
-                <Typography variant="body2" noWrap>
-                  {linkCard.label}
-                </Typography>
+          {page.title && (
+            <Typography variant={titleVariant}>
+              <EditableText block={root} placeholder="Untitled" ariaLabel="Title" />
+            </Typography>
+          )}
+          {afterTitle}
+          {!hideBody && decided && (
+            <Alert
+              severity={decided.failed ? "error" : "success"}
+              role={decided.failed ? "alert" : "status"}
+              onClose={() => setDecided(null)}
+              actions={
+                decided.undo && (
+                  <Button
+                    size="small"
+                    variant="text"
+                    disabled={deciding}
+                    onClick={() => void sendDecision({ intent: "reopen", id: decided.undo! })}
+                  >
+                    Undo
+                  </Button>
+                )
+              }
+            >
+              {decided.message}
+            </Alert>
+          )}
+          {!hideBody && suggestions.views.length > 0 && (
+            <div className="suggestions-bar">
+              <Typography variant="body2" color="text.secondary">
+                {suggestions.views.length === 1 ? "1 suggestion to review" : `${suggestions.views.length} suggestions to review`}
+              </Typography>
+              {suggestions.views.length > 1 && (
                 <Stack direction="row" spacing={1}>
-                  <Button size="small" variant="text" onClick={() => openLink(linkCard)}>
-                    Open
+                  <Button
+                    size="small"
+                    variant="text"
+                    disabled={deciding}
+                    onClick={() => void sendDecision({ intent: "reject-all", pageId: page.pageId })}
+                  >
+                    Reject all
                   </Button>
-                  <Button size="small" variant="text" onClick={() => editLink(linkCard)}>
-                    Edit
-                  </Button>
-                  <Button size="small" variant="text" color="error" onClick={() => removeLink(linkCard)}>
-                    Remove
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    disabled={deciding}
+                    onClick={() => void sendDecision({ intent: "approve-all", pageId: page.pageId })}
+                  >
+                    Approve all
                   </Button>
                 </Stack>
-              </Stack>
+              )}
             </div>
           )}
-        </HoverCard>
-        {linkFor && (
-          <LinkDialog
-            initial={linkFor.href}
-            onDone={(href) => {
-              setLinkFor(null);
-              if (href === undefined) return;
-              editor.setSelection(linkFor.selection);
-              editor.setLink(href);
-              restoreSelection.current = true;
+          <div className="editor-body" hidden={hideBody}>
+            {root.children.length === 0 ? (
+              <button
+                type="button"
+                className="editor-empty"
+                onClick={() => {
+                  editor.setSelection(caret(state.rootId, 0));
+                  editor.enter();
+                  restoreSelection.current = true;
+                }}
+              >
+                <Typography color="text.secondary">{emptyText}</Typography>
+              </button>
+            ) : (
+              <EditorBlocks state={state} ids={root.children} closed={closed} references={page.references} actions={actions} />
+            )}
+          </div>
+
+          <InlineCommandMenu
+            id={SLASH_MENU_ID}
+            open={slash !== null}
+            anchorRect={slash?.anchor ?? null}
+            ariaLabel={slash?.kind === "page" ? "Mention a page" : "Turn into"}
+            options={slashOptions.map(({ value, label, description }) => ({
+              value,
+              label,
+              ...(description ? { description } : {}),
+            }))}
+            activeValue={slash?.active ?? null}
+            onActiveValueChange={(value) => slash && setSlash({ ...slash, active: value })}
+            onSelect={(value) => {
+              const item = slashOptions.find((c) => c.value === value);
+              if (item) applySlashRef.current?.(item);
             }}
+            onDismiss={() => setSlash(null)}
+            emptyText={slash?.kind === "page" ? (found === null ? "Searching…" : "No page matches") : "No matching blocks"}
           />
-        )}
-        {blocker.state === "blocked" && (
-          <Dialog
-            open
-            title="Leave without saving?"
-            onClose={() => blocker.reset()}
-            cancelAction={{ label: "Stay", onClick: () => blocker.reset() }}
-            confirmAction={{ label: "Leave", onClick: () => blocker.proceed() }}
+          <HoverCard
+            open={linkCard !== null}
+            anchorRect={linkCard?.rect ?? null}
+            ariaLabel="Link"
+            onPointerEnter={cardTimers.cancelClose}
+            onPointerLeave={() => cardTimers.close(() => setLinkCard(null))}
+            onDismiss={() => setLinkCard(null)}
           >
-            <Stack spacing={1}>
-              <Typography>Some edits haven't been saved yet. If you leave now they'll be lost.</Typography>
-            </Stack>
-          </Dialog>
-        )}
-      </div>
+            {linkCard && (
+              // Pressing a button keeps the caret and selection in the text.
+              <div onMouseDown={(event) => event.preventDefault()}>
+                <Stack spacing={1}>
+                  <Typography variant="body2" noWrap>
+                    {linkCard.label}
+                  </Typography>
+                  <Stack direction="row" spacing={1}>
+                    <Button size="small" variant="text" onClick={() => openLink(linkCard)}>
+                      Open
+                    </Button>
+                    <Button size="small" variant="text" onClick={() => editLink(linkCard)}>
+                      Edit
+                    </Button>
+                    <Button size="small" variant="text" color="error" onClick={() => removeLink(linkCard)}>
+                      Remove
+                    </Button>
+                  </Stack>
+                </Stack>
+              </div>
+            )}
+          </HoverCard>
+          {linkFor && (
+            <LinkDialog
+              initial={linkFor.href}
+              onDone={(href) => {
+                setLinkFor(null);
+                if (href === undefined) return;
+                editor.setSelection(linkFor.selection);
+                editor.setLink(href);
+                restoreSelection.current = true;
+              }}
+            />
+          )}
+          {blocker.state === "blocked" && (
+            <Dialog
+              open
+              title="Leave without saving?"
+              onClose={() => blocker.reset()}
+              cancelAction={{ label: "Stay", onClick: () => blocker.reset() }}
+              confirmAction={{ label: "Leave", onClick: () => blocker.proceed() }}
+            >
+              <Stack spacing={1}>
+                <Typography>Some edits haven't been saved yet. If you leave now they'll be lost.</Typography>
+              </Stack>
+            </Dialog>
+          )}
+        </div>
+      </SuggestionsContext.Provider>
     </MentionTargetsContext.Provider>
   );
 }

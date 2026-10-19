@@ -137,7 +137,8 @@ const markdownOf = (services: AppServices, tree: TreeNode | undefined, anchors =
 
 /** Markdown an agent wrote, as blocks. Suggestions are read, never written as Markdown. */
 function blocksOf(services: AppServices, markdown: string) {
-  if (SUGGESTION_TAG.test(markdown)) throw new AgentError(422, "validation", "Suggestions can't be written as Markdown; use `suggest`");
+  if (SUGGESTION_TAG.test(markdown))
+    throw new AgentError(422, "validation", "Suggestions can't be written as Markdown; use `suggest`");
   return fromMarkdown(markdown, writer(services));
 }
 

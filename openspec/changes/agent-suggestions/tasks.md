@@ -17,7 +17,7 @@
 
 ## 3. Edits and backlinks
 
-- [x] 3.1 `checkPageEdit`: refuse inserting suggestions, touching a suggestion or anything inside one, and deleting a block that contains one; allow moving it and editing its target; tests for the block-editor scenarios
+- [x] 3.1 `checkPageEdit`: refuse inserting suggestions, changing or deleting a suggestion or anything inside one, and deleting a block that contains one; allow moving a suggestion as a whole, moving a block containing one, and editing its target; tests for the block-editor scenarios
 - [x] 3.2 "Mentioned in" for pages and tasks skips sources with a suggestion ancestor; tests
 
 ## 4. Agent API and MCP
@@ -28,7 +28,7 @@
 
 ## 5. Screens
 
-- [ ] 5.1 Review region (composed from `Card`, `Chip`, `Button` until the review container ships): author, action label, note, Outdated, Approve and Reject, struck-through target copy; target marker; pending count on the page. Read-only viewer and editor renderers
-- [ ] 5.2 Editor: `suggestion` in `block-types.ts` (non-text, caret skips it, no nesting into it, Backspace after it keeps it); approve and reject route actions that flush pending saves, call the service, reload the blocks and offer Undo until the next edit; Approve all / Reject all when more than one is pending
+- [x] 5.1 Review region (composed from `Card`, `Chip`, `Button` until the review container ships): author, action label, note, Outdated, Approve and Reject, struck-through target copy; target marker; pending count on the page. Read-only viewer and editor renderers
+- [x] 5.2 Editor: `suggestion` in `block-types.ts` (non-text, caret skips it, no nesting into it, Backspace after it keeps it); approve and reject route actions that flush pending saves, call the service, reload the blocks and offer Undo until the next edit; Approve all / Reject all when more than one is pending
 - [ ] 5.3 Home dashboard "Waiting for review" section; view-builder tests
 - [ ] 5.4 Headless check of a page with insert, replace, delete and outdated suggestions (light and dark, phone width); typecheck and full test run

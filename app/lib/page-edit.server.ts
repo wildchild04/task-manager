@@ -6,7 +6,13 @@ import type { Batch, TreeNode } from "~/domain/blocks/types";
 import { PROJECT_OWNER_KIND } from "~/domain/projects/types";
 import { TaskError } from "~/domain/tasks/errors";
 
-import type { MentionTargets, ReferenceView, ViewBlock } from "../blocks/view-model";
+import {
+  type MentionTargets,
+  type ReferenceView,
+  type SuggestionBlockView,
+  suggestionsIn,
+  type ViewBlock,
+} from "../blocks/view-model";
 import { browsableScope, buildBodyView, buildCommentView, mentionTargets } from "./page-view.server";
 
 /** Where an editor runs: a page, a project's home page, a task's body, or a comment's content. */
@@ -17,6 +23,8 @@ export type EditablePage = {
   surface: EditSurface;
   /** The page's own ID for `page`; the project's, task's or comment's ID otherwise. */
   id: string;
+  /** The edited page block's ID (a task's or project's body page, or the page itself). */
+  pageId: string;
   /** The page's own content; sub-pages come without theirs. */
   tree: TreeNode;
   version: string;
@@ -26,6 +34,8 @@ export type EditablePage = {
   references: Record<string, ReferenceView>;
   /** The current titles of the pages mentioned in the page (`null` for deleted ones). */
   mentions: MentionTargets;
+  /** The page's pending suggestions, by block ID, in document order. */
+  suggestions: Record<string, SuggestionBlockView>;
 };
 
 type EditTarget = { rootId: string; title: boolean };
@@ -70,16 +80,18 @@ export function editablePage(services: AppServices, surface: EditSurface, id: st
   const blocks =
     surface === "comment"
       ? buildCommentView(services.blocks, target.rootId)
-      : buildBodyView(services.blocks, target.rootId)?.blocks;
+      : buildBodyView(services.blocks, target.rootId, services.suggestions)?.blocks;
   const view = blocks && { blocks, mentions: mentionTargets(services.blocks, blocks) };
   return {
     surface,
     id,
+    pageId: target.rootId,
     tree,
     version: treeVersion(tree),
     title: target.title,
     references: referencesOf(view?.blocks ?? []),
     mentions: view?.mentions ?? {},
+    suggestions: Object.fromEntries(suggestionsIn(view?.blocks ?? []).map((s) => [s.id, s])),
   };
 }
 

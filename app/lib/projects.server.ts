@@ -94,7 +94,7 @@ export function projectHomeView(services: AppServices, projectId: string): Proje
   const list = (slug: string) => `/projects/${project.id}/${slug}`;
   return {
     project: { id: project.id, title: project.title || "Untitled" },
-    home: buildPageView(services.blocks, project.homePageId),
+    home: buildPageView(services.blocks, project.homePageId, services.suggestions),
     glance,
     tabs: [
       {

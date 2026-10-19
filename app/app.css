@@ -197,3 +197,52 @@ body {
 .chore-controls {
   margin-left: auto;
 }
+
+/* Agent suggestions: a tinted region in the page, until the design system's review container ships. */
+.suggestion-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0;
+  padding: 8px 12px;
+  border: 1px solid var(--ds-warning);
+  border-left-width: 4px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--ds-warning-container) 45%, transparent);
+}
+
+.suggestion-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+}
+
+.suggestion-removed {
+  opacity: 0.7;
+  text-decoration: line-through;
+}
+
+.suggestion-removed::before {
+  content: "Removed";
+  display: block;
+  font-size: 0.75rem;
+  text-decoration: none;
+  opacity: 0.8;
+}
+
+/* A block a pending suggestion would replace or delete. */
+.suggestion-target {
+  background: color-mix(in srgb, var(--ds-warning-container) 60%, transparent);
+  box-shadow: inset 0 -2px 0 var(--ds-warning);
+}
+
+.suggestions-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+  margin: 8px 0;
+}

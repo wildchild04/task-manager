@@ -1,7 +1,7 @@
 import type { PropsByType, RichText } from "~/domain/blocks/types";
 
 /** Content block types the viewer renders directly. */
-export type ContentBlockType = Exclude<keyof PropsByType, "page" | "reference" | "comment">;
+export type ContentBlockType = Exclude<keyof PropsByType, "page" | "reference" | "comment" | "suggestion">;
 
 /** What a page's loader sends to the browser: plain, serializable data. `projectId` is set for project pages. */
 /** What a mention shows and opens: a page, or the task whose description page it is. */
@@ -22,7 +22,28 @@ export type ViewBlock =
       children: ViewBlock[];
     }
   | { kind: "subpage"; id: string; title: RichText }
-  | { kind: "reference"; id: string; target: ReferenceView };
+  | { kind: "reference"; id: string; target: ReferenceView }
+  | SuggestionBlockView;
+
+/** An agent's pending suggestion, with the blocks it proposes and, for a replace or delete, its target as it is now. */
+export type SuggestionBlockView = {
+  kind: "suggestion";
+  id: string;
+  author: string;
+  action: "insert" | "replace" | "delete";
+  note: string | null;
+  outdated: boolean;
+  targetId: string | null;
+  blocks: ViewBlock[];
+  removed: ViewBlock | null;
+};
+
+/** The suggestions among blocks, at any depth, in document order. */
+export function suggestionsIn(blocks: readonly ViewBlock[]): SuggestionBlockView[] {
+  return blocks.flatMap((block) =>
+    block.kind === "suggestion" ? [block] : block.kind === "content" ? suggestionsIn(block.children) : [],
+  );
+}
 
 export type ReferenceView =
   | { status: "page"; pageId: string; title: RichText }

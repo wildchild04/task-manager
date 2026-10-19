@@ -295,6 +295,34 @@ describe("editor", () => {
     });
   });
 
+  describe("suggestions", () => {
+    const suggestion = (id: string, children: Seed[]): Seed => ({ id, type: "suggestion", props: { action: "insert" }, children });
+
+    it("leaves a suggestion's blocks out of the text being edited", () => {
+      seed([p("a", "Before"), suggestion("s", [p("in", "Proposed")]), p("b", "After")]);
+      expect(documentOrder(editor.state)).toEqual(["a", "s", "b"]);
+    });
+
+    it("steps over a suggestion with Backspace and Delete, keeping it", () => {
+      seed([p("a", "Before"), suggestion("s", [p("in", "Proposed")]), p("b", "After")]);
+      at("b", 0);
+      editor.deleteBackward();
+      expect(editor.selection).toEqual(caret("a", 6));
+      editor.deleteForward();
+      expect(outline()).toEqual(["paragraph:Before", "suggestion:", "  paragraph:Proposed", "paragraph:After"]);
+    });
+
+    it("doesn't nest into a suggestion, and outdents past one as a whole", () => {
+      seed([suggestion("s", [p("in", "Proposed")]), p("a", "x"), p("parent", "P", [p("c", "c"), suggestion("s2", [p("in2", "y")])])]);
+      at("a", 0);
+      expect(editor.indent()).toBe(false);
+      at("c", 0);
+      editor.outdent();
+      expect(outline().slice(-4)).toEqual(["paragraph:P", "paragraph:c", "  suggestion:", "    paragraph:y"]);
+      expectInSync();
+    });
+  });
+
   describe("markdown shortcuts", () => {
     it.each([
       ["# ", "heading1:"],

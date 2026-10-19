@@ -183,7 +183,7 @@ export function taskOverviewView(services: AppServices, taskId: string): TaskOve
       stateColor: stateColor(task.state),
     },
     project: { id: project.id, title: project.title || "Untitled", listSlug: slug, listTitle: TASK_LISTS[slug].title },
-    body: buildBodyView(services.blocks, task.bodyPageId),
+    body: buildBodyView(services.blocks, task.bodyPageId, services.suggestions),
     ...(task.kind === "chore" ? { chore: choreView(services, task) } : {}),
     transitions,
     canStartUpdate: task.kind === "work" && task.state === "done",

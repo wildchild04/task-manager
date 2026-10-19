@@ -95,6 +95,24 @@ describe("save queue", () => {
     expect(sent).toHaveLength(1);
   });
 
+  it("tells when nothing is left to save, after a retry or a rejection too", async () => {
+    let idle = false;
+    await queue.idle();
+    queue.enqueue([inserted("b")]);
+    void queue.idle().then(() => (idle = true));
+    await reply({ ok: false, retry: true });
+    expect(idle).toBe(false);
+    await vi.advanceTimersByTimeAsync(1000);
+    await reply({ ok: true });
+    expect(idle).toBe(true);
+
+    idle = false;
+    queue.enqueue([inserted("c")]);
+    void queue.idle().then(() => (idle = true));
+    await reply({ ok: false, retry: false, message: "No" });
+    expect(idle).toBe(true);
+  });
+
   it("flushes on demand", () => {
     queue.enqueue([typed("a", "x")]);
     queue.flush();

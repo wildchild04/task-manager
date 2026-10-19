@@ -65,7 +65,7 @@ After a resolution, the editor first flushes its pending saves, then calls the a
 ### 6. The editor treats suggestions as one closed unit
 
 - In `block-types.ts`, `suggestion` is non-text and can't take children *from the editor*: the caret skips it as it skips dividers and sub-pages, Tab can't nest into it, and Backspace after it moves the caret to the previous text block without deleting it.
-- `checkPageEdit` refuses a batch that inserts a `suggestion`, or inserts, updates, moves or deletes a suggestion or any block inside one. It also refuses deleting a block that *contains* a suggestion ("Approve or reject the suggestion inside first"), as it already does for sub-pages. Moving such a block is allowed. Deleting or editing a suggestion's *target* is allowed and makes the suggestion outdated.
+- `checkPageEdit` refuses a batch that inserts a `suggestion`, or inserts, updates, moves or deletes a suggestion or any block inside one. It also refuses deleting a block that *contains* a suggestion ("Approve or reject the suggestion inside first"), as it already does for sub-pages. Moving such a block is allowed, and so is moving a suggestion **as a whole**: Shift+Tab and merges move the blocks that follow, which may include a suggestion, and moving it doesn't change what it proposes (an insert then applies where it now is; a replace or delete applies at its target wherever the box sits). Deleting or editing a suggestion's *target* is allowed and makes the suggestion outdated.
 
 ### 7. Anchors in the Markdown agents read
 

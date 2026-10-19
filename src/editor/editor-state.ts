@@ -71,7 +71,8 @@ export function documentOrder(state: EditorState, closed: ReadonlySet<string> = 
   const visit = (id: string) => {
     for (const child of getBlock(state, id).children) {
       out.push(child);
-      if (!closed.has(child)) visit(child);
+      // A suggestion's proposed blocks aren't part of the text being edited.
+      if (!closed.has(child) && getBlock(state, child).type !== "suggestion") visit(child);
     }
   };
   visit(state.rootId);
