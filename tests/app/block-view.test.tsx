@@ -119,7 +119,7 @@ describe("suggestion boxes", () => {
   it("shows the author, the action, the note, the proposed blocks and the decision", () => {
     const html = render([suggestion({ note: "From the audit" })]);
     for (const text of ["builder", "Suggests adding", "From the audit", "proposed-text", "Reject", "Approve"]) expect(html).toContain(text);
-    expect(html).toContain('role="group"');
+    expect(html).toMatch(/class="suggestion-proposed" role="group" aria-label="Proposed"[\s\S]*proposed-text/);
     // Before the editor takes over, there's nothing to decide with.
     expect(html).toMatch(/disabled=""><span[^>]*><\/span>Approve/);
   });

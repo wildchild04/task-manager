@@ -115,7 +115,10 @@ export function SuggestionBox({ suggestion }: { suggestion: SuggestionBlockView 
         </div>
       )}
       {blocks.length > 0 && (
-        <div className="suggestion-body">
+        <div className="suggestion-proposed" role="group" aria-label="Proposed">
+          <Typography variant="caption" color="text.secondary">
+            Proposed
+          </Typography>
           <Blocks blocks={blocks} />
         </div>
       )}

@@ -219,9 +219,27 @@ body {
   gap: 4px 8px;
 }
 
+/* Inside the box, what goes and what comes read like a diff: removed in red, proposed in green. */
+.suggestion-removed,
+.suggestion-proposed {
+  padding: 4px 8px;
+  border-left: 3px solid;
+  border-radius: 4px;
+}
+
+.suggestion-removed {
+  border-left-color: var(--ds-error);
+  background: color-mix(in srgb, var(--ds-error-container) 40%, transparent);
+}
+
 .suggestion-removed-content {
-  opacity: 0.7;
+  opacity: 0.75;
   text-decoration: line-through;
+}
+
+.suggestion-proposed {
+  border-left-color: var(--ds-success);
+  background: color-mix(in srgb, var(--ds-success-container) 40%, transparent);
 }
 
 /* A block a pending suggestion would replace or delete. */

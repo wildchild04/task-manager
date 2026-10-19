@@ -30,6 +30,10 @@ function surfaceVariables(mode: ThemeMode): CSSProperties {
     "--ds-primary": color.primary,
     "--ds-warning": color.warning,
     "--ds-warning-container": color.warningContainer,
+    "--ds-success": color.success,
+    "--ds-success-container": color.successContainer,
+    "--ds-error": color.error,
+    "--ds-error-container": color.errorContainer,
   } as CSSProperties;
 }
 
