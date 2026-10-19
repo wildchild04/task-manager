@@ -46,5 +46,8 @@ Run it by hand with `npm run mcp` (the three variables must be set).
 | `suggest` | Propose an insert, replace or delete in any page or description, at a block from `anchors`; a human approves or rejects it |
 | `get_suggestion` | A suggestion's status: pending, outdated, approved, rejected, withdrawn |
 | `withdraw_suggestion` | Take back your own pending suggestion |
+| `get_markdown_guide` | The Markdown agents can write (headings to `######`, lists, todos, quotes, pipe tables, ``` code fences, `> [!NOTE]` callouts, marks, links, mentions) and what isn't supported |
+
+Tools that take Markdown keep anything unsupported (images, raw HTML, footnotes, a table without its `|---|` row, an unclosed fence) as text and say so in `warnings`, by line, e.g. `"Line 3: images aren't supported yet; kept as text"`.
 
 Agents can't cancel, change chores or explorations, or delete anything, and they change existing pages and descriptions only through suggestions a human approves.

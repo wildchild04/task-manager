@@ -21,6 +21,7 @@ import { caret, caretOrder, type EditorState, getBlock, isCollapsed, type Select
 import type { CommentBlockInput } from "~/domain/comments/types";
 import { linkAt, linkRangeAt, plain } from "~/editor/rich-text";
 import { type SaveStatus, SaveQueue, type SendResult } from "~/editor/save-queue";
+import { verticalNeighbour } from "~/editor/tables";
 
 import { SuggestionsContext } from "../blocks/block-view";
 import { MentionTargetsContext } from "../blocks/rich-text";
@@ -625,6 +626,8 @@ export function PageEditor({
       const trigger = text[start];
       const previous = text[start - 1];
       if ((trigger !== "/" && trigger !== "@") || (previous !== undefined && !/\s/.test(previous))) return;
+      // Code is plain text: no menus. A table cell can mention pages but not change type.
+      if (block.type === "code" || (block.type === "table_cell" && trigger === "/")) return;
       setSlash({
         kind: trigger === "/" ? "command" : "page",
         blockId,
@@ -794,7 +797,9 @@ export function PageEditor({
         draftRef.current.onSubmit();
         return;
       }
-      if (event.key === "Enter" && !mod) {
+      if (event.key === "Enter" && mod && getBlock(editor.state, selection.blockId).type === "code") {
+        editor.exitBlock();
+      } else if (event.key === "Enter" && !mod) {
         if (event.shiftKey) editor.lineBreak();
         else editor.enter();
       } else if (event.key === "Backspace" && isCollapsed(selection) && selection.focus === 0 && !mod && !event.altKey) {
@@ -802,8 +807,7 @@ export function PageEditor({
       } else if (event.key === "Delete" && isCollapsed(selection) && selection.focus === length && !mod && !event.altKey) {
         editor.deleteForward();
       } else if (event.key === "Tab") {
-        if (event.shiftKey) editor.outdent();
-        else editor.indent();
+        editor.tab(event.shiftKey);
       } else if (mod && key === "z") {
         if (event.shiftKey) editor.redo();
         else editor.undo();
@@ -819,6 +823,8 @@ export function PageEditor({
         editor.toggleMark("strikethrough");
       } else if (mod && key === "e") {
         editor.toggleMark("code");
+      } else if (mod && key === "k" && getBlock(editor.state, selection.blockId).type === "code") {
+        // Code holds no links.
       } else if (mod && key === "k") {
         const content = getBlock(editor.state, selection.blockId).content;
         if (!isCollapsed(selection)) {
@@ -842,7 +848,11 @@ export function PageEditor({
         if (plainArrow && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
           const up = event.key === "ArrowUp";
           if (caretOnEdgeLine(element, up ? "first" : "last")) {
-            const target = neighbour(selection.blockId, up ? -1 : 1);
+            // In a table, ↑ and ↓ keep to the column, leaving the table from its first or last row.
+            const inTable = getBlock(editor.state, selection.blockId).type === "table_cell";
+            const target = inTable
+              ? verticalNeighbour(editor.state, selection.blockId, up, editor.closed)
+              : neighbour(selection.blockId, up ? -1 : 1);
             if (target) {
               goalX.current ??= caretRect()?.left ?? element.getBoundingClientRect().left;
               moveTo(caret(target, offsetAtX(editableOf(root, target)!, goalX.current, up ? "last" : "first")));
@@ -969,6 +979,10 @@ export function PageEditor({
     () => ({
       toggleTodo: (id: string) => editor.toggleTodo(id),
       toggleOpen: (id: string) => editor.toggleOpen(id),
+      run: (command: (editor: Editor) => unknown) => {
+        command(editor);
+        restoreSelection.current = true;
+      },
     }),
     [editor],
   );

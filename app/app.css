@@ -257,3 +257,115 @@ body {
   flex-direction: column;
   white-space: normal;
 }
+
+/* ----- Tables, callouts and headings 4–6 (markdown-blocks) ----- */
+
+/* Wide tables scroll inside the page; the page itself never scrolls sideways. */
+.block-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 4px 0;
+}
+
+.block-table {
+  border-collapse: collapse;
+  min-width: 100%;
+}
+
+.block-table th,
+.block-table td {
+  border: 1px solid var(--ds-outline-variant);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+  min-width: 4em;
+}
+
+.block-table th {
+  background: var(--ds-surface-container);
+  font-weight: 600;
+}
+
+/* A callout: a tinted box of its tone, its emoji beside its content. */
+.block-callout {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--ds-outline-variant);
+  background: var(--ds-surface-container);
+}
+
+.block-callout-emoji {
+  flex: none;
+  line-height: 1.5;
+}
+
+.block-callout-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.block-callout-info {
+  border-color: var(--ds-info);
+  background: color-mix(in srgb, var(--ds-info-container) 50%, transparent);
+}
+
+.block-callout-success {
+  border-color: var(--ds-success);
+  background: color-mix(in srgb, var(--ds-success-container) 50%, transparent);
+}
+
+.block-callout-warning {
+  border-color: var(--ds-warning);
+  background: color-mix(in srgb, var(--ds-warning-container) 50%, transparent);
+}
+
+.block-callout-error {
+  border-color: var(--ds-error);
+  background: color-mix(in srgb, var(--ds-error-container) 50%, transparent);
+}
+
+/* Editor controls for tables and code blocks. */
+.editor-table-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  opacity: 0.6;
+}
+
+.editor-table:focus-within .editor-table-controls,
+.editor-table:hover .editor-table-controls {
+  opacity: 1;
+}
+
+.editor-code {
+  margin: 4px 0;
+  border: 1px solid var(--ds-outline-variant);
+  border-radius: 8px;
+  background: var(--ds-surface-lowest);
+  overflow: hidden;
+}
+
+.editor-code-header {
+  display: flex;
+  justify-content: flex-start;
+  padding: 0 4px;
+  border-bottom: 1px solid var(--ds-outline-variant);
+}
+
+.editor-code-body {
+  margin: 0;
+  padding: 8px 12px;
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.875rem;
+  white-space: pre;
+}
+
+.editor-code-body .editable {
+  display: block;
+  min-height: 1.5em;
+  white-space: pre;
+}

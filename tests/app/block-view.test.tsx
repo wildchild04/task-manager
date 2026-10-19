@@ -135,3 +135,58 @@ describe("suggestion boxes", () => {
     expect(html).not.toMatch(/<\/span>Approve</);
   });
 });
+
+describe("tables, code, callouts and headings 4–6", () => {
+  const cell = (id: string, value: string) => content(id, "table_cell", value);
+  const row = (id: string, ...cells: ViewBlock[]) => ({ ...content(id, "table_row", ""), children: cells }) as ViewBlock;
+  const table = (props: Record<string, unknown>, ...rows: ViewBlock[]) =>
+    ({ ...content("t", "table", "", props), children: rows }) as ViewBlock;
+
+  it("renders a header row as column headers and the rest as rows, scrolling inside the page", () => {
+    const html = render([
+      table(
+        { headerRow: true, headerColumn: false },
+        row("r1", cell("a", "Surface"), cell("b", "Sun")),
+        row("r2", cell("c", "Tile"), cell("d", "61°C")),
+      ),
+    ]);
+    expect(html).toContain(
+      '<div class="block-table-scroll"><table class="block-table"><thead><tr><th scope="col"><span>Surface</span></th>' +
+        '<th scope="col"><span>Sun</span></th></tr></thead><tbody><tr><td><span>Tile</span></td><td><span>61°C</span></td></tr></tbody>',
+    );
+  });
+
+  it("renders a header column as row headers, and no thead without a header row", () => {
+    const html = render([table({ headerRow: false, headerColumn: true }, row("r1", cell("a", "DNS"), cell("b", "Shaky")))]);
+    expect(html).toContain('<div class="block-table-scroll">');
+    expect(html).not.toContain("<thead>");
+    expect(html).toContain('<tr><th scope="row"><span>DNS</span></th><td><span>Shaky</span></td></tr>');
+  });
+
+  it("renders code with its language and a copy button", () => {
+    const html = render([content("k", "code", "strace -f ./server", { language: "sh" })]);
+    expect(html).toContain("strace -f ./server");
+    expect(html).toContain('aria-label="Code, sh"');
+    expect(html).toContain("Copy code");
+  });
+
+  it("renders a callout of its tone with its emoji, text and nested blocks, not as an announcement", () => {
+    const callout = content("c", "callout", "Don't load a movement that scored 0", { emoji: "⚠️", tone: "warning" });
+    const html = render([{ ...callout, children: [content("c1", "paragraph", "nested-text")] } as ViewBlock]);
+    expect(html).toMatch(/class="block-callout block-callout-warning"><span class="block-callout-emoji">⚠️<\/span>/);
+    expect(html).toContain("Don&#x27;t load a movement that scored 0");
+    expect(html).toContain("nested-text");
+    expect(html).not.toMatch(/role="(alert|status)"/);
+  });
+
+  it("renders headings 4 and 5 as h5 and h6, and 6 with its real level", () => {
+    const html = render([
+      content("h4", "heading", "four", { level: 4 }),
+      content("h5", "heading", "five", { level: 5 }),
+      content("h6", "heading", "six", { level: 6 }),
+    ]);
+    expect(html).toMatch(/<h5[^>]*><span>four<\/span><\/h5>/);
+    expect(html).toMatch(/<h6[^>]*><span>five<\/span><\/h6>/);
+    expect(html).toMatch(/<div role="heading" aria-level="7" class="block-heading-6"[^>]*><span>six<\/span><\/div>/);
+  });
+});

@@ -39,6 +39,10 @@ const anchors = z
   .optional()
   .describe("End each block's first line with ` ^` and its block ID, to point `suggest` at it (default false)");
 
+/** What every tool that takes Markdown says about it. */
+const MARKDOWN_NOTE =
+  " Markdown as described by get_markdown_guide (including pipe tables, ``` code fences and > [!NOTE] callouts); anything unsupported is kept as text and listed in `warnings` by line.";
+
 /** The MCP server for agents: one tool per agent API function. */
 export function createAgentServer(call: AgentCall): McpServer {
   const server = new McpServer({ name: "notion-task-manager", version: "0.1.0" });
@@ -69,7 +73,8 @@ export function createAgentServer(call: AgentCall): McpServer {
     "create_task",
     {
       description:
-        "Create a task in a project, in its kind's first state. `description` is Markdown (same as `comment`). Chores take `urgency` and `schedule`; updates take `iteratesOn` (a done work task). Returns { ok, id, state }.",
+        "Create a task in a project, in its kind's first state. `description` is Markdown (same as `comment`). Chores take `urgency` and `schedule`; updates take `iteratesOn` (a done work task). Returns { ok, id, state, warnings? }." +
+        MARKDOWN_NOTE,
       inputSchema: {
         project: z.string().describe("Project ID from list_projects"),
         kind: z.enum(["exploration", "update", "work", "chore"]),
@@ -147,7 +152,8 @@ export function createAgentServer(call: AgentCall): McpServer {
     "comment",
     {
       description:
-        "Comment on a work task, in Markdown (paragraphs, # headings, - lists, - [ ] todos, > quotes, **bold**, *italic*, `code`, [links](url); mention with @[Title](task:id) or @[Title](page:id)). Returns { ok, id }.",
+        "Comment on a work task, in Markdown (paragraphs, # headings, - lists, - [ ] todos, > quotes, **bold**, *italic*, `code`, [links](url); mention with @[Title](task:id) or @[Title](page:id)). Returns { ok, id, warnings? }." +
+        MARKDOWN_NOTE,
       inputSchema: { id, markdown: z.string() },
     },
     ({ id, markdown }) => run(call, "POST", `task/${enc(id)}/comment`, { markdown }),
@@ -156,7 +162,9 @@ export function createAgentServer(call: AgentCall): McpServer {
   server.registerTool(
     "append_description",
     {
-      description: "Add Markdown to the end of a work task's description (same Markdown as `comment`). Returns { ok }.",
+      description:
+        "Add Markdown to the end of a work task's description (same Markdown as `comment`). Returns { ok, warnings? }." +
+        MARKDOWN_NOTE,
       inputSchema: { id, markdown: z.string() },
     },
     ({ id, markdown }) => run(call, "POST", `task/${enc(id)}/description`, { markdown }),
@@ -186,7 +194,8 @@ export function createAgentServer(call: AgentCall): McpServer {
     "create_page",
     {
       description:
-        "Create a page titled `title`, with optional Markdown content (same as `comment`; mention with `@[Title](page:id)`). Where it goes: a workspace page by default; with `project`, a document at the top of that project's library; with `parent`, a page inside that page (workspace or library). Give `project` or `parent`, not both. It's added after the existing pages there. Returns { ok, id }.",
+        "Create a page titled `title`, with optional Markdown content (same as `comment`; mention with `@[Title](page:id)`). Where it goes: a workspace page by default; with `project`, a document at the top of that project's library; with `parent`, a page inside that page (workspace or library). Give `project` or `parent`, not both. It's added after the existing pages there. Returns { ok, id, warnings? }." +
+        MARKDOWN_NOTE,
       inputSchema: {
         title: z.string(),
         project: z.string().optional().describe("Project ID from list_projects: create in its knowledge library"),
@@ -201,7 +210,8 @@ export function createAgentServer(call: AgentCall): McpServer {
     "suggest",
     {
       description:
-        "Propose a change to a page or a task's description; a human approves or rejects it, and nothing changes until then. Read it first with `anchors: true` to get block IDs. `insert` adds `markdown` after the block `after`, as the last children of `inside`, or at the end; `replace` swaps the block `target` for `markdown`; `delete` removes `target` and what's nested in it. `note` (at most 280 characters) tells the human why. Works on any page or task, including work another agent holds. Returns { ok, id }.",
+        "Propose a change to a page or a task's description; a human approves or rejects it, and nothing changes until then. Read it first with `anchors: true` to get block IDs. `insert` adds `markdown` after the block `after`, as the last children of `inside`, or at the end; `replace` swaps the block `target` for `markdown`; `delete` removes `target` and what's nested in it. `note` (at most 280 characters) tells the human why. Works on any page or task, including work another agent holds. A table is suggested on as a whole: its rows and cells can't be targets. Returns { ok, id, warnings? }." +
+        MARKDOWN_NOTE,
       inputSchema: {
         page: z.string().optional().describe("Page ID from search_pages (or give `task`)"),
         task: z.string().optional().describe("Task ID: suggest on its description (or give `page`)"),
@@ -233,6 +243,15 @@ export function createAgentServer(call: AgentCall): McpServer {
       inputSchema: { id: z.string().describe("Suggestion ID from suggest") },
     },
     ({ id }) => run(call, "POST", `suggestion/${enc(id)}/withdraw`, {}),
+  );
+
+  server.registerTool(
+    "get_markdown_guide",
+    {
+      description:
+        "The Markdown you can write in comments, descriptions, pages and suggestions: { blocks: [{ type, markdown, example }], inline, unsupported }. Check it before writing tables, code or callouts; what's unsupported is kept as text and reported in `warnings`.",
+    },
+    () => run(call, "GET", "markdown"),
   );
 
   return server;

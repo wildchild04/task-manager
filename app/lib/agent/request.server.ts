@@ -28,6 +28,7 @@ const ROUTES: { method: "GET" | "POST"; path: string; handler: Handler }[] = [
   { method: "POST", path: "suggestion/:id/withdraw", handler: (s, a, p) => api.withdrawSuggestion(s, a, p.id!) },
   { method: "POST", path: "suggestion/:id/approve", handler: () => api.resolveSuggestion() },
   { method: "POST", path: "suggestion/:id/reject", handler: () => api.resolveSuggestion() },
+  { method: "GET", path: "markdown", handler: () => api.markdownGuide() },
 ];
 
 function match(method: string, path: string) {

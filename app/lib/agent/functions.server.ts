@@ -1,7 +1,14 @@
 import { z } from "zod";
 
 import type { AppServices } from "~/composition";
-import { fromMarkdown, type MarkdownReader, type MarkdownWriter, SUGGESTION_TAG, toMarkdown } from "~/domain/blocks/markdown";
+import {
+  fromMarkdown,
+  MARKDOWN_GUIDE,
+  type MarkdownReader,
+  type MarkdownWriter,
+  SUGGESTION_TAG,
+  toMarkdown,
+} from "~/domain/blocks/markdown";
 import { plainText } from "~/domain/blocks/text";
 import type { Batch, TreeNode } from "~/domain/blocks/types";
 import { urgencySchema } from "~/domain/chores/schedule";
@@ -135,11 +142,27 @@ function writer(services: AppServices): MarkdownWriter {
 const markdownOf = (services: AppServices, tree: TreeNode | undefined, anchors = false) =>
   toMarkdown(tree?.children ?? [], reader(services, anchors));
 
-/** Markdown an agent wrote, as blocks. Suggestions are read, never written as Markdown. */
+/** How agents' Markdown is read and written, for tools that convert content as agents see it. */
+export const agentMarkdown = (services: AppServices) => ({ reader: reader(services), writer: writer(services) });
+
+/**
+ * Markdown an agent wrote, as blocks, with what it held that isn't supported
+ * (kept as text). Suggestions are read, never written as Markdown.
+ */
 function blocksOf(services: AppServices, markdown: string) {
   if (SUGGESTION_TAG.test(markdown))
     throw new AgentError(422, "validation", "Suggestions can't be written as Markdown; use `suggest`");
-  return fromMarkdown(markdown, writer(services));
+  const warnings: string[] = [];
+  return { blocks: fromMarkdown(markdown, writer(services), warnings), warnings };
+}
+
+/** A write's answer with its warnings, only when there are any. */
+const withWarnings = <T extends object>(answer: T, warnings: readonly string[]) =>
+  warnings.length > 0 ? { ...answer, warnings: [...warnings] } : answer;
+
+/** The Markdown agents may write, and what isn't supported. */
+export function markdownGuide() {
+  return MARKDOWN_GUIDE;
 }
 
 // ----- Reads -----
@@ -310,7 +333,7 @@ export function createTask(services: AppServices, input: unknown) {
     "project",
   );
   const iteratesOn = body.iteratesOn ? findTask(services, body.iteratesOn).id : undefined;
-  const blocks = body.description ? blocksOf(services, body.description) : [];
+  const { blocks, warnings } = body.description ? blocksOf(services, body.description) : { blocks: [], warnings: [] };
   try {
     const task = services.tasks.create({
       id: crypto.randomUUID(),
@@ -328,7 +351,7 @@ export function createTask(services: AppServices, input: unknown) {
         : {}),
     });
     if (blocks.length > 0) appendBlocks(services, task.bodyPageId, blocks);
-    return { ok: true as const, id: short(task.id), state: task.state };
+    return withWarnings({ ok: true as const, id: short(task.id), state: task.state }, warnings);
   } catch (error) {
     return toAgentError(error);
   }
@@ -369,7 +392,7 @@ export function createPage(services: AppServices, input: unknown) {
     parentId = services.projects.get(projectId)!.libraryRootId;
   }
   const siblings = parentId ? services.blocks.getChildren(parentId) : services.blocks.listRootPages();
-  const blocks = body.markdown ? blocksOf(services, body.markdown) : [];
+  const { blocks, warnings } = body.markdown ? blocksOf(services, body.markdown) : { blocks: [], warnings: [] };
   const id = crypto.randomUUID();
   try {
     services.blocks.apply([
@@ -379,7 +402,7 @@ export function createPage(services: AppServices, input: unknown) {
   } catch (error) {
     throw new AgentError(422, "validation", error instanceof Error ? error.message : "The page couldn't be created");
   }
-  return { ok: true as const, id: short(id) };
+  return withWarnings({ ok: true as const, id: short(id) }, warnings);
 }
 
 const transitionBody = z.object({ name: z.string().min(1), reason: z.string().optional() });
@@ -409,13 +432,11 @@ export function comment(services: AppServices, actor: AgentActor, id: string, in
   const task = findTask(services, id);
   checkWork(task);
   checkHeld(services, task, actor);
-  const blocks = blocksOf(services, markdown);
+  const { blocks, warnings } = blocksOf(services, markdown);
   if (blocks.length === 0) throw new AgentError(422, "validation", "The comment is empty");
   try {
-    return {
-      ok: true as const,
-      id: short(services.comments.add({ id: crypto.randomUUID(), taskId: task.id, author: actor, blocks }).id),
-    };
+    const added = services.comments.add({ id: crypto.randomUUID(), taskId: task.id, author: actor, blocks });
+    return withWarnings({ ok: true as const, id: short(added.id) }, warnings);
   } catch (error) {
     return toAgentError(error);
   }
@@ -426,10 +447,10 @@ export function appendDescription(services: AppServices, actor: AgentActor, id: 
   const task = findTask(services, id);
   checkWork(task);
   checkHeld(services, task, actor);
-  const blocks = blocksOf(services, markdown);
+  const { blocks, warnings } = blocksOf(services, markdown);
   if (blocks.length === 0) throw new AgentError(422, "validation", "Nothing to add");
   appendBlocks(services, task.bodyPageId, blocks);
-  return { ok: true as const };
+  return withWarnings({ ok: true as const }, warnings);
 }
 
 // ----- Suggestions -----
@@ -480,6 +501,7 @@ export function suggest(services: AppServices, actor: AgentActor, input: unknown
       );
   const ids = blockIds(services, pageId);
   const block = (id: string | undefined) => (id === undefined ? undefined : resolveId(id, ids, "block"));
+  const { blocks, warnings } = body.markdown ? blocksOf(services, body.markdown) : { blocks: [], warnings: [] };
   try {
     const suggestion = services.suggestions.suggest({
       pageId,
@@ -487,11 +509,11 @@ export function suggest(services: AppServices, actor: AgentActor, input: unknown
       afterId: block(body.after),
       insideId: block(body.inside),
       targetId: block(body.target),
-      blocks: body.markdown ? blocksOf(services, body.markdown) : [],
+      blocks,
       note: body.note,
       author: actor.name,
     });
-    return { ok: true as const, id: short(suggestion.id) };
+    return withWarnings({ ok: true as const, id: short(suggestion.id) }, warnings);
   } catch (error) {
     return fromSuggestionError(error);
   }

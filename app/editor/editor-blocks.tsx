@@ -1,10 +1,21 @@
-import { Checkbox, Divider, IconButton, Typography } from "@wildchild/design-system";
-import { memo, useContext, useLayoutEffect, useRef } from "react";
+import { Button, Checkbox, Divider, IconButton, Menu, Typography } from "@wildchild/design-system";
+import { memo, type ReactNode, useContext, useLayoutEffect, useRef, useState } from "react";
 
-import { PageLink, ReferenceBlockView, SuggestionBox, SuggestionsContext } from "../blocks/block-view";
+import {
+  CalloutFrame,
+  HeadingText,
+  PageLink,
+  ReferenceBlockView,
+  SuggestionBox,
+  SuggestionsContext,
+  TableFrame,
+} from "../blocks/block-view";
 import { MentionTargetsContext } from "../blocks/rich-text";
 import type { ReferenceView } from "../blocks/view-model";
+import { CALLOUT_TONES, type CalloutTone } from "~/domain/blocks/types";
+import type { Editor } from "~/editor/editor";
 import type { EditorBlock, EditorState } from "~/editor/editor-state";
+import { cellPosition } from "~/editor/tables";
 import { renderRichText } from "./dom-caret";
 
 /**
@@ -46,6 +57,8 @@ export const EditableText = memo(function EditableText({
 export type BlockActions = {
   toggleTodo: (id: string) => void;
   toggleOpen: (id: string) => void;
+  /** Runs an editor command from a block's own controls (table, code and callout menus), then puts the caret back. */
+  run: (command: (editor: Editor) => unknown) => void;
 };
 
 type BlockProps = {
@@ -55,8 +68,6 @@ type BlockProps = {
   references: Record<string, ReferenceView>;
   actions: BlockActions;
 };
-
-const headingVariants = { 1: "h2", 2: "h3", 3: "h4" } as const;
 
 /** Nested blocks. Under a toggle or todo they line up with its text, past the arrow or checkbox. */
 function Children({ gutter, ...props }: Omit<BlockProps, "block"> & { ids: readonly string[]; gutter?: boolean }) {
@@ -91,9 +102,9 @@ const EditorBlock = memo(function EditorBlock(props: BlockProps) {
     case "heading":
       return (
         <div className="editor-block">
-          <Typography variant={headingVariants[block.props.level as 1 | 2 | 3] ?? "h2"}>
+          <HeadingText level={Number(block.props.level ?? 1)}>
             <EditableText block={block} placeholder={`Heading ${String(block.props.level ?? 1)}`} />
-          </Typography>
+          </HeadingText>
           {children}
         </div>
       );
@@ -173,6 +184,24 @@ const EditorBlock = memo(function EditorBlock(props: BlockProps) {
       );
     case "suggestion":
       return <SuggestionBlock id={block.id} />;
+    case "table":
+      return <TableBlock state={state} table={block} actions={actions} />;
+    case "code":
+      return <CodeBlockEditor block={block} actions={actions} />;
+    case "callout":
+      return (
+        <div className="editor-block">
+          <CalloutFrame
+            tone={(block.props.tone as CalloutTone) ?? "default"}
+            emoji={<CalloutStyleButton id={block.id} emoji={String(block.props.emoji ?? "💡")} actions={actions} />}
+          >
+            <Typography>
+              <EditableText block={block} placeholder="Callout" />
+            </Typography>
+            {children}
+          </CalloutFrame>
+        </div>
+      );
     default:
       return null;
   }
@@ -185,6 +214,179 @@ function SuggestionBlock({ id }: { id: string }) {
     <div className="editor-block" contentEditable={false}>
       {suggestion && <SuggestionBox suggestion={suggestion} />}
     </div>
+  );
+}
+
+/** A button that opens a menu of commands, keeping the caret where it was. */
+function CommandMenu({
+  label,
+  ariaLabel,
+  button,
+  options,
+}: {
+  label?: ReactNode;
+  ariaLabel: string;
+  button?: "text" | "icon";
+  options: { value: string; label: ReactNode; disabled?: boolean; onClick: () => void }[];
+}) {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  return (
+    <span contentEditable={false} onMouseDown={(event) => event.preventDefault()}>
+      {button === "icon" ? (
+        <IconButton ariaLabel={ariaLabel} icon="menu" size="small" onClick={(event) => setAnchor(event.currentTarget)} />
+      ) : (
+        <Button size="small" variant="text" ariaLabel={ariaLabel} onClick={(event) => setAnchor(event.currentTarget)}>
+          {label}
+        </Button>
+      )}
+      <Menu
+        dense
+        open={anchor !== null}
+        anchorEl={anchor}
+        options={options}
+        onClose={() => setAnchor(null)}
+        onSelect={() => setAnchor(null)}
+      />
+    </span>
+  );
+}
+
+/**
+ * A table: each cell's editable text in the table frame, and under it adding
+ * a row or a column and a menu for the row and column the caret is in.
+ */
+function TableBlock({ state, table, actions }: { state: EditorState; table: EditorBlock; actions: BlockActions }) {
+  const rows = table.children.map((rowId) => ({
+    id: rowId,
+    cells: (state.blocks[rowId]?.children ?? []).map((cellId) => ({
+      id: cellId,
+      content: state.blocks[cellId] ? <EditableText block={state.blocks[cellId]} ariaLabel="Cell" /> : null,
+    })),
+  }));
+  /** Runs a command on the caret's row and column, if the caret is in this table. */
+  const atCaret = (command: (editor: Editor, at: { rowId: string; column: number }) => unknown) =>
+    actions.run((editor) => {
+      const at = cellPosition(editor.state, editor.selection.blockId);
+      if (at?.tableId === table.id) command(editor, at);
+    });
+  const toggle = (which: "headerRow" | "headerColumn", label: string) => ({
+    value: which,
+    label: `${table.props[which] ? "✓ " : ""}${label}`,
+    onClick: () => actions.run((editor) => editor.toggleTableHeader(table.id, which)),
+  });
+  return (
+    <div className="editor-block editor-table">
+      <TableFrame headerRow={table.props.headerRow === true} headerColumn={table.props.headerColumn === true} rows={rows} />
+      <div className="editor-table-controls" contentEditable={false}>
+        <Button size="small" variant="text" onClick={() => actions.run((editor) => editor.addTableRow(table.id))}>
+          + Row
+        </Button>
+        <Button size="small" variant="text" onClick={() => actions.run((editor) => editor.addTableColumn(table.id))}>
+          + Column
+        </Button>
+        <CommandMenu
+          ariaLabel="Table actions"
+          button="icon"
+          options={[
+            {
+              value: "row-above",
+              label: "Insert row above",
+              onClick: () => atCaret((e, at) => e.addTableRow(table.id, { rowId: at.rowId, side: "before" })),
+            },
+            {
+              value: "row-below",
+              label: "Insert row below",
+              onClick: () => atCaret((e, at) => e.addTableRow(table.id, { rowId: at.rowId, side: "after" })),
+            },
+            {
+              value: "col-left",
+              label: "Insert column left",
+              onClick: () => atCaret((e, at) => e.addTableColumn(table.id, { column: at.column, side: "before" })),
+            },
+            {
+              value: "col-right",
+              label: "Insert column right",
+              onClick: () => atCaret((e, at) => e.addTableColumn(table.id, { column: at.column, side: "after" })),
+            },
+            { value: "row-up", label: "Move row up", onClick: () => atCaret((e, at) => e.moveTableRow(at.rowId, -1)) },
+            { value: "row-down", label: "Move row down", onClick: () => atCaret((e, at) => e.moveTableRow(at.rowId, 1)) },
+            {
+              value: "col-left-move",
+              label: "Move column left",
+              onClick: () => atCaret((e, at) => e.moveTableColumn(table.id, at.column, -1)),
+            },
+            {
+              value: "col-right-move",
+              label: "Move column right",
+              onClick: () => atCaret((e, at) => e.moveTableColumn(table.id, at.column, 1)),
+            },
+            { value: "row-delete", label: "Delete row", onClick: () => atCaret((e, at) => e.deleteTableRow(at.rowId)) },
+            {
+              value: "col-delete",
+              label: "Delete column",
+              onClick: () => atCaret((e, at) => e.deleteTableColumn(table.id, at.column)),
+            },
+            toggle("headerRow", "Header row"),
+            toggle("headerColumn", "Header column"),
+            {
+              value: "table-delete",
+              label: "Delete table",
+              onClick: () => actions.run((editor) => editor.deleteTable(table.id)),
+            },
+          ]}
+        />
+      </div>
+    </div>
+  );
+}
+
+const CODE_LANGUAGES = ["", "ts", "tsx", "js", "json", "sh", "python", "go", "rust", "sql", "html", "css", "yaml", "md"];
+
+/** A code block: its language, then its text in a monospace surface (plain text, lines kept). */
+function CodeBlockEditor({ block, actions }: { block: EditorBlock; actions: BlockActions }) {
+  const language = String(block.props.language ?? "");
+  const languages = CODE_LANGUAGES.includes(language) ? CODE_LANGUAGES : [...CODE_LANGUAGES, language];
+  return (
+    <div className="editor-block editor-code">
+      <div className="editor-code-header" contentEditable={false}>
+        <CommandMenu
+          ariaLabel="Code language"
+          label={language || "Plain text"}
+          options={languages.map((value) => ({
+            value: value || "plain",
+            label: value || "Plain text",
+            onClick: () => actions.run((editor) => editor.setCodeLanguage(block.id, value)),
+          }))}
+        />
+      </div>
+      <pre className="editor-code-body">
+        <EditableText block={block} placeholder="Code" ariaLabel={language ? `Code, ${language}` : "Code"} />
+      </pre>
+    </div>
+  );
+}
+
+const CALLOUT_EMOJIS = ["💡", "ℹ️", "✅", "⚠️", "❗", "📌", "🔥", "📝"];
+
+/** A callout's emoji, which opens its choice of emoji and tone. */
+function CalloutStyleButton({ id, emoji, actions }: { id: string; emoji: string; actions: BlockActions }) {
+  return (
+    <CommandMenu
+      ariaLabel="Callout emoji and colour"
+      label={emoji}
+      options={[
+        ...CALLOUT_EMOJIS.map((value) => ({
+          value: `emoji-${value}`,
+          label: value,
+          onClick: () => actions.run((editor) => editor.setCalloutStyle(id, { emoji: value })),
+        })),
+        ...CALLOUT_TONES.map((tone) => ({
+          value: `tone-${tone}`,
+          label: `${tone[0]!.toUpperCase()}${tone.slice(1)} colour`,
+          onClick: () => actions.run((editor) => editor.setCalloutStyle(id, { tone })),
+        })),
+      ]}
+    />
   );
 }
 

@@ -26,6 +26,12 @@ export function plain(text: RichText): string {
   return text.map((s) => s.text).join("");
 }
 
+/** The text without marks or mentions, as a code block holds it. */
+export function withoutFormatting(text: RichText): RichText {
+  const value = plain(text).replaceAll(MENTION_TEXT, "");
+  return value ? [{ text: value }] : [];
+}
+
 export function length(text: RichText): number {
   return plain(text).length;
 }

@@ -94,7 +94,7 @@ export function blockRepositoryContract(name: string, factory: ContractFactory) 
       });
 
       it("rejects invalid props, naming the prop", () => {
-        const error = expectRejected(() => apply([ins(nb("H", "heading", { props: { level: 4 } }), "P")]),
+        const error = expectRejected(() => apply([ins(nb("H", "heading", { props: { level: 7 } }), "P")]),
           0,
           "validation",
         );
@@ -103,6 +103,73 @@ export function blockRepositoryContract(name: string, factory: ContractFactory) 
 
       it("rejects an unknown type", () => {
         expectRejected(() => apply([ins(nb("K", "kanban" as BlockType), "P")]), 0, "validation");
+      });
+    });
+
+    describe("new block types", () => {
+      it("takes headings up to level 6, callout defaults, and code languages", () => {
+        apply([
+          ins(nb("H", "heading", { props: { level: 6 } }), "P"),
+          ins(nb("C", "callout", { content: text("Note") }), "P"),
+          ins(nb("K", "code", { props: { language: "ts" }, content: text("let x = 1;") }), "P"),
+        ]);
+        expect(blocks.getBlock("H")?.props).toEqual({ level: 6 });
+        expect(blocks.getBlock("C")?.props).toEqual({ emoji: "💡", tone: "default" });
+        expect(blocks.getBlock("K")?.props).toEqual({ language: "ts" });
+      });
+
+      it("keeps code plain and a callout's emoji to one character", () => {
+        expectRejected(() => apply([ins(nb("K", "code", { content: [{ text: "x", marks: ["bold"] }] }), "P")]), 0, "validation");
+        expectRejected(() => apply([ins(nb("C", "callout", { props: { emoji: "🙂🙂" } }), "P")]), 0, "validation");
+      });
+    });
+
+    describe("table shape", () => {
+      /** A table T with rows R1, R2 of cells R1a, R1b and R2a, R2b. */
+      const table = () =>
+        apply([
+          ins(nb("T", "table"), "P"),
+          ins(nb("R1", "table_row"), "T"),
+          ins(nb("R1a", "table_cell", { content: text("a") }), "R1"),
+          ins(nb("R1b", "table_cell", { content: text("b") }), "R1", "R1a"),
+          ins(nb("R2", "table_row"), "T", "R1"),
+          ins(nb("R2a", "table_cell"), "R2"),
+          ins(nb("R2b", "table_cell"), "R2", "R2a"),
+        ]);
+      const widths = () => children("T").map((row) => children(row).length);
+
+      it("builds a table in one batch, with header row by default", () => {
+        table();
+        expect(blocks.getBlock("T")?.props).toEqual({ headerRow: true, headerColumn: false });
+        expect(widths()).toEqual([2, 2]);
+      });
+
+      it("adds a column in one batch, and refuses a ragged table whole", () => {
+        table();
+        apply([ins(nb("R1c", "table_cell"), "R1", "R1b"), ins(nb("R2c", "table_cell"), "R2", "R2b")]);
+        expect(widths()).toEqual([3, 3]);
+        expectRejected(() => apply([ins(nb("R1d", "table_cell"), "R1", "R1c")]), 0, "validation");
+        expect(widths()).toEqual([3, 3]);
+      });
+
+      it("refuses a table left without rows or with an empty row, but deletes a whole table", () => {
+        table();
+        expectRejected(() => apply([{ op: "delete", id: "R1" }, { op: "delete", id: "R2" }]), 1, "validation");
+        expectRejected(() => apply([{ op: "delete", id: "R2a" }, { op: "delete", id: "R2b" }, { op: "delete", id: "R1a" }]), 2, "validation");
+        apply([{ op: "delete", id: "R2" }]);
+        expect(widths()).toEqual([2]);
+        apply([{ op: "delete", id: "T" }]);
+        expect(blocks.getBlock("R1a")).toBeUndefined();
+      });
+
+      it("keeps rows in tables and cells in rows", () => {
+        table();
+        expectRejected(() => apply([ins(nb("X", "paragraph"), "R1")]), 0, "invalid_parent");
+        expectRejected(() => apply([ins(nb("X", "paragraph"), "T")]), 0, "invalid_parent");
+        expectRejected(() => apply([ins(nb("X", "table_cell"), "P")]), 0, "invalid_parent");
+        expectRejected(() => apply([{ op: "move", id: "A", parentId: "R1" }]), 0, "invalid_parent");
+        expectRejected(() => apply([{ op: "update", id: "A", type: "table_cell" }]), 0, "invalid_type_change");
+        expectRejected(() => apply([{ op: "update", id: "R1a", type: "paragraph" }]), 0, "invalid_type_change");
       });
     });
 

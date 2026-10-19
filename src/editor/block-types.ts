@@ -1,11 +1,14 @@
 import type { BlockType } from "~/domain/blocks/types";
 
-/** What Enter creates after a block (or before it, at its start). */
-export type EnterRule = "paragraph" | "same-type" | "unchecked-todo" | "first-child-when-open";
+/**
+ * What Enter does: create a block after this one (or before it, at its start), add a line (code), or move to
+ * the cell below (a table cell).
+ */
+export type EnterRule = "paragraph" | "same-type" | "unchecked-todo" | "first-child-when-open" | "line-break" | "cell-below";
 
 /** What a block becomes on Enter when it is empty, or on Backspace at its start. */
-export type EmptyRule = "new-block" | "becomes-paragraph";
-export type BackspaceRule = "merge" | "becomes-paragraph";
+export type EmptyRule = "new-block" | "becomes-paragraph" | "line-break" | "cell-below";
+export type BackspaceRule = "merge" | "becomes-paragraph" | "paragraph-when-empty" | "nothing";
 
 /** How a block type behaves in the editor. */
 export type BlockTypeBehavior = {
@@ -24,8 +27,11 @@ export function defineBlockType(behavior: BlockTypeBehavior): BlockTypeBehavior 
   return behavior;
 }
 
-const textBlock = (type: BlockType, rules: Pick<BlockTypeBehavior, "enter" | "enterWhenEmpty" | "backspaceAtStart">) =>
-  defineBlockType({ type, text: true, children: true, ...rules });
+const textBlock = (
+  type: BlockType,
+  rules: Pick<BlockTypeBehavior, "enter" | "enterWhenEmpty" | "backspaceAtStart">,
+  children = true,
+) => defineBlockType({ type, text: true, children, ...rules });
 
 const nonText = (type: BlockType) =>
   defineBlockType({ type, text: false, children: false, enter: "paragraph", enterWhenEmpty: "new-block", backspaceAtStart: "merge" });
@@ -51,6 +57,11 @@ export const BLOCK_TYPES: Readonly<Partial<Record<BlockType, BlockTypeBehavior>>
     backspaceAtStart: "becomes-paragraph",
   }),
   quote: textBlock("quote", { enter: "paragraph", enterWhenEmpty: "becomes-paragraph", backspaceAtStart: "becomes-paragraph" }),
+  callout: textBlock("callout", { enter: "paragraph", enterWhenEmpty: "becomes-paragraph", backspaceAtStart: "becomes-paragraph" }),
+  code: textBlock("code", { enter: "line-break", enterWhenEmpty: "line-break", backspaceAtStart: "paragraph-when-empty" }, false),
+  table_cell: textBlock("table_cell", { enter: "cell-below", enterWhenEmpty: "cell-below", backspaceAtStart: "nothing" }, false),
+  table: nonText("table"),
+  table_row: nonText("table_row"),
   divider: nonText("divider"),
   reference: nonText("reference"),
   page: nonText("page"),
@@ -68,6 +79,9 @@ export const MARKDOWN_SHORTCUTS: Readonly<Record<string, TypeChange>> = {
   "#": { type: "heading", props: { level: 1 } },
   "##": { type: "heading", props: { level: 2 } },
   "###": { type: "heading", props: { level: 3 } },
+  "####": { type: "heading", props: { level: 4 } },
+  "#####": { type: "heading", props: { level: 5 } },
+  "######": { type: "heading", props: { level: 6 } },
   "-": { type: "bulleted_list_item", props: {} },
   "*": { type: "bulleted_list_item", props: {} },
   "1.": { type: "numbered_list_item", props: {} },
@@ -78,14 +92,21 @@ export const MARKDOWN_SHORTCUTS: Readonly<Record<string, TypeChange>> = {
 /** Typed as the whole content of a paragraph, this turns it into a divider. */
 export const DIVIDER_SHORTCUT = "---";
 
-/** A slash menu command: turn the block into a type, or add a divider. */
+/** A paragraph holding only ```` ``` ```` and a language becomes, on Enter, an empty code block of that language. */
+export const CODE_SHORTCUT = /^```([^\s`]{0,32})$/;
+
+/** A new table's size, and the props a new callout starts with. */
+export const NEW_TABLE = { rows: 3, columns: 3 } as const;
+export const NEW_CALLOUT = { emoji: "💡", tone: "default" } as const;
+
+/** A slash menu command: turn the block into a type, or add a divider or a table. */
 export type SlashCommand = {
   value: string;
   label: string;
   description: string;
   /** Extra words the filter matches. */
   keywords: readonly string[];
-  action: TypeChange | "divider";
+  action: TypeChange | "divider" | "table";
 };
 
 export const SLASH_COMMANDS: readonly SlashCommand[] = [
@@ -93,11 +114,17 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
   { value: "heading-1", label: "Heading 1", description: "Big section heading", keywords: ["h1", "title"], action: { type: "heading", props: { level: 1 } } },
   { value: "heading-2", label: "Heading 2", description: "Medium section heading", keywords: ["h2", "subtitle"], action: { type: "heading", props: { level: 2 } } },
   { value: "heading-3", label: "Heading 3", description: "Small section heading", keywords: ["h3"], action: { type: "heading", props: { level: 3 } } },
+  { value: "heading-4", label: "Heading 4", description: "Smaller heading", keywords: ["h4"], action: { type: "heading", props: { level: 4 } } },
+  { value: "heading-5", label: "Heading 5", description: "Minor heading", keywords: ["h5"], action: { type: "heading", props: { level: 5 } } },
+  { value: "heading-6", label: "Heading 6", description: "Smallest heading", keywords: ["h6"], action: { type: "heading", props: { level: 6 } } },
   { value: "bulleted", label: "Bulleted list", description: "A simple bulleted list", keywords: ["bullet", "unordered", "ul"], action: { type: "bulleted_list_item", props: {} } },
   { value: "numbered", label: "Numbered list", description: "A list with numbering", keywords: ["ordered", "ol", "number"], action: { type: "numbered_list_item", props: {} } },
   { value: "todo", label: "To-do", description: "Track a task with a checkbox", keywords: ["checkbox", "task", "check"], action: { type: "todo", props: { checked: false } } },
   { value: "toggle", label: "Toggle", description: "Hide content inside", keywords: ["collapse", "fold"], action: { type: "toggle", props: {} } },
   { value: "quote", label: "Quote", description: "Capture a quote", keywords: ["blockquote", "citation"], action: { type: "quote", props: {} } },
+  { value: "callout", label: "Callout", description: "Make a note stand out", keywords: ["note", "tip", "warning", "info"], action: { type: "callout", props: { ...NEW_CALLOUT } } },
+  { value: "code", label: "Code", description: "A block of code", keywords: ["snippet", "pre"], action: { type: "code", props: { language: "" } } },
+  { value: "table", label: "Table", description: "Rows and columns", keywords: ["grid", "rows", "columns"], action: "table" },
   { value: "divider", label: "Divider", description: "Separate sections", keywords: ["line", "separator", "hr"], action: "divider" },
 ];
 

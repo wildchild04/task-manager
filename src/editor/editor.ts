@@ -1,4 +1,4 @@
-import { MENTION_TEXT, type Operation, type SimpleMark } from "~/domain/blocks/types";
+import { type CalloutTone, MENTION_TEXT, type Operation, type SimpleMark } from "~/domain/blocks/types";
 
 import type { SlashCommand } from "./block-types";
 import * as commands from "./commands";
@@ -6,6 +6,8 @@ import type { CommandResult, DeleteUnit } from "./commands";
 import { applyOps, caret, type EditorState, getBlock, invert, isCollapsed, type Selection } from "./editor-state";
 import { length, plain } from "./rich-text";
 import { History } from "./history";
+import * as tables from "./tables";
+import type { TableSide } from "./tables";
 
 /** Every toggle of a state, folded. */
 const foldedToggles = (state: EditorState): Set<string> =>
@@ -140,6 +142,76 @@ export class Editor {
 
   outdent(): boolean {
     return this.run(commands.outdent(this.state, this.selection));
+  }
+
+  /**
+   * Tab (Shift+Tab with `backward`): in a table cell, the next (previous) cell, adding a row after the last;
+   * in code, indents (outdents) the line; elsewhere, nests (un-nests) the block.
+   */
+  tab(backward = false): boolean {
+    const { blockId } = this.selection;
+    const { type } = getBlock(this.state, blockId);
+    if (type === "table_cell") return this.run(tables.tabCell(this.state, blockId, backward, this.newId));
+    if (type === "code") return this.run(commands.indentCode(this.state, this.selection, backward));
+    return backward ? this.outdent() : this.indent();
+  }
+
+  /** Cmd/Ctrl+Enter: leaves a code block for a new paragraph after it. Returns false outside code. */
+  exitBlock(): boolean {
+    return this.run(commands.exitCode(this.state, this.selection, this.context));
+  }
+
+  // ----- Tables (each one undo step) -----
+
+  /** Adds a row of empty cells before or after a row, or at the bottom; the caret goes to its first cell. */
+  addTableRow(tableId: string, at?: { rowId: string; side: TableSide }): boolean {
+    return this.run(tables.addRow(this.state, tableId, at, this.newId));
+  }
+
+  /** Adds a column of empty cells before or after column `at.column` (from 0), or at the right. */
+  addTableColumn(tableId: string, at?: { column: number; side: TableSide }): boolean {
+    return this.run(tables.addColumn(this.state, tableId, at, this.newId));
+  }
+
+  /** Moves a row up (`-1`) or down (`1`). */
+  moveTableRow(rowId: string, step: -1 | 1): boolean {
+    return this.run(tables.moveRow(this.state, rowId, step, this.selection));
+  }
+
+  /** Moves column `column` (from 0) left (`-1`) or right (`1`). */
+  moveTableColumn(tableId: string, column: number, step: -1 | 1): boolean {
+    return this.run(tables.moveColumn(this.state, tableId, column, step, this.selection));
+  }
+
+  /** Deletes a row; refused (false) when it's the table's only row. */
+  deleteTableRow(rowId: string): boolean {
+    return this.run(tables.deleteRow(this.state, rowId, this.selection));
+  }
+
+  /** Deletes column `column` (from 0); refused (false) when it's the table's only column. */
+  deleteTableColumn(tableId: string, column: number): boolean {
+    return this.run(tables.deleteColumn(this.state, tableId, column, this.selection));
+  }
+
+  /** Turns a table's header row or header column on or off. */
+  toggleTableHeader(tableId: string, which: "headerRow" | "headerColumn"): boolean {
+    return this.run(tables.toggleHeader(this.state, tableId, which, this.selection));
+  }
+
+  deleteTable(tableId: string): boolean {
+    return this.run(tables.deleteTable(this.state, tableId, this.selection, this.closed));
+  }
+
+  // ----- Code and callouts -----
+
+  /** Sets a code block's language; empty for plain text. */
+  setCodeLanguage(id: string, language: string): boolean {
+    return this.run(commands.setCodeLanguage(this.state, id, language, this.selection));
+  }
+
+  /** Changes a callout's emoji, tone, or both. */
+  setCalloutStyle(id: string, style: { emoji?: string; tone?: CalloutTone }): boolean {
+    return this.run(commands.setCalloutStyle(this.state, id, style, this.selection));
   }
 
   toggleMark(mark: SimpleMark): boolean {

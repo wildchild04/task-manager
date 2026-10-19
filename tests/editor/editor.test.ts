@@ -6,6 +6,7 @@ import { matchSlashCommands, SLASH_COMMANDS } from "~/editor/block-types";
 import { Editor } from "~/editor/editor";
 import { caret, documentOrder, type EditorState, stateFromTree } from "~/editor/editor-state";
 import { plain } from "~/editor/rich-text";
+import { verticalNeighbour } from "~/editor/tables";
 
 type Seed = NewBlock & { children?: Seed[] };
 
@@ -323,6 +324,238 @@ describe("editor", () => {
     });
   });
 
+  describe("tables", () => {
+    const cell = (id: string, value = ""): Seed => ({ id, type: "table_cell", content: value ? [{ text: value }] : [] });
+    /** T: a 2×2 table, rows r1 [a, b] and r2 [c, d], between paragraphs "Before" and "After". */
+    const seedTable = () =>
+      seed([
+        p("x", "Before"),
+        {
+          id: "T",
+          type: "table",
+          props: { headerRow: true, headerColumn: false },
+          children: [
+            { id: "r1", type: "table_row", children: [cell("a", "A"), cell("b", "B")] },
+            { id: "r2", type: "table_row", children: [cell("c", "C"), cell("d", "D")] },
+          ],
+        },
+        p("y", "After"),
+      ]);
+    const grid = () =>
+      getBlockIds("T").map((row) => getBlockIds(row).map((id) => plain(services.blocks.getBlock(id)!.content)));
+    const getBlockIds = (id: string) => services.blocks.getChildren(id).map((b) => b.id);
+
+    it("moves through cells with Tab and Shift+Tab, adding a row from the last cell", () => {
+      seedTable();
+      at("a", 1);
+      editor.tab();
+      expect(editor.selection).toEqual(caret("b", 0));
+      editor.tab();
+      expect(editor.selection).toEqual(caret("c", 0));
+      editor.tab(true);
+      expect(editor.selection).toEqual(caret("b", 0));
+      at("d", 1);
+      editor.tab();
+      expect(grid()).toEqual([["A", "B"], ["C", "D"], ["", ""]]);
+      expect(editor.selection).toEqual(caret(getBlockIds(getBlockIds("T")[2]!)[0]!, 0));
+      expectInSync();
+    });
+
+    it("moves down with Enter without splitting, adding a row from the last row; Shift+Enter breaks a line", () => {
+      seedTable();
+      at("b", 1);
+      editor.enter();
+      expect(editor.selection).toEqual(caret("d", 0));
+      expect(grid()).toEqual([["A", "B"], ["C", "D"]]);
+      editor.enter();
+      expect(grid()).toEqual([["A", "B"], ["C", "D"], ["", ""]]);
+      expect(editor.selection).toEqual(caret(getBlockIds(getBlockIds("T")[2]!)[1]!, 0));
+      at("a", 1);
+      editor.lineBreak();
+      expect(grid()[0]).toEqual(["A\n", "B"]);
+      expectInSync();
+    });
+
+    it("never merges at a cell's edges, steps over the table with Backspace, and doesn't nest into it", () => {
+      seedTable();
+      at("c", 0);
+      editor.deleteBackward();
+      at("a", 1);
+      editor.deleteForward();
+      expect(grid()).toEqual([["A", "B"], ["C", "D"]]);
+      at("y", 0);
+      editor.deleteBackward();
+      expect(editor.selection).toEqual(caret("d", 1));
+      expect(outline()).toContain("paragraph:After");
+      expect(editor.indent()).toBe(false);
+      at("x", 6);
+      editor.deleteForward();
+      expect(outline()[0]).toBe("paragraph:Before");
+    });
+
+    it("moves by column with ↑ and ↓, leaving the table from its first or last row", () => {
+      seedTable();
+      expect(verticalNeighbour(editor.state, "b", false)).toBe("d");
+      expect(verticalNeighbour(editor.state, "d", true)).toBe("b");
+      expect(verticalNeighbour(editor.state, "a", true)).toBe("x");
+      expect(verticalNeighbour(editor.state, "c", false)).toBe("y");
+    });
+
+    it("adds, moves and deletes rows and columns as single undo steps", () => {
+      seedTable();
+      at("a", 0);
+      editor.addTableColumn("T");
+      expect(grid()).toEqual([["A", "B", ""], ["C", "D", ""]]);
+      editor.undo();
+      expect(grid()).toEqual([["A", "B"], ["C", "D"]]);
+      editor.addTableColumn("T", { column: 0, side: "before" });
+      expect(grid()).toEqual([["", "A", "B"], ["", "C", "D"]]);
+      editor.undo();
+      editor.addTableRow("T", { rowId: "r1", side: "before" });
+      expect(grid()).toEqual([["", ""], ["A", "B"], ["C", "D"]]);
+      editor.undo();
+      editor.moveTableRow("r2", -1);
+      expect(grid()).toEqual([["C", "D"], ["A", "B"]]);
+      expect(editor.moveTableRow("r2", -1)).toBe(false);
+      editor.moveTableColumn("T", 0, 1);
+      expect(grid()).toEqual([["D", "C"], ["B", "A"]]);
+      editor.undo();
+      editor.undo();
+      at("c", 0);
+      editor.deleteTableRow("r2");
+      expect(grid()).toEqual([["A", "B"]]);
+      expect(editor.selection).toEqual(caret("a", 0));
+      expect(editor.deleteTableRow("r1")).toBe(false);
+      editor.deleteTableColumn("T", 0);
+      expect(grid()).toEqual([["B"]]);
+      expect(editor.deleteTableColumn("T", 0)).toBe(false);
+      expectInSync();
+    });
+
+    it("toggles headers, and deletes the table, the caret going before it", () => {
+      seedTable();
+      editor.toggleTableHeader("T", "headerColumn");
+      editor.toggleTableHeader("T", "headerRow");
+      expect(services.blocks.getBlock("T")!.props).toEqual({ headerRow: false, headerColumn: true });
+      at("c", 1);
+      editor.deleteTable("T");
+      expect(outline()).toEqual(["paragraph:Before", "paragraph:After"]);
+      expect(editor.selection).toEqual(caret("x", 6));
+      editor.undo();
+      expect(grid()).toEqual([["A", "B"], ["C", "D"]]);
+      expectInSync();
+    });
+
+    it("makes a 3×3 table with a header row from the slash menu", () => {
+      seed([p("e", ""), p("f", "Notes")]);
+      at("e", 0);
+      typeText("/table");
+      editor.slash(0, SLASH_COMMANDS.find((c) => c.value === "table")!);
+      const table = services.blocks.getChildren("page")[0]!;
+      expect(table).toMatchObject({ type: "table", props: { headerRow: true, headerColumn: false } });
+      expect(getBlockIds(table.id).map((row) => getBlockIds(row).length)).toEqual([3, 3, 3]);
+      expect(editor.selection).toEqual(caret(getBlockIds(getBlockIds(table.id)[0]!)[0]!, 0));
+      expect(services.blocks.getBlock("e")).toBeUndefined();
+      at("f", 5);
+      typeText(" /table");
+      editor.slash(6, SLASH_COMMANDS.find((c) => c.value === "table")!);
+      expect(services.blocks.getChildren("page").map((b) => b.type)).toEqual(["table", "paragraph", "table"]);
+      expect(plain(services.blocks.getBlock("f")!.content)).toBe("Notes ");
+      expectInSync();
+    });
+  });
+
+  describe("code blocks", () => {
+    it("becomes code from ``` and a language with Enter", () => {
+      seed([p("a", "")]);
+      at("a", 0);
+      typeText("```ts");
+      editor.enter();
+      expect(services.blocks.getBlock("a")).toMatchObject({ type: "code", props: { language: "ts" }, content: [] });
+      expect(editor.selection).toEqual(caret("a", 0));
+    });
+
+    it("adds lines with Enter, indents with Tab and Shift+Tab, and leaves with exitBlock", () => {
+      seed([{ id: "k", type: "code", props: { language: "sh" }, content: [{ text: "echo" }] }]);
+      at("k", 4);
+      editor.enter();
+      editor.tab();
+      typeText("ls");
+      expect(plain(services.blocks.getBlock("k")!.content)).toBe("echo\n  ls");
+      editor.tab(true);
+      expect(plain(services.blocks.getBlock("k")!.content)).toBe("echo\nls");
+      expect(editor.selection).toEqual(caret("k", 7));
+      editor.exitBlock();
+      expect(outline()).toEqual(["code:echo\nls", "paragraph:"]);
+      expectInSync();
+    });
+
+    it("keeps marks and links out, and becomes a paragraph with Backspace only when empty", () => {
+      seed([{ id: "k", type: "code", content: [{ text: "x" }] }]);
+      editor.setSelection({ blockId: "k", anchor: 0, focus: 1 });
+      expect(editor.toggleMark("bold")).toBe(false);
+      expect(editor.setLink("https://example.com")).toBe(false);
+      at("k", 0);
+      editor.deleteBackward();
+      expect(services.blocks.getBlock("k")!.type).toBe("code");
+      at("k", 1);
+      editor.deleteBackward();
+      editor.deleteBackward();
+      expect(services.blocks.getBlock("k")!.type).toBe("paragraph");
+    });
+
+    it("turns a block into plain code from the slash menu, its children moving out after it", () => {
+      seed([p("a", "", [p("child", "Inside")])]);
+      services.blocks.apply([{ op: "update", id: "a", content: [{ text: "x" }, { text: "y", marks: ["bold"] }] }]);
+      editor.reset(stateFromTree(services.blocks.loadTree("page")!));
+      at("a", 0);
+      typeText("/code");
+      editor.slash(0, SLASH_COMMANDS.find((c) => c.value === "code")!);
+      expect(services.blocks.getBlock("a")).toMatchObject({ type: "code", content: [{ text: "xy" }] });
+      expect(outline()).toEqual(["code:xy", "paragraph:Inside"]);
+      expectInSync();
+    });
+
+    it("joins a following paragraph as plain text, and sets its language", () => {
+      seed([{ id: "k", type: "code", content: [{ text: "a" }] }, { id: "b", type: "paragraph", content: [{ text: "b", marks: ["bold"] }] }]);
+      at("b", 0);
+      editor.deleteBackward();
+      expect(services.blocks.getBlock("k")!.content).toEqual([{ text: "ab" }]);
+      editor.setCodeLanguage("k", "python");
+      expect(services.blocks.getBlock("k")!.props).toEqual({ language: "python" });
+    });
+  });
+
+  describe("headings 4–6 and callouts", () => {
+    it("makes headings 4 to 6 with #### to ######", () => {
+      seed([p("a", "Glossary"), p("b", ""), p("c", "")]);
+      at("a", 0);
+      typeText("#### ");
+      at("b", 0);
+      typeText("##### ");
+      at("c", 0);
+      typeText("###### ");
+      expect(outline()).toEqual(["heading4:Glossary", "heading5:", "heading6:"]);
+    });
+
+    it("makes a callout, continues after it with Enter, and changes its emoji and tone in one step each", () => {
+      seed([p("a", "Careful")]);
+      at("a", 0);
+      typeText("/call");
+      editor.slash(0, SLASH_COMMANDS.find((c) => c.value === "callout")!);
+      expect(services.blocks.getBlock("a")).toMatchObject({ type: "callout", props: { emoji: "💡", tone: "default" } });
+      at("a", 7);
+      editor.enter();
+      expect(outline()).toEqual(["callout:Careful", "paragraph:"]);
+      editor.setCalloutStyle("a", { tone: "warning" });
+      editor.setCalloutStyle("a", { emoji: "⚠️" });
+      expect(services.blocks.getBlock("a")!.props).toEqual({ emoji: "⚠️", tone: "warning" });
+      editor.undo();
+      expect(services.blocks.getBlock("a")!.props).toEqual({ emoji: "💡", tone: "warning" });
+      expectInSync();
+    });
+  });
+
   describe("markdown shortcuts", () => {
     it.each([
       ["# ", "heading1:"],
@@ -380,7 +613,8 @@ describe("editor", () => {
     const command = (value: string) => SLASH_COMMANDS.find((c) => c.value === value)!;
 
     it("filters by name and keyword", () => {
-      expect(matchSlashCommands("hea").map((c) => c.value)).toEqual(["heading-1", "heading-2", "heading-3"]);
+      expect(matchSlashCommands("hea").map((c) => c.value)).toEqual(["heading-1", "heading-2", "heading-3", "heading-4", "heading-5", "heading-6"]);
+      expect(matchSlashCommands("tab").map((c) => c.value)).toEqual(["table"]);
       expect(matchSlashCommands("check").map((c) => c.value)).toEqual(["todo"]);
       expect(matchSlashCommands("list").map((c) => c.value)).toEqual(["bulleted", "numbered"]);
       expect(matchSlashCommands("")).toHaveLength(SLASH_COMMANDS.length);

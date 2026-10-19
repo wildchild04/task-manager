@@ -80,3 +80,53 @@ describe("buildPageView", () => {
     expect(buildPageView(blocks, "T1")).toBeUndefined();
   });
 });
+
+describe("buildPageView: tables", () => {
+  it("keeps a table's rows and cells as nested content, with mentions in cells resolved", () => {
+    const blocks = createInMemoryServices().blocks;
+    blocks.apply([
+      { op: "insert", block: { id: "P", type: "page", content: text("Page") }, parentId: null },
+      { op: "insert", block: { id: "Q", type: "page", content: text("Linked") }, parentId: null, afterId: "P" },
+      { op: "insert", block: { id: "T", type: "table" }, parentId: "P" },
+      { op: "insert", block: { id: "R", type: "table_row" }, parentId: "T" },
+      { op: "insert", block: { id: "C1", type: "table_cell", content: text("see") }, parentId: "R" },
+      {
+        op: "insert",
+        block: { id: "C2", type: "table_cell", content: [{ text: "\uFFFC", mention: { pageId: "Q" } }] },
+        parentId: "R",
+        afterId: "C1",
+      },
+    ]);
+    const view = buildPageView(blocks, "P")!;
+    expect(view.blocks).toEqual([
+      {
+        kind: "content",
+        id: "T",
+        type: "table",
+        props: { headerRow: true, headerColumn: false },
+        content: [],
+        children: [
+          {
+            kind: "content",
+            id: "R",
+            type: "table_row",
+            props: {},
+            content: [],
+            children: [
+              { kind: "content", id: "C1", type: "table_cell", props: {}, content: text("see"), children: [] },
+              {
+                kind: "content",
+                id: "C2",
+                type: "table_cell",
+                props: {},
+                content: [{ text: "\uFFFC", mention: { pageId: "Q" } }],
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+    expect(view.mentions).toEqual({ Q: { title: "Linked", href: "/pages/Q" } });
+  });
+});

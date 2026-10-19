@@ -11,6 +11,11 @@ export const BLOCK_TYPES = [
   "reference",
   "comment",
   "suggestion",
+  "table",
+  "table_row",
+  "table_cell",
+  "code",
+  "callout",
 ] as const;
 
 export type BlockType = (typeof BLOCK_TYPES)[number];
@@ -25,10 +30,20 @@ export const TEXT_TYPES = [
   "numbered_list_item",
   "toggle",
   "quote",
+  "table_cell",
+  "code",
+  "callout",
 ] as const satisfies readonly BlockType[];
 
 /** Types that can never have children. */
-export const LEAF_TYPES = ["divider", "reference"] as const satisfies readonly BlockType[];
+export const LEAF_TYPES = ["divider", "reference", "table_cell", "code"] as const satisfies readonly BlockType[];
+
+/** A table's structure: a table holds rows, a row holds cells. Nothing turns into or out of these. */
+export const TABLE_TYPES = ["table", "table_row", "table_cell"] as const satisfies readonly BlockType[];
+
+/** A callout's colour. */
+export const CALLOUT_TONES = ["default", "info", "success", "warning", "error"] as const;
+export type CalloutTone = (typeof CALLOUT_TONES)[number];
 
 /** Types that may have no parent. */
 export const ROOT_TYPES = ["page", "comment"] as const satisfies readonly BlockType[];
@@ -54,7 +69,7 @@ export type RichText = TextSpan[];
 export type PropsByType = {
   page: Record<string, never>;
   paragraph: Record<string, never>;
-  heading: { level: 1 | 2 | 3 };
+  heading: { level: HeadingLevel };
   todo: { checked: boolean };
   bulleted_list_item: Record<string, never>;
   numbered_list_item: Record<string, never>;
@@ -64,7 +79,14 @@ export type PropsByType = {
   reference: { targetId: string };
   comment: Record<string, never>;
   suggestion: SuggestionProps;
+  table: { headerRow: boolean; headerColumn: boolean };
+  table_row: Record<string, never>;
+  table_cell: Record<string, never>;
+  code: { language: string };
+  callout: { emoji: string; tone: CalloutTone };
 };
+
+export type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
 
 /** An entity outside the block tree that owns a root block, e.g. `{ kind: "task", id }`. */
 export type Owner = { kind: string; id: string };

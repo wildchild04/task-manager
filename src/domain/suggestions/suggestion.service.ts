@@ -52,6 +52,12 @@ function treeOf(repos: Repositories, block: Block): TreeNode {
 
 const asNew = (block: Block): NewBlock => ({ id: block.id, type: block.type, props: block.props, content: block.content });
 
+/** Whether blocks can be nested under a block of this type (a table holds only its rows). */
+const holdsChildren = (type: BlockType) => !isLeafType(type) && type !== "page" && type !== "suggestion" && type !== "table";
+
+/** A delete, or a replace of a table, acts on the target and everything in it; other replaces on the block alone. */
+const actsOnSubtree = (action: SuggestionAction, target: Block) => action === "delete" || target.type === "table";
+
 /** Insert operations for a tree of new blocks under `parentId`, the first after `afterId`. */
 function insertOps(parentId: string, afterId: string | null, blocks: readonly SuggestionBlockInput[]): Operation[] {
   const ops: Operation[] = [];
@@ -113,6 +119,11 @@ export class SuggestionService {
       const inPage = (id: string, what: string): Block => {
         const block = content.blocks.get(id) ?? fail("not_found", `${what} ${id} is not in this page`);
         if (content.inSuggestion.has(id)) fail("validation", `${what} ${id} is inside a suggestion`);
+        if (block.type === "table_row" || block.type === "table_cell") {
+          let table: Block = block;
+          while (table.type !== "table") table = content.blocks.get(table.parentId!)!;
+          fail("validation", `${what} ${id} is part of a table; suggest on the whole table (${table.id}) instead`);
+        }
         return block;
       };
 
@@ -130,9 +141,10 @@ export class SuggestionService {
           afterId = after.id;
         } else {
           const inside = input.insideId ? inPage(input.insideId, "Block") : page;
-          if (inside.id !== pageId && (inside.type === "page" || inside.type === "suggestion" || isLeafType(inside.type))) {
+          if (inside.type === "table")
+            fail("validation", "Nothing can be added inside a table; suggest replacing the whole table");
+          if (inside.id !== pageId && !holdsChildren(inside.type))
             fail("validation", `A ${inside.type} can't hold the suggested blocks`);
-          }
           parentId = inside.id;
           afterId = repos.blocks.getChildren(inside.id).at(-1)?.id ?? null;
         }
@@ -150,7 +162,7 @@ export class SuggestionService {
         parentId = target.parentId!;
         afterId = target.id;
         targetId = target.id;
-        base = stable(action === "replace" ? own(target) : subtree(tree));
+        base = stable(actsOnSubtree(action, target) ? subtree(tree) : own(target));
       }
 
       const id = input.id ?? this.newId();
@@ -284,18 +296,27 @@ export class SuggestionService {
     const targetAt = this.position(repos, target);
     const targetTree = treeOf(repos, target);
     if (suggestion.action === "replace") {
-      // The proposed blocks take the target's place; its children move under the first of them.
-      const kept = repos.blocks.getChildren(target.id).map((b) => b.id);
+      // The proposed blocks take the target's place. Its children move under the first of them, or after
+      // the last when that can't hold them; a table's rows go with the table.
+      const whole = actsOnSubtree("replace", target);
+      const kept = whole ? [] : repos.blocks.getChildren(target.id).map((b) => b.id);
       const first = proposed[0]!;
+      const last = proposed.at(-1)!;
+      const keptAt = holdsChildren(repos.blocks.getBlock(first)!.type)
+        ? moveOps(kept, first, repos.blocks.getChildren(first).at(-1)?.id ?? null)
+        : moveOps(kept, targetAt.parentId, last);
       const ops: Operation[] = [
         ...moveOps(proposed, targetAt.parentId, target.id),
-        ...moveOps(kept, first, repos.blocks.getChildren(first).at(-1)?.id ?? null),
+        ...keptAt,
         { op: "delete", id: target.id },
         { op: "delete", id },
       ];
+      const restoreTarget: Operation[] = whole
+        ? restoreOps(targetTree, targetAt.parentId, targetAt.afterId)
+        : [{ op: "insert", block: asNew(target), parentId: targetAt.parentId, afterId: targetAt.afterId }];
       const undo: Operation[] = [
         ...inOrder(
-          [{ op: "insert", block: asNew(target), parentId: targetAt.parentId, afterId: targetAt.afterId }],
+          restoreTarget,
           target.id,
           [{ op: "insert", block: asNew(block), parentId: at.parentId, afterId: at.afterId }],
           id,
@@ -352,7 +373,7 @@ export class SuggestionService {
     if (suggestion.action === "insert" || suggestion.base === null) return false;
     const target = repos.blocks.getBlock(suggestion.targetId!);
     if (!target) return true;
-    const now = suggestion.action === "replace" ? own(target) : subtree(treeOf(repos, target));
+    const now = actsOnSubtree(suggestion.action, target) ? subtree(treeOf(repos, target)) : own(target);
     return stable(now) !== suggestion.base;
   }
 

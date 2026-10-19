@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { fromMarkdown, type MarkdownReader, type MarkdownWriter, toMarkdown } from "~/domain/blocks/markdown";
-import type { Block, BlockType, RichText, TreeNode } from "~/domain/blocks/types";
+import {
+  fromMarkdown,
+  MARKDOWN_GUIDE,
+  type MarkdownBlock,
+  type MarkdownReader,
+  type MarkdownWriter,
+  toMarkdown,
+} from "~/domain/blocks/markdown";
+import { type Block, BLOCK_TYPES, type BlockType, type RichText, type TreeNode } from "~/domain/blocks/types";
 
 const node = (
   id: string,
@@ -197,5 +204,124 @@ describe("anchors and suggestions", () => {
         "  </suggestion>",
       ].join("\n"),
     );
+  });
+});
+
+describe("marks spanning several spans", () => {
+  const roundTrip = (markdown: string) =>
+    toMarkdown(
+      fromMarkdown(markdown, writer).map((block) => ({ block: block as unknown as Block, children: [] })),
+      reader,
+    );
+
+  it.each([
+    "**Correction: `.pm-cli` is not skippable.**",
+    "~~`.pm-cli` — skip~~",
+    "**bold *and italic* inside**",
+    "[see **this** part](https://example.com) after",
+    "~~a **b** c~~ and `code`",
+    "plain **bold** plain *italic* plain",
+  ])("writes %s back unchanged", (markdown) => {
+    expect(roundTrip(markdown)).toBe(markdown);
+  });
+
+  it("opens a mark once across spans that share it", () => {
+    const tree = [node("p", "paragraph", [t("a ", ["bold"]), t("b", ["bold", "code"]), t(" c", ["bold"])])];
+    expect(toMarkdown(tree, reader)).toBe("**a `b` c**");
+  });
+});
+
+describe("tables, code, headings 4–6 and callouts", () => {
+  /** Written blocks as a tree, as if stored and loaded. */
+  const tree = (blocks: MarkdownBlock[]): TreeNode[] =>
+    blocks.map(({ children, ...block }) => ({
+      block: { props: {}, content: [], ...block } as unknown as Block,
+      children: tree(children ?? []),
+    }));
+  const read = (markdown: string, warnings?: string[]) => fromMarkdown(markdown, writer, warnings);
+  const roundTrip = (markdown: string) => toMarkdown(tree(read(markdown)), reader);
+  const cells = (table: MarkdownBlock) => table.children!.map((row) => row.children!.map((cell) => cell.content));
+
+  it.each([
+    "| Subtopic | Rating |\n|---|---|\n| DNS | 🟡 **Shaky** |",
+    "```sh\nstrace -f ./server\n```\n\n> [!WARNING] ⚠️ Don't load a movement that scored 0",
+    "#### Four\n\n##### Five\n\n###### Six",
+    "> [!TIP] ✅ First line\n> second line\n  - nested in the callout",
+    "|  |  |\n|---|---|\n| a | b |",
+    "| a \\| b | x<br>y |\n|---|---|\n| `c \\| d` | e |",
+    "````md\n```js\nlet x;\n```\n````",
+  ])("round-trips %j", (markdown) => {
+    expect(roundTrip(markdown)).toBe(markdown);
+  });
+
+  it("reads a table: header row, rows padded or cut to its width, alignment ignored", () => {
+    const [table] = read("| Time | Soil | Notes |\n|:---|:---:|---:|\n| 10:00 | | |\n| 13:00 | 27.5 | ok | extra |\n| 15:00 |");
+    expect(table).toMatchObject({ type: "table", props: { headerRow: true, headerColumn: false } });
+    expect(cells(table!)).toEqual([
+      [[{ text: "Time" }], [{ text: "Soil" }], [{ text: "Notes" }]],
+      [[{ text: "10:00" }], [], []],
+      [[{ text: "13:00" }], [{ text: "27.5" }], [{ text: "ok" }]],
+      [[{ text: "15:00" }], [], []],
+    ]);
+  });
+
+  it("reads an all-empty header row as a table without one, and escapes in cells", () => {
+    const [table] = read("|  |  |\n|---|---|\n| a \\| b | x<br>y |");
+    expect(table).toMatchObject({ props: { headerRow: false } });
+    expect(cells(table!)).toEqual([[[{ text: "a | b" }], [{ text: "x\ny" }]]]);
+  });
+
+  it("keeps code verbatim, less its fence's indentation, and never parses inside it", () => {
+    const [list] = read("- step\n  ```ts\n  const a = **b**; // [!NOTE]\n    indented\n  ```");
+    expect(list!.children).toEqual([
+      { id: expect.any(String), type: "code", props: { language: "ts" }, content: [{ text: "const a = **b**; // [!NOTE]\n  indented" }] },
+    ]);
+  });
+
+  it("gives a callout without an emoji its tone's, and reads the marker alone on its line", () => {
+    const [plain, alone] = read("> [!CAUTION] Careful\n\n> [!note]\n> On the next line");
+    expect(plain).toMatchObject({ type: "callout", props: { emoji: "🛑", tone: "error" }, content: [{ text: "Careful" }] });
+    expect(alone).toMatchObject({ type: "callout", props: { emoji: "💡", tone: "default" }, content: [{ text: "On the next line" }] });
+  });
+
+  it("drops the anchor on a table's first line and a fence's", () => {
+    const [table, code] = read("| a | ^1a2b3c4d\n|---|\n\n```sh ^5e6f7a8b\nls\n```");
+    expect(table).toMatchObject({ type: "table" });
+    expect(code).toMatchObject({ type: "code", props: { language: "sh" }, content: [{ text: "ls" }] });
+  });
+
+  it("guides agents through every block the importer creates, with examples that read as that block", () => {
+    // Types the importer never creates: pages, references, comments and suggestions aren't written as
+    // Markdown, toggles read back as paragraphs, and rows and cells are part of a table.
+    const notImported = ["page", "reference", "comment", "suggestion", "toggle", "table_row", "table_cell"];
+    expect(MARKDOWN_GUIDE.blocks.map((b) => b.type).sort()).toEqual(BLOCK_TYPES.filter((type) => !notImported.includes(type)).sort());
+    for (const { type, example } of MARKDOWN_GUIDE.blocks) expect(read(example).map((b) => b.type)).toEqual([type]);
+  });
+
+  it("reports what it keeps as text, by line, and nothing for what it supports", () => {
+    const warnings: string[] = [];
+    read(
+      [
+        "Intro",
+        "",
+        "![chart](chart.png)",
+        "A note[^1] and <div>html</div>, `<b>` in code is fine, <u>underline</u> too",
+        "| a | b |",
+        "| c | d |",
+        "```js",
+        "never closed",
+      ].join("\n"),
+      warnings,
+    );
+    expect(warnings).toEqual([
+      "Line 3: images aren't supported yet; kept as text",
+      "Line 4: footnotes aren't supported; kept as text",
+      "Line 4: HTML (<div>) isn't supported; kept as text",
+      "Line 5: a table needs a separator row (|---|) under its header; kept as text",
+      "Line 7: this code fence is never closed; kept as text",
+    ]);
+    const none: string[] = [];
+    read("| a | b<br>c |\n|---|---|\n\n```\n<div>![x](y)\n```\n\n> [!TIP] ok", none);
+    expect(none).toEqual([]);
   });
 });

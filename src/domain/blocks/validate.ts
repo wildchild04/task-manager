@@ -1,7 +1,7 @@
 import { BlockOperationError } from "./errors";
 import { parseContent, parseProps, parseType } from "./schema";
 import type { Block, BlockType, Operation, Owner, RichText } from "./types";
-import { isLeafType, isRootType, isTextType } from "./types";
+import { isLeafType, isRootType, isTextType, TABLE_TYPES } from "./types";
 
 /** Read-only view of the current state, including earlier operations of the batch. */
 export interface BlockReader {
@@ -138,6 +138,11 @@ function checkPlacement(
   } else {
     const parent = mustGet(reader, parentId, "Parent");
     if (isLeafType(parent.type)) fail("invalid_parent", `A ${parent.type} block cannot have children`);
+    // A table holds rows, a row holds cells, and they go nowhere else.
+    if (parent.type === "table" && type !== "table_row") fail("invalid_parent", "A table holds only rows");
+    if (parent.type === "table_row" && type !== "table_cell") fail("invalid_parent", "A table row holds only cells");
+    if (type === "table_row" && parent.type !== "table") fail("invalid_parent", "A table row belongs in a table");
+    if (type === "table_cell" && parent.type !== "table_row") fail("invalid_parent", "A table cell belongs in a table row");
     if (movingId !== undefined && isSelfOrDescendant(reader, parentId, movingId)) {
       fail("cycle", "A block cannot be moved into itself or one of its descendants");
     }
@@ -202,6 +207,10 @@ export function validateOperation(
         }
         if (type === "suggestion" || block.type === "suggestion") {
           fail("invalid_type_change", "A block cannot be turned into or out of a suggestion");
+        }
+        const tableTypes: readonly string[] = TABLE_TYPES;
+        if (tableTypes.includes(type) || tableTypes.includes(block.type)) {
+          fail("invalid_type_change", `A ${block.type} block cannot be turned into a ${type}`);
         }
         if (isTextType(type) !== isTextType(block.type)) {
           fail("invalid_type_change", `A ${block.type} block cannot be turned into a ${type}`);

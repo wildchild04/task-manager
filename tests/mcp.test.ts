@@ -48,7 +48,7 @@ describe("MCP server", () => {
     }
   });
 
-  it("offers the sixteen tools, each describing its defaults", async () => {
+  it("offers the seventeen tools, each describing its defaults", async () => {
     const client = await connect(services);
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
@@ -56,6 +56,7 @@ describe("MCP server", () => {
       "comment",
       "create_page",
       "create_task",
+      "get_markdown_guide",
       "get_suggestion",
       "get_task",
       "list_comments",
@@ -70,6 +71,15 @@ describe("MCP server", () => {
       "withdraw_suggestion",
     ]);
     expect(tools.find((t) => t.name === "list_tasks")!.description).toContain("default 10");
+    for (const name of ["comment", "append_description", "create_task", "create_page", "suggest"]) {
+      expect(tools.find((t) => t.name === name)!.description).toContain("get_markdown_guide");
+    }
+  });
+
+  it("gives the Markdown guide", async () => {
+    const client = await connect(services);
+    const guide = JSON.parse(text(await client.callTool({ name: "get_markdown_guide", arguments: {} })));
+    expect(guide.blocks.map((b: { type: string }) => b.type)).toContain("table");
   });
 
   it("returns compact results with only the API's fields", async () => {

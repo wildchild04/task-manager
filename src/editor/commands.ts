@@ -1,6 +1,22 @@
-import type { NewBlock, Operation, RichText, SimpleMark } from "~/domain/blocks/types";
+import {
+  type BlockType,
+  type CalloutTone,
+  type NewBlock,
+  type Operation,
+  type RichText,
+  type SimpleMark,
+  TABLE_TYPES,
+} from "~/domain/blocks/types";
 
-import { behaviorOf, DIVIDER_SHORTCUT, MARKDOWN_SHORTCUTS, type SlashCommand, type TypeChange } from "./block-types";
+import {
+  behaviorOf,
+  CODE_SHORTCUT,
+  DIVIDER_SHORTCUT,
+  MARKDOWN_SHORTCUTS,
+  NEW_TABLE,
+  type SlashCommand,
+  type TypeChange,
+} from "./block-types";
 import {
   applyOps,
   caret,
@@ -15,6 +31,10 @@ import {
   selectionStart,
 } from "./editor-state";
 import * as text from "./rich-text";
+import { cellBelow, newTable } from "./tables";
+
+/** A table, its rows and its cells: Backspace and Delete never merge into or out of them. */
+const isTablePart = (type: BlockType) => (TABLE_TYPES as readonly BlockType[]).includes(type);
 
 /** What a command produces: the operations to apply and where the selection goes. */
 export type CommandResult = { ops: Operation[]; selection: Selection };
@@ -94,6 +114,8 @@ export function mentionPage(state: EditorState, selection: Selection, start: num
 export function toggleMark(state: EditorState, selection: Selection, mark: SimpleMark): CommandResult | null {
   if (isCollapsed(selection)) return null;
   const block = getBlock(state, selection.blockId);
+  // Code is plain text.
+  if (block.type === "code") return null;
   const content = text.toggleMark(block.content, selectionStart(selection), selectionEnd(selection), mark);
   return { ops: [updateContent(block.id, content)], selection };
 }
@@ -102,6 +124,7 @@ export function toggleMark(state: EditorState, selection: Selection, mark: Simpl
 export function setLink(state: EditorState, selection: Selection, href: string | null): CommandResult | null {
   if (isCollapsed(selection)) return null;
   const block = getBlock(state, selection.blockId);
+  if (block.type === "code") return null;
   const content = text.setLink(block.content, selectionStart(selection), selectionEnd(selection), href);
   return { ops: [updateContent(block.id, content)], selection };
 }
@@ -132,6 +155,21 @@ export function splitBlock(state: EditorState, selection: Selection, context: Co
     return {
       ops: [{ op: "insert", block: { id, type: "paragraph" }, parentId: state.rootId, afterId: null }],
       selection: caret(id, 0),
+    };
+  }
+
+  // Code adds a line; a table cell moves to the cell below.
+  const current = getBlock(state, selection.blockId);
+  const rule = behaviorOf(current.type).enter;
+  if (rule === "line-break") return insertText(state, selection, "\n");
+  if (rule === "cell-below") return cellBelow(state, current.id, context.newId) ?? { ops: [], selection };
+  // A paragraph holding only ```` ``` ```` and a language becomes an empty code block of that language.
+  const fence =
+    current.type === "paragraph" && current.children.length === 0 ? CODE_SHORTCUT.exec(text.plain(current.content)) : null;
+  if (fence && isCollapsed(selection) && selection.focus === text.length(current.content)) {
+    return {
+      ops: [{ op: "update", id: current.id, type: "code", props: { language: fence[1] }, content: [] }],
+      selection: caret(current.id, 0),
     };
   }
 
@@ -198,9 +236,11 @@ function merge(state: EditorState, into: string, from: string): CommandResult {
   const target = getBlock(state, into);
   const source = getBlock(state, from);
   const joinAt = text.length(target.content);
+  // Code holds plain text, so what joins it loses its marks and mentions.
+  const joined = target.type === "code" ? text.withoutFormatting(source.content) : source.content;
   return {
     ops: [
-      updateContent(into, text.concat(target.content, source.content)),
+      updateContent(into, text.concat(target.content, joined)),
       ...adoptChildren(state, from, into),
       { op: "delete", id: from },
     ],
@@ -211,8 +251,12 @@ function merge(state: EditorState, into: string, from: string): CommandResult {
 function backspaceAtStart(state: EditorState, id: string, context: CommandContext): CommandResult | null {
   if (id === state.rootId) return null;
   const block = getBlock(state, id);
-  if (behaviorOf(block.type).backspaceAtStart === "becomes-paragraph") {
-    return { ops: [toParagraph(id)], selection: caret(id, 0) };
+  const rule = behaviorOf(block.type).backspaceAtStart;
+  if (rule === "becomes-paragraph") return { ops: [toParagraph(id)], selection: caret(id, 0) };
+  // Table cells never merge; a code block only becomes a paragraph when it's empty.
+  if (rule === "nothing") return null;
+  if (rule === "paragraph-when-empty") {
+    return text.length(block.content) === 0 ? { ops: [toParagraph(id)], selection: caret(id, 0) } : null;
   }
   if (block.parentId !== state.rootId) return outdent(state, caret(id, 0));
 
@@ -227,8 +271,14 @@ function backspaceAtStart(state: EditorState, id: string, context: CommandContex
   if (before.type === "reference" || before.type === "divider") {
     return { ops: [{ op: "delete", id: previous }], selection: caret(id, 0) };
   }
-  if (before.type === "page" || before.type === "suggestion") {
-    // Sub-pages and suggestions are never deleted by Backspace: step over them.
+  // Sub-pages, suggestions and tables are never deleted by Backspace, nor does text merge into a table: step over
+  // them. Code can't hold another block's children, so a block with children steps over it too.
+  const stepOver =
+    before.type === "page" ||
+    before.type === "suggestion" ||
+    isTablePart(before.type) ||
+    (before.type === "code" && block.children.length > 0);
+  if (stepOver) {
     const target = previousTextBlock(state, id, context.closed);
     return { ops: [], selection: caret(target, text.length(getBlock(state, target).content)) };
   }
@@ -237,13 +287,16 @@ function backspaceAtStart(state: EditorState, id: string, context: CommandContex
 
 function deleteAtEnd(state: EditorState, id: string, context: CommandContext): CommandResult | null {
   if (id === state.rootId) return null;
+  const current = getBlock(state, id);
+  if (current.type === "table_cell") return null;
   const order = documentOrder(state, context.closed);
   const next = order[order.indexOf(id) + 1];
   if (!next) return null;
   const after = getBlock(state, next);
-  const length = text.length(getBlock(state, id).content);
+  const length = text.length(current.content);
   if (after.type === "reference" || after.type === "divider") return { ops: [{ op: "delete", id: next }], selection: caret(id, length) };
-  if (after.type === "page" || after.type === "suggestion") return null;
+  if (after.type === "page" || after.type === "suggestion" || isTablePart(after.type)) return null;
+  if (current.type === "code" && after.children.length > 0) return null;
   return merge(state, id, next);
 }
 
@@ -252,7 +305,7 @@ function deleteAtEnd(state: EditorState, id: string, context: CommandContext): C
 /** Tab: nests the block as the last child of its previous sibling. */
 export function indent(state: EditorState, selection: Selection): CommandResult | null {
   const id = selection.blockId;
-  if (id === state.rootId) return null;
+  if (id === state.rootId || getBlock(state, id).type === "table_cell") return null;
   const previous = previousSibling(state, id);
   if (previous === null || !behaviorOf(getBlock(state, previous).type).children) return null;
   return {
@@ -265,10 +318,12 @@ export function indent(state: EditorState, selection: Selection): CommandResult 
 export function outdent(state: EditorState, selection: Selection): CommandResult | null {
   const id = selection.blockId;
   if (id === state.rootId) return null;
-  const { parentId } = getBlock(state, id);
-  if (parentId === null || parentId === state.rootId) return null;
+  const { parentId, type } = getBlock(state, id);
+  if (parentId === null || parentId === state.rootId || type === "table_cell") return null;
   const parent = getBlock(state, parentId);
   const followers = parent.children.slice(parent.children.indexOf(id) + 1);
+  // The blocks after it become its children, which a block like code can't have.
+  if (followers.length > 0 && !behaviorOf(type).children) return null;
   const ops: Operation[] = [{ op: "move", id, parentId: parent.parentId!, afterId: parentId }];
   let afterId = getBlock(state, id).children.at(-1) ?? null;
   for (const follower of followers) {
@@ -337,12 +392,27 @@ export function slashCommand(
 ): CommandResult {
   const block = getBlock(state, blockId);
   const content = text.remove(block.content, start, end);
+  const replaceable = text.length(content) === 0 && block.children.length === 0 && behaviorOf(block.type).text;
+  if (command.action === "table") {
+    // A new table replaces an empty block, or follows one with text; the caret goes to its first cell.
+    const table = newTable(block.parentId!, blockId, NEW_TABLE.rows, NEW_TABLE.columns, context.newId);
+    const around: Operation[] = replaceable ? [{ op: "delete", id: blockId }] : [updateContent(blockId, content)];
+    return { ops: [...table.ops, ...around], selection: caret(table.firstCell, 0) };
+  }
   if (command.action !== "divider") {
     const { type, props } = command.action;
-    return { ops: [{ op: "update", id: blockId, type, props, content }], selection: caret(blockId, start) };
+    if (type !== "code") return { ops: [{ op: "update", id: blockId, type, props, content }], selection: caret(blockId, start) };
+    // Code keeps the text as plain text, and can't hold children: they move out to follow it.
+    const ops: Operation[] = [{ op: "update", id: blockId, type, props, content: text.withoutFormatting(content) }];
+    let afterId = blockId;
+    for (const child of block.children) {
+      ops.push({ op: "move", id: child, parentId: block.parentId!, afterId });
+      afterId = child;
+    }
+    return { ops, selection: caret(blockId, Math.min(start, text.length(text.withoutFormatting(content)))) };
   }
   const divider = context.newId();
-  if (text.length(content) === 0 && block.children.length === 0 && behaviorOf(block.type).text) {
+  if (replaceable) {
     const paragraph = context.newId();
     return {
       ops: [
@@ -360,4 +430,54 @@ export function slashCommand(
     ],
     selection: caret(blockId, start),
   };
+}
+
+// ----- Code -----
+
+/**
+ * Tab in code: two spaces at the caret. Shift+Tab (`backward`): removes up to
+ * two spaces at the start of the caret's line.
+ */
+export function indentCode(state: EditorState, selection: Selection, backward: boolean): CommandResult | null {
+  const block = getBlock(state, selection.blockId);
+  if (block.type !== "code") return null;
+  if (!backward) return insertText(state, selection, "  ");
+  const value = text.plain(block.content);
+  const from = selectionStart(selection);
+  const lineStart = from === 0 ? 0 : value.lastIndexOf("\n", from - 1) + 1;
+  const spaces = /^ {0,2}/.exec(value.slice(lineStart))![0].length;
+  if (spaces === 0) return { ops: [], selection };
+  const shift = (offset: number) => (offset <= lineStart ? offset : Math.max(lineStart, offset - spaces));
+  return {
+    ops: [updateContent(block.id, text.remove(block.content, lineStart, lineStart + spaces))],
+    selection: { blockId: block.id, anchor: shift(selection.anchor), focus: shift(selection.focus) },
+  };
+}
+
+/** Cmd/Ctrl+Enter in code: an empty paragraph after the code block, holding the caret. */
+export function exitCode(state: EditorState, selection: Selection, context: CommandContext): CommandResult | null {
+  const block = getBlock(state, selection.blockId);
+  if (block.type !== "code") return null;
+  const id = context.newId();
+  return {
+    ops: [{ op: "insert", block: { id, type: "paragraph" }, parentId: block.parentId!, afterId: block.id }],
+    selection: caret(id, 0),
+  };
+}
+
+/** Sets a code block's language (empty for plain text). */
+export function setCodeLanguage(state: EditorState, id: string, language: string, selection: Selection): CommandResult | null {
+  if (getBlock(state, id).type !== "code") return null;
+  return { ops: [{ op: "update", id, props: { language: language.trim().slice(0, 32) } }], selection };
+}
+
+/** Changes a callout's emoji, tone, or both. */
+export function setCalloutStyle(
+  state: EditorState,
+  id: string,
+  style: { emoji?: string; tone?: CalloutTone },
+  selection: Selection,
+): CommandResult | null {
+  if (getBlock(state, id).type !== "callout") return null;
+  return { ops: [{ op: "update", id, props: style }], selection };
 }

@@ -239,6 +239,71 @@ export function suggestionContract(name: string, factory: ServicesFactory) {
       });
     });
 
+    describe("tables", () => {
+      /** A 2×2 table TB after B: rows TR1 (TC1a "x", TC1b "y") and TR2 (TC2a, TC2b). */
+      const addTable = () =>
+        services.blocks.apply([
+          { op: "insert", block: { id: "TB", type: "table" }, parentId: "P", afterId: "B" },
+          { op: "insert", block: { id: "TR1", type: "table_row" }, parentId: "TB" },
+          { op: "insert", block: { id: "TC1a", type: "table_cell", content: [{ text: "x" }] }, parentId: "TR1" },
+          { op: "insert", block: { id: "TC1b", type: "table_cell", content: [{ text: "y" }] }, parentId: "TR1", afterId: "TC1a" },
+          { op: "insert", block: { id: "TR2", type: "table_row" }, parentId: "TB", afterId: "TR1" },
+          { op: "insert", block: { id: "TC2a", type: "table_cell" }, parentId: "TR2" },
+          { op: "insert", block: { id: "TC2b", type: "table_cell" }, parentId: "TR2", afterId: "TC2a" },
+        ]);
+      const table = (id: string): SuggestionBlockInput => ({
+        id,
+        type: "table",
+        children: [
+          { id: `${id}-r`, type: "table_row", children: [{ id: `${id}-c`, type: "table_cell", content: [{ text: "new" }] }] },
+        ],
+      });
+
+      it("refuses rows and cells as targets or positions, naming the table, and anything inside a table", () => {
+        addTable();
+        for (const input of [
+          { action: "replace" as const, targetId: "TC1a", blocks: [para("n", "x")] },
+          { action: "delete" as const, targetId: "TR2" },
+          { afterId: "TR1", blocks: [para("n", "x")] },
+        ]) {
+          expect(() => suggest(input)).toThrow(/part of a table; suggest on the whole table \(TB\)/);
+        }
+        expectError(() => suggest({ insideId: "TB", blocks: [para("n", "x")] }), "validation");
+      });
+
+      it("replaces a whole table, and undo brings it back exactly", () => {
+        addTable();
+        const before = page();
+        suggest({ id: "r", action: "replace", targetId: "TB", blocks: [para("n", "Flattened")] });
+        services.suggestions.approve("r");
+        expect(page()).toEqual(["paragraph:Alpha", "paragraph:Beta", "paragraph:Flattened", "toggle:Notes", "  paragraph:One", "  paragraph:Two", "page:Sub"]);
+        services.suggestions.reopen("r");
+        services.suggestions.reject("r");
+        expect(page()).toEqual(before);
+      });
+
+      it("outdates a suggestion on a table when any cell changes", () => {
+        addTable();
+        suggest({ id: "d", action: "delete", targetId: "TB" });
+        suggest({ id: "r", action: "replace", targetId: "TB", blocks: [table("t2")] });
+        setText("TC2b", "filled in");
+        expect(services.suggestions.get("d")?.state).toBe("outdated");
+        expect(services.suggestions.get("r")?.state).toBe("outdated");
+      });
+
+      it("proposes a table, and puts a replaced toggle's children after a block that can't hold them", () => {
+        suggest({ id: "i", afterId: "A", blocks: [table("t1")] });
+        services.suggestions.approve("i");
+        expect(page().slice(0, 4)).toEqual(["paragraph:Alpha", "table:", "  table_row:", "    table_cell:new"]);
+        suggest({ id: "r", action: "replace", targetId: "T", blocks: [{ id: "k", type: "code", content: [{ text: "notes" }] }] });
+        const before = page();
+        services.suggestions.approve("r");
+        expect(page().slice(-4)).toEqual(["code:notes", "paragraph:One", "paragraph:Two", "page:Sub"]);
+        services.suggestions.reopen("r");
+        expect(page()).toEqual(before);
+      });
+    });
+
     describe("all at once", () => {
       it("approves a page's suggestions in document order, skipping outdated ones", () => {
         suggest({ id: "late", blocks: [para("n1", "End")] });

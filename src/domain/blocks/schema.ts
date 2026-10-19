@@ -1,8 +1,7 @@
 import { z } from "zod";
 
 import { BlockOperationError } from "./errors";
-import type { BlockType, RichText } from "./types";
-import { isTextType, MENTION_TEXT } from "./types";
+import { type BlockType, CALLOUT_TONES, isTextType, MENTION_TEXT, type RichText } from "./types";
 
 const empty = z.object({}).strict();
 
@@ -10,7 +9,7 @@ const empty = z.object({}).strict();
 export const propsSchemas = {
   page: empty,
   paragraph: empty,
-  heading: z.object({ level: z.union([z.literal(1), z.literal(2), z.literal(3)]).default(1) }).strict(),
+  heading: z.object({ level: z.number().int().min(1).max(6).default(1) }).strict(),
   todo: z.object({ checked: z.boolean().default(false) }).strict(),
   bulleted_list_item: empty,
   numbered_list_item: empty,
@@ -24,6 +23,19 @@ export const propsSchemas = {
     z.object({ action: z.literal("replace"), targetId: z.string().min(1) }).strict(),
     z.object({ action: z.literal("delete"), targetId: z.string().min(1) }).strict(),
   ]),
+  table: z.object({ headerRow: z.boolean().default(true), headerColumn: z.boolean().default(false) }).strict(),
+  table_row: empty,
+  table_cell: empty,
+  code: z.object({ language: z.string().max(32).default("") }).strict(),
+  callout: z
+    .object({
+      emoji: z
+        .string()
+        .default("💡")
+        .refine((emoji) => [...new Intl.Segmenter().segment(emoji)].length === 1, { message: "An emoji is one character" }),
+      tone: z.enum(CALLOUT_TONES).default("default"),
+    })
+    .strict(),
 } satisfies Record<BlockType, z.ZodType>;
 
 const markSchema = z.union([
@@ -58,6 +70,11 @@ export const blockTypeSchema = z.enum([
   "reference",
   "comment",
   "suggestion",
+  "table",
+  "table_row",
+  "table_cell",
+  "code",
+  "callout",
 ]);
 
 function toError(prefix: string, error: z.ZodError): BlockOperationError {
@@ -90,6 +107,9 @@ export function parseContent(type: BlockType, content: unknown): RichText {
   }
   if (type === "page" && result.data.some((span) => span.mention)) {
     throw new BlockOperationError("validation", "A page title cannot contain mentions", ["content"]);
+  }
+  if (type === "code" && result.data.some((span) => span.mention || span.marks?.length)) {
+    throw new BlockOperationError("validation", "A code block holds plain text: no marks or mentions", ["content"]);
   }
   return result.data as RichText;
 }

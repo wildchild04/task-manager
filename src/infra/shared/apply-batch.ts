@@ -31,6 +31,24 @@ export function applyBatch(
     },
   };
 
+  // Tables the batch touches, checked for shape once every operation has applied.
+  const tables = new Set<string>();
+  const noteTables = (op: Batch[number]) => {
+    const ids = op.op === "insert" ? [op.block.id, "parentId" in op ? op.parentId : null] : [op.id, op.op === "move" ? op.parentId : null];
+    for (const id of ids) {
+      if (id === null) continue;
+      const block = reader.getBlock(id);
+      // A delete leaves its parent to check; anything else, its own nearest table.
+      for (let at = op.op === "delete" && id === op.id && block ? reader.getBlock(block.parentId ?? "") : block; at; ) {
+        if (at.type === "table") {
+          tables.add(at.id);
+          break;
+        }
+        at = at.parentId === null ? undefined : reader.getBlock(at.parentId);
+      }
+    }
+  };
+
   batch.forEach((op, index) => {
     let validated: ValidatedOperation;
     try {
@@ -39,8 +57,27 @@ export function applyBatch(
       if (error instanceof BlockOperationError) throw new BatchError(index, error);
       throw error;
     }
+    noteTables(op);
     write(store, validated, now());
+    if (op.op !== "delete") noteTables(op);
   });
+
+  for (const tableId of tables) {
+    const problem = tableProblem(store, tableId);
+    if (problem) throw new BatchError(batch.length - 1, new BlockOperationError("validation", problem));
+  }
+}
+
+/** Why a table isn't a whole grid (no rows, an empty row, rows of different lengths), or `undefined` when it is. */
+function tableProblem(store: RowStore, tableId: string): string | undefined {
+  const table = store.get(tableId);
+  if (!table || table.parentId === DETACHED) return undefined;
+  const rows = store.childrenOf(tableId);
+  if (rows.length === 0) return "A table needs at least one row";
+  const widths = rows.map((row) => store.childrenOf(row.id).length);
+  if (widths.some((width) => width === 0)) return "A table row needs at least one cell";
+  if (widths.some((width) => width !== widths[0])) return "Every row of a table needs the same number of cells";
+  return undefined;
 }
 
 function write(store: RowStore, op: ValidatedOperation, at: string): void {

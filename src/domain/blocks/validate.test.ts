@@ -51,7 +51,7 @@ describe("insert", () => {
 
   it("names the invalid prop", () => {
     const error = rejects(
-      { op: "insert", block: { id: "n", type: "heading", props: { level: 4 } }, parentId: "P" },
+      { op: "insert", block: { id: "n", type: "heading", props: { level: 7 } }, parentId: "P" },
       "validation",
     );
     expect(error.path).toEqual(["props", "level"]);

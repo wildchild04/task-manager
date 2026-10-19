@@ -62,6 +62,18 @@ describe("page backlinks", () => {
     expect(pageBacklinks(services, "pers")).toEqual([{ kind: "page", id: "plan", title: "Release plan", href: "/pages/plan", count: 1 }]);
   });
 
+  it("lists a page mentioned from a table cell", () => {
+    services.blocks.apply([
+      { op: "insert", block: { id: "garden", type: "page", content: [{ text: "Garden" }] }, parentId: null },
+      { op: "insert", block: { id: "tbl", type: "table" }, parentId: "garden" },
+      { op: "insert", block: { id: "row", type: "table_row" }, parentId: "tbl" },
+      { op: "insert", block: { id: "cell", type: "table_cell", content: [m("pers")] }, parentId: "row" },
+    ]);
+    expect(pageBacklinks(services, "pers")).toEqual([
+      { kind: "page", id: "garden", title: "Garden", href: "/pages/garden", count: 1 },
+    ]);
+  });
+
   it("skips comments", () => {
     services.comments.add({ id: "c", taskId: "W", blocks: [{ id: "cp", type: "paragraph", content: [m("pers")] }] });
     expect(pageBacklinks(services, "pers")).toEqual([]);

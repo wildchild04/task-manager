@@ -406,6 +406,54 @@ describe("agent API", () => {
     });
   });
 
+  describe("tables, code and callouts", () => {
+    const create = async (markdown: string) => (await call("POST", "pages", { title: "Notes", markdown })).body;
+
+    it("round-trips a table, a code block and a callout", async () => {
+      const markdown = [
+        "| Subtopic | Rating |\n|---|---|\n| DNS | 🟡 **Shaky** |",
+        "```sh\nstrace -f ./server\n```",
+        "> [!WARNING] ⚠️ Don't load a movement that scored 0",
+      ].join("\n\n");
+      const page = await create(markdown);
+      expect(page).toEqual({ ok: true, id: expect.any(String) });
+      const blocks = services.blocks.getChildren(workspacePageTree(services)[0]!.id);
+      expect(blocks.map((b) => b.type)).toEqual(["table", "code", "callout"]);
+      expect(blocks[1]).toMatchObject({ props: { language: "sh" } });
+      expect(blocks[2]).toMatchObject({ props: { emoji: "⚠️", tone: "warning" } });
+      expect((await call("GET", `page/${page.id}`)).body.markdown).toBe(markdown);
+    });
+
+    it("tells agents what's supported", async () => {
+      const { body } = await call("GET", "markdown");
+      expect(body.blocks.find((b: { type: string }) => b.type === "table").example).toContain("|---|");
+      expect(body.blocks.find((b: { type: string }) => b.type === "code").markdown).toContain("```");
+      expect(body.unsupported.map((u: { name: string }) => u.name)).toContain("Images");
+    });
+
+    it("warns about unsupported Markdown by line, and only then", async () => {
+      expect(await create("A chart:\n\n![chart](chart.png)")).toEqual({
+        ok: true,
+        id: expect.any(String),
+        warnings: ["Line 3: images aren't supported yet; kept as text"],
+      });
+      work("aaaa0001-0000-0000-0000-000000000000");
+      const commented = await call("POST", "task/aaaa0001/comment", { markdown: "| a | b |\n|---|---|\n\n```\ncode\n```" });
+      expect(commented.body).toEqual({ ok: true, id: expect.any(String) });
+      const appended = await call("POST", "task/aaaa0001/description", { markdown: "See <div>this</div>" });
+      expect(appended.body).toEqual({ ok: true, warnings: ["Line 1: HTML (<div>) isn't supported; kept as text"] });
+    });
+
+    it("refuses a table's cell as a suggestion target, naming the table", async () => {
+      const page = await create("| a | b |\n|---|---|\n| c | d |");
+      const pageId = workspacePageTree(services)[0]!.id;
+      const table = services.blocks.getChildren(pageId)[0]!;
+      const cell = services.blocks.getChildren(services.blocks.getChildren(table.id)[0]!.id)[0]!;
+      const refused = await call("POST", "suggest", { page: page.id, action: "delete", target: cell.id.slice(0, 8) });
+      expect(refused).toMatchObject({ status: 422, body: { error: { code: "validation", message: expect.stringContaining(table.id) } } });
+    });
+  });
+
   describe("writing Markdown", () => {
     it("comments and appends to the description as blocks, with mentions", async () => {
       work("aaaa0001-0000-0000-0000-000000000000", "Write parser");

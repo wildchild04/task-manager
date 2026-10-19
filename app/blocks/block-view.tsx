@@ -1,9 +1,21 @@
-import { Alert, Button, Checkbox, Chip, Divider, IconButton, Link, Stack, Typography } from "@wildchild/design-system";
+import {
+  Alert,
+  Button,
+  Checkbox,
+  Chip,
+  CodeBlock,
+  createAppTheme,
+  Divider,
+  IconButton,
+  Link,
+  Stack,
+  Typography,
+} from "@wildchild/design-system";
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 import { Link as RouterLink } from "react-router";
 
 import { RichText } from "./rich-text";
-import type { RichText as RichTextValue } from "~/domain/blocks/types";
+import type { CalloutTone, RichText as RichTextValue } from "~/domain/blocks/types";
 import type { ReferenceView, SuggestionBlockView, ViewBlock } from "./view-model";
 import { plainText } from "./view-model";
 
@@ -30,7 +42,80 @@ function Children({ blocks, gutter }: { blocks: ViewBlock[]; gutter?: boolean })
   );
 }
 
-const headingVariants = { 1: "h2", 2: "h3", 3: "h4" } as const;
+/** The page title is the `h1`, so heading levels start at `h2`; 5 and 6 share the smallest size. */
+const headingVariants = { 1: "h2", 2: "h3", 3: "h4", 4: "h5", 5: "h6" } as const;
+
+/** The theme's smallest heading size, for level 6, which has no HTML element of its own (it would be an `h7`). */
+const h6Type = (() => {
+  const { fontSize, lineHeight, letterSpacing, fontFamily } = createAppTheme("light").typography.h6;
+  return { fontSize, lineHeight, letterSpacing, fontFamily, fontWeight: 400, margin: 0 };
+})();
+
+/** A heading of level 1 to 6 below the page title, its real level kept for assistive technology. */
+export function HeadingText({ level, children }: { level: number; children: ReactNode }) {
+  if (level >= 6) {
+    return (
+      <div role="heading" aria-level={7} className="block-heading-6" style={h6Type}>
+        {children}
+      </div>
+    );
+  }
+  return <Typography variant={headingVariants[level as 1 | 2 | 3 | 4 | 5] ?? "h2"}>{children}</Typography>;
+}
+
+/** A table's frame: header row and column as `th`, wide tables scrolling inside the page. Cells are any content. */
+export function TableFrame({
+  headerRow,
+  headerColumn,
+  rows,
+}: {
+  headerRow: boolean;
+  headerColumn: boolean;
+  rows: { id: string; cells: { id: string; content: ReactNode }[] }[];
+}) {
+  const cell = (row: number, column: number, id: string, content: ReactNode) => {
+    if (headerRow && row === 0)
+      return (
+        <th key={id} scope="col">
+          {content}
+        </th>
+      );
+    if (headerColumn && column === 0)
+      return (
+        <th key={id} scope="row">
+          {content}
+        </th>
+      );
+    return <td key={id}>{content}</td>;
+  };
+  const offset = headerRow ? 1 : 0;
+  return (
+    <div className="block-table-scroll">
+      <table className="block-table">
+        {headerRow && rows[0] && (
+          <thead>
+            <tr>{rows[0].cells.map((c, column) => cell(0, column, c.id, c.content))}</tr>
+          </thead>
+        )}
+        <tbody>
+          {rows.slice(offset).map((row, index) => (
+            <tr key={row.id}>{row.cells.map((c, column) => cell(index + offset, column, c.id, c.content))}</tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** A callout's frame: a tinted box of its tone with its emoji, holding its text and nested blocks. Content, not an announcement. */
+export function CalloutFrame({ emoji, tone, children }: { emoji: ReactNode; tone: CalloutTone; children: ReactNode }) {
+  return (
+    <div className={`block-callout block-callout-${tone}`}>
+      <span className="block-callout-emoji">{emoji}</span>
+      <div className="block-callout-body">{children}</div>
+    </div>
+  );
+}
 
 /**
  * Checks or unchecks a todo where the read-only view allows it (a posted
@@ -131,8 +216,50 @@ function ContentBlockView({ block }: { block: ContentBlock }) {
     case "heading":
       return (
         <div className="editor-block">
-          <Typography variant={headingVariants[block.props.level as 1 | 2 | 3]}>{text}</Typography>
+          <HeadingText level={Number(block.props.level ?? 1)}>{text}</HeadingText>
           {children}
+        </div>
+      );
+    case "table":
+      return (
+        <div className="editor-block">
+          <TableFrame
+            headerRow={block.props.headerRow !== false}
+            headerColumn={block.props.headerColumn === true}
+            rows={block.children.map((row) => ({
+              id: row.id,
+              cells: (row.kind === "content" ? row.children : []).map((cell) => ({
+                id: cell.id,
+                content: cell.kind === "content" ? <RichText value={cell.content} /> : null,
+              })),
+            }))}
+          />
+        </div>
+      );
+    case "table_row":
+    case "table_cell":
+      // Rows and cells are drawn by their table.
+      return null;
+    case "code": {
+      const language = String(block.props.language ?? "");
+      return (
+        <div className="editor-block">
+          <CodeBlock
+            code={plainText(block.content)}
+            {...(language ? { language } : {})}
+            copyable
+            ariaLabel={language ? `Code, ${language}` : "Code"}
+          />
+        </div>
+      );
+    }
+    case "callout":
+      return (
+        <div className="editor-block">
+          <CalloutFrame emoji={String(block.props.emoji ?? "💡")} tone={(block.props.tone as CalloutTone) ?? "default"}>
+            <Typography>{text}</Typography>
+            {children}
+          </CalloutFrame>
         </div>
       );
     case "todo": {

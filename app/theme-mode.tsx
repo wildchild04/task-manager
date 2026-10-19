@@ -34,6 +34,9 @@ function surfaceVariables(mode: ThemeMode): CSSProperties {
     "--ds-success-container": color.successContainer,
     "--ds-error": color.error,
     "--ds-error-container": color.errorContainer,
+    "--ds-info": color.info,
+    "--ds-info-container": color.infoContainer,
+    "--ds-surface-container": color.surfaceContainer,
   } as CSSProperties;
 }
 
