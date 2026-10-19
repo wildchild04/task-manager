@@ -19,6 +19,11 @@ export const propsSchemas = {
   divider: empty,
   reference: z.object({ targetId: z.string().min(1) }).strict(),
   comment: empty,
+  suggestion: z.discriminatedUnion("action", [
+    z.object({ action: z.literal("insert") }).strict(),
+    z.object({ action: z.literal("replace"), targetId: z.string().min(1) }).strict(),
+    z.object({ action: z.literal("delete"), targetId: z.string().min(1) }).strict(),
+  ]),
 } satisfies Record<BlockType, z.ZodType>;
 
 const markSchema = z.union([
@@ -52,6 +57,7 @@ export const blockTypeSchema = z.enum([
   "divider",
   "reference",
   "comment",
+  "suggestion",
 ]);
 
 function toError(prefix: string, error: z.ZodError): BlockOperationError {

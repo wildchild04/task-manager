@@ -4,12 +4,14 @@ import { describe, expect, it } from "vitest";
 import type { UnitOfWork } from "~/domain/unit-of-work";
 import { MemoryBlockRepository } from "~/infra/memory/memory-block.repository";
 import { MemoryCommentRepository } from "~/infra/memory/memory-comment.repository";
+import { MemorySuggestionRepository } from "~/infra/memory/memory-suggestion.repository";
 import { MemoryProjectRepository } from "~/infra/memory/memory-project.repository";
 import { MemoryTaskRepository } from "~/infra/memory/memory-task.repository";
 import { MemoryUnitOfWork } from "~/infra/memory/memory-unit-of-work";
 import { migrate } from "~/infra/sqlite/migrate";
 import { SqliteBlockRepository } from "~/infra/sqlite/sqlite-block.repository";
 import { SqliteCommentRepository } from "~/infra/sqlite/sqlite-comment.repository";
+import { SqliteSuggestionRepository } from "~/infra/sqlite/sqlite-suggestion.repository";
 import { SqliteProjectRepository } from "~/infra/sqlite/sqlite-project.repository";
 import { SqliteTaskRepository } from "~/infra/sqlite/sqlite-task.repository";
 import { SqliteUnitOfWork } from "~/infra/sqlite/sqlite-unit-of-work";
@@ -19,7 +21,8 @@ function memory(): UnitOfWork {
   const projects = new MemoryProjectRepository();
   const tasks = new MemoryTaskRepository();
   const comments = new MemoryCommentRepository();
-  return new MemoryUnitOfWork({ blocks, projects, tasks, comments }, [blocks, projects, tasks, comments]);
+  const suggestions = new MemorySuggestionRepository();
+  return new MemoryUnitOfWork({ blocks, projects, tasks, comments, suggestions }, [blocks, projects, tasks, comments, suggestions]);
 }
 
 function sqlite(): UnitOfWork {
@@ -30,6 +33,7 @@ function sqlite(): UnitOfWork {
     projects: new SqliteProjectRepository(db),
     tasks: new SqliteTaskRepository(db),
     comments: new SqliteCommentRepository(db),
+    suggestions: new SqliteSuggestionRepository(db),
   });
 }
 

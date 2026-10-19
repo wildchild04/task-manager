@@ -92,6 +92,14 @@ function targetIdOf(type: BlockType, props: Record<string, unknown>): string | n
   return type === "reference" ? (props.targetId as string) : null;
 }
 
+function isInsideSuggestion(reader: BlockReader, parentId: string | null): boolean {
+  for (let at = parentId === null ? undefined : reader.getBlock(parentId); at; ) {
+    if (at.type === "suggestion") return true;
+    at = at.parentId === null ? undefined : reader.getBlock(at.parentId);
+  }
+  return false;
+}
+
 function checkReferenceTarget(reader: BlockReader, id: string, type: BlockType, props: Record<string, unknown>) {
   if (type !== "reference") return;
   const targetId = props.targetId as string;
@@ -121,6 +129,10 @@ function checkPlacement(
   movingId?: string,
 ) {
   if (type === "comment") fail("invalid_parent", "A comment block must be an owned root");
+  // A suggestion's proposed blocks are plain content: no pages, and no suggestions within suggestions.
+  if ((type === "page" || type === "suggestion") && isInsideSuggestion(reader, parentId)) {
+    fail("invalid_parent", `A ${type} block can't be inside a suggestion`);
+  }
   if (parentId === null) {
     if (type !== "page") fail("invalid_parent", `A ${type} block must have a parent`);
   } else {
@@ -187,6 +199,9 @@ export function validateOperation(
       if (type !== block.type) {
         if (type === "comment" || block.type === "comment") {
           fail("invalid_type_change", "A block cannot be turned into or out of a comment");
+        }
+        if (type === "suggestion" || block.type === "suggestion") {
+          fail("invalid_type_change", "A block cannot be turned into or out of a suggestion");
         }
         if (isTextType(type) !== isTextType(block.type)) {
           fail("invalid_type_change", `A ${block.type} block cannot be turned into a ${type}`);

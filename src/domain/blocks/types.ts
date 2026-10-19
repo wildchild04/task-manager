@@ -10,6 +10,7 @@ export const BLOCK_TYPES = [
   "divider",
   "reference",
   "comment",
+  "suggestion",
 ] as const;
 
 export type BlockType = (typeof BLOCK_TYPES)[number];
@@ -31,6 +32,10 @@ export const LEAF_TYPES = ["divider", "reference"] as const satisfies readonly B
 
 /** Types that may have no parent. */
 export const ROOT_TYPES = ["page", "comment"] as const satisfies readonly BlockType[];
+
+/** What a suggestion proposes; `targetId` is the block a replace or delete acts on. */
+export type SuggestionAction = "insert" | "replace" | "delete";
+export type SuggestionProps = { action: "insert" } | { action: "replace" | "delete"; targetId: string };
 
 export type SimpleMark = "bold" | "italic" | "underline" | "strikethrough" | "code";
 export type LinkMark = { type: "link"; href: string };
@@ -58,6 +63,7 @@ export type PropsByType = {
   divider: Record<string, never>;
   reference: { targetId: string };
   comment: Record<string, never>;
+  suggestion: SuggestionProps;
 };
 
 /** An entity outside the block tree that owns a root block, e.g. `{ kind: "task", id }`. */

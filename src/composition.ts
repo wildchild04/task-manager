@@ -15,18 +15,21 @@ import { plainText } from "~/domain/blocks/text";
 import { CommentService, commentProtection } from "~/domain/comments/comment.service";
 import { COMMENT_OWNER_KIND } from "~/domain/comments/types";
 import type { ReferenceableKinds } from "~/domain/tasks/referenceable";
+import { SuggestionService } from "~/domain/suggestions/suggestion.service";
 import { TaskService, taskProtection } from "~/domain/tasks/task.service";
 import { TASK_OWNER_KIND } from "~/domain/tasks/types";
 import type { UnitOfWork } from "~/domain/unit-of-work";
 import { MemoryBlockRepository } from "~/infra/memory/memory-block.repository";
 import { MemoryCommentRepository } from "~/infra/memory/memory-comment.repository";
 import { MemoryProjectRepository } from "~/infra/memory/memory-project.repository";
+import { MemorySuggestionRepository } from "~/infra/memory/memory-suggestion.repository";
 import { MemoryTaskRepository } from "~/infra/memory/memory-task.repository";
 import { MemoryUnitOfWork } from "~/infra/memory/memory-unit-of-work";
 import { migrate } from "~/infra/sqlite/migrate";
 import { SqliteBlockRepository } from "~/infra/sqlite/sqlite-block.repository";
 import { SqliteCommentRepository } from "~/infra/sqlite/sqlite-comment.repository";
 import { SqliteProjectRepository } from "~/infra/sqlite/sqlite-project.repository";
+import { SqliteSuggestionRepository } from "~/infra/sqlite/sqlite-suggestion.repository";
 import { SqliteTaskRepository } from "~/infra/sqlite/sqlite-task.repository";
 import { SqliteUnitOfWork } from "~/infra/sqlite/sqlite-unit-of-work";
 
@@ -43,6 +46,7 @@ export type AppServices = {
   library: LibraryService;
   tasks: TaskService;
   comments: CommentService;
+  suggestions: SuggestionService;
   chores: ChoreService;
   dashboard: DashboardService;
   /** Where later changes add dashboard sections. */
@@ -73,13 +77,14 @@ function buildServices(uow: UnitOfWork, close: () => void, options: ServiceOptio
       comments.addWithin(repos, { id, taskId: task.id, author: actor, blocks: [reasonBlock, ...commentBlocks] }, at);
     },
   });
+  const suggestions = new SuggestionService(uow, options.newId, options.now);
   const library = new LibraryService(blocks, projects, resolvers);
   const dashboardSections = new DashboardRegistry();
   const chores = new ChoreService(uow, tasks, options.now);
   registerCoreSections(dashboardSections, { tasks, blocks, projects });
   dashboardSections.replace(choresSection(tasks, chores));
   const dashboard = new DashboardService(dashboardSections, projects);
-  return { blocks, projects, library, tasks, comments, chores, dashboard, dashboardSections, close };
+  return { blocks, projects, library, tasks, comments, suggestions, chores, dashboard, dashboardSections, close };
 
   /** Entity kinds a task can reference. Later domains (comments, subtasks) add theirs. */
   function referenceable(): ReferenceableKinds {
@@ -111,6 +116,7 @@ export function createServices(
     projects: new SqliteProjectRepository(db),
     tasks: new SqliteTaskRepository(db),
     comments: new SqliteCommentRepository(db),
+    suggestions: new SqliteSuggestionRepository(db),
   });
   return buildServices(uow, () => db.close(), options);
 }
@@ -121,6 +127,7 @@ export function createInMemoryServices(options: ServiceOptions = {}): AppService
   const projects = new MemoryProjectRepository();
   const tasks = new MemoryTaskRepository();
   const comments = new MemoryCommentRepository();
-  const uow = new MemoryUnitOfWork({ blocks, projects, tasks, comments }, [blocks, projects, tasks, comments]);
+  const suggestions = new MemorySuggestionRepository();
+  const uow = new MemoryUnitOfWork({ blocks, projects, tasks, comments, suggestions }, [blocks, projects, tasks, comments, suggestions]);
   return buildServices(uow, () => {}, options);
 }

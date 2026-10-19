@@ -1,6 +1,7 @@
 import type { BlockRepository } from "./blocks/block.repository";
 import type { CommentRepository } from "./comments/comment.repository";
 import type { ProjectRepository } from "./projects/project.repository";
+import type { SuggestionRepository } from "./suggestions/suggestion.repository";
 import type { TaskRepository } from "./tasks/task.repository";
 
 /** Every repository, bound to the same store so they can share a transaction. */
@@ -9,6 +10,7 @@ export type Repositories = {
   projects: ProjectRepository;
   tasks: TaskRepository;
   comments: CommentRepository;
+  suggestions: SuggestionRepository;
 };
 
 /**

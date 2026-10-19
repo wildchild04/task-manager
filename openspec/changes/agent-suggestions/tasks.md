@@ -1,19 +1,19 @@
 ## 0. Before starting
 
-- [ ] 0.1 Archive `agent-create-tasks`, `agent-create-pages` and `home-dashboard` so the delta specs here apply on top of them
-- [ ] 0.2 Write the design-system feature request `~/dev/design-system/feature-requests/review-container.md` in the format of the existing requests
+- [x] 0.1 Archive `agent-create-tasks`, `agent-create-pages` and `home-dashboard` so the delta specs here apply on top of them
+- [x] 0.2 Write the design-system feature request `~/dev/design-system/feature-requests/review-container.md` in the format of the existing requests
 
 ## 1. Block type and storage
 
-- [ ] 1.1 `suggestion` block type: props schema (`action`, `targetId` required for replace and delete), no content, no `page`/`comment`/`suggestion` descendants; validation tests
-- [ ] 1.2 Migration `005_suggestions.sql` and the `suggestions` repository (SQLite and in-memory, shared contract tests): create, get, list pending by place, resolve (approved, rejected, withdrawn), reopen
+- [x] 1.1 `suggestion` block type: props schema (`action`, `targetId` required for replace and delete), no content, no `page`/`comment`/`suggestion` descendants; validation tests
+- [x] 1.2 Migration `005_suggestions.sql` and the `suggestions` repository (SQLite and in-memory, shared contract tests): create, get, list pending by place, resolve (approved, rejected, withdrawn), reopen
 
 ## 2. Suggestion service
 
-- [ ] 2.1 `SuggestionService.suggest`: resolve the place (page or task body page), check position and target are in the page's own content, build the suggestion block and its children, store `base` for replace and delete; one transaction; tests for each action and each refusal
-- [ ] 2.2 Status with computed `outdated` (target missing or differs from `base`); tests for edit, delete, unchanged save
-- [ ] 2.3 `approve` (insert, replace with children moving under the first new block, delete; refuses outdated) and `reject`, each one batch plus the record update with a `snapshot`; tests for the agent-suggestions scenarios
-- [ ] 2.4 `withdraw` (author only, pending or outdated, no snapshot needed); `reopen` from the snapshot; `approveAll` / `rejectAll` for a page in document order, skipping outdated; tests
+- [x] 2.1 `SuggestionService.suggest`: resolve the place (page or task body page), check position and target are in the page's own content, build the suggestion block and its children, store `base` for replace and delete; one transaction; tests for each action and each refusal
+- [x] 2.2 Status with computed `outdated` (target missing or differs from `base`); tests for edit, delete, unchanged save
+- [x] 2.3 `approve` (insert, replace with children moving under the first new block, delete; refuses outdated) and `reject`, each one batch plus the record update with a `snapshot`; tests for the agent-suggestions scenarios
+- [x] 2.4 `withdraw` (author only, pending or outdated, no snapshot needed); `reopen` from the snapshot; `approveAll` / `rejectAll` for a page in document order, skipping outdated; tests
 
 ## 3. Edits and backlinks
 

@@ -102,6 +102,48 @@ describe("insert", () => {
   });
 });
 
+describe("suggestions", () => {
+  // S: a pending insert suggestion on P holding S1.
+  const reader = readerOf(
+    block("P", "page", null),
+    block("S", "suggestion", "P", { props: { action: "insert" } }),
+    block("S1", "paragraph", "S"),
+    block("X", "divider", "P"),
+  );
+  const check = (op: Operation) => () => validateOperation(op, reader);
+
+  it("needs a target for replace and delete, and none for insert", () => {
+    expect(
+      validateOperation(
+        { op: "insert", block: { id: "n", type: "suggestion", props: { action: "replace", targetId: "X" } }, parentId: "P" },
+        reader,
+      ),
+    ).toMatchObject({ props: { action: "replace", targetId: "X" } });
+    const error = rejects(
+      { op: "insert", block: { id: "n", type: "suggestion", props: { action: "replace" } }, parentId: "P" },
+      "validation",
+    );
+    expect(error.path).toEqual(["props", "targetId"]);
+    rejects(
+      { op: "insert", block: { id: "n", type: "suggestion", props: { action: "insert", targetId: "A" } }, parentId: "P" },
+      "validation",
+    );
+  });
+
+  it("holds no pages or suggestions, at any depth", () => {
+    expect(check({ op: "insert", block: { id: "n", type: "page" }, parentId: "S1" })).toThrow(/inside a suggestion/);
+    expect(check({ op: "insert", block: { id: "n", type: "suggestion", props: { action: "insert" } }, parentId: "S" })).toThrow(
+      /inside a suggestion/,
+    );
+    expect(check({ op: "insert", block: { id: "n", type: "paragraph" }, parentId: "S1" })).not.toThrow();
+  });
+
+  it("can't be turned into or out of", () => {
+    expect(check({ op: "update", id: "X", type: "suggestion", props: { action: "insert" } })).toThrow(/suggestion/);
+    expect(check({ op: "update", id: "S", type: "divider" })).toThrow(/suggestion/);
+  });
+});
+
 describe("update", () => {
   it("turns a paragraph into a todo with default props", () => {
     const result = validateOperation({ op: "update", id: "A1", type: "todo" }, fixture);
