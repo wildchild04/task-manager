@@ -64,7 +64,8 @@ const SUGGESTION_LABELS = { insert: "Suggests adding", replace: "Suggests replac
 
 /** An agent's suggestion: who and what, its note, what it would remove (struck through), what it proposes, and the decision. */
 export function SuggestionBox({ suggestion }: { suggestion: SuggestionBlockView }) {
-  const { decide, busy } = useContext(SuggestionsContext);
+  const context = useContext(SuggestionsContext);
+  const { decide, busy } = context;
   const { id, author, action, note, outdated, removed, blocks } = suggestion;
   const label = SUGGESTION_LABELS[action];
   return (
@@ -102,7 +103,15 @@ export function SuggestionBox({ suggestion }: { suggestion: SuggestionBlockView 
       )}
       {removed && (
         <div className="suggestion-removed" role="group" aria-label="Removed">
-          <Blocks blocks={[removed]} />
+          <Typography variant="caption" color="text.secondary">
+            Removed
+          </Typography>
+          {/* The copy isn't the target itself, so it isn't marked as one. */}
+          <SuggestionsContext.Provider value={{ ...context, marked: new Set() }}>
+            <div className="suggestion-removed-content">
+              <Blocks blocks={[removed]} />
+            </div>
+          </SuggestionsContext.Provider>
         </div>
       )}
       {blocks.length > 0 && (

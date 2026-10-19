@@ -219,17 +219,9 @@ body {
   gap: 4px 8px;
 }
 
-.suggestion-removed {
+.suggestion-removed-content {
   opacity: 0.7;
   text-decoration: line-through;
-}
-
-.suggestion-removed::before {
-  content: "Removed";
-  display: block;
-  font-size: 0.75rem;
-  text-decoration: none;
-  opacity: 0.8;
 }
 
 /* A block a pending suggestion would replace or delete. */
