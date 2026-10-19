@@ -34,6 +34,10 @@ const cursor = z.string().optional().describe("The `cursor` from the previous re
 const maxChars = (fallback: number) =>
   z.number().int().min(1).max(20000).optional().describe(`Cut the text after this many characters (default ${fallback})`);
 const offset = z.number().int().min(0).optional().describe("Continue reading from this `offset` (from the previous result)");
+const anchors = z
+  .boolean()
+  .optional()
+  .describe("End each block's first line with ` ^` and its block ID, to point `suggest` at it (default false)");
 
 /** The MCP server for agents: one tool per agent API function. */
 export function createAgentServer(call: AgentCall): McpServer {
@@ -98,8 +102,8 @@ export function createAgentServer(call: AgentCall): McpServer {
     "read_description",
     {
       description:
-        "A task's description as Markdown, cut at `maxChars` (default 2000). If `more` is true, call again with the returned `offset`.",
-      inputSchema: { id, maxChars: maxChars(2000), offset },
+        "A task's description as Markdown, cut at `maxChars` (default 2000). If `more` is true, call again with the returned `offset`. Pending suggestions show as `<suggestion …>` … `</suggestion>`.",
+      inputSchema: { id, maxChars: maxChars(2000), offset, anchors },
     },
     ({ id, ...rest }) => run(call, "GET", `task/${enc(id)}/description`, rest),
   );
@@ -172,8 +176,8 @@ export function createAgentServer(call: AgentCall): McpServer {
     "read_page",
     {
       description:
-        "A page as { title, markdown }, cut at `maxChars` (default 2000). If `more` is true, call again with the returned `offset`.",
-      inputSchema: { id: z.string().describe("Page ID from search_pages"), maxChars: maxChars(2000), offset },
+        "A page as { title, markdown }, cut at `maxChars` (default 2000). If `more` is true, call again with the returned `offset`. Pending suggestions show as `<suggestion …>` … `</suggestion>`.",
+      inputSchema: { id: z.string().describe("Page ID from search_pages"), maxChars: maxChars(2000), offset, anchors },
     },
     ({ id, ...rest }) => run(call, "GET", `page/${enc(id)}`, rest),
   );
@@ -191,6 +195,44 @@ export function createAgentServer(call: AgentCall): McpServer {
       },
     },
     (input) => run(call, "POST", "pages", input),
+  );
+
+  server.registerTool(
+    "suggest",
+    {
+      description:
+        "Propose a change to a page or a task's description; a human approves or rejects it, and nothing changes until then. Read it first with `anchors: true` to get block IDs. `insert` adds `markdown` after the block `after`, as the last children of `inside`, or at the end; `replace` swaps the block `target` for `markdown`; `delete` removes `target` and what's nested in it. `note` (at most 280 characters) tells the human why. Works on any page or task, including work another agent holds. Returns { ok, id }.",
+      inputSchema: {
+        page: z.string().optional().describe("Page ID from search_pages (or give `task`)"),
+        task: z.string().optional().describe("Task ID: suggest on its description (or give `page`)"),
+        action: z.enum(["insert", "replace", "delete"]),
+        after: z.string().optional().describe("insert: the block ID to follow"),
+        inside: z.string().optional().describe("insert: the block ID to add under"),
+        target: z.string().optional().describe("replace and delete: the block ID"),
+        markdown: z.string().optional().describe("insert and replace: the proposed blocks, in Markdown"),
+        note: z.string().optional().describe("Why, for the human reviewing it"),
+      },
+    },
+    (input) => run(call, "POST", "suggest", input),
+  );
+
+  server.registerTool(
+    "get_suggestion",
+    {
+      description:
+        "A suggestion's status: { id, action, status, place, resolvedAt? }. Status is pending, outdated (its target changed since; it can only be rejected, so withdraw and suggest again), approved, rejected or withdrawn.",
+      inputSchema: { id: z.string().describe("Suggestion ID from suggest") },
+    },
+    ({ id }) => run(call, "GET", `suggestion/${enc(id)}`),
+  );
+
+  server.registerTool(
+    "withdraw_suggestion",
+    {
+      description: "Take back your own pending or outdated suggestion, removing it from the page. Returns { ok }.",
+      inputSchema: { id: z.string().describe("Suggestion ID from suggest") },
+    },
+    ({ id }) => run(call, "POST", `suggestion/${enc(id)}/withdraw`, {}),
   );
 
   return server;

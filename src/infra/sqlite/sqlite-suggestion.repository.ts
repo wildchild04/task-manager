@@ -59,6 +59,7 @@ export class SqliteSuggestionRepository implements SuggestionRepository {
          undo = ?, created_at = ?, resolved_at = ? WHERE id = ?`,
       ),
       get: db.prepare<[string], SuggestionRow>("SELECT * FROM suggestions WHERE id = ?"),
+      findByPrefix: db.prepare<[string], SuggestionRow>("SELECT * FROM suggestions WHERE substr(id, 1, length(?1)) = ?1"),
       listPending: db.prepare<[], SuggestionRow>("SELECT * FROM suggestions WHERE status = 'pending' ORDER BY created_at, rowid"),
     };
   }
@@ -74,6 +75,10 @@ export class SqliteSuggestionRepository implements SuggestionRepository {
 
   update(suggestion: Suggestion): void {
     this.s.update.run(...values(suggestion));
+  }
+
+  findByPrefix(prefix: string): Suggestion[] {
+    return this.s.findByPrefix.all(prefix).map(toSuggestion);
   }
 
   listPending(): Suggestion[] {

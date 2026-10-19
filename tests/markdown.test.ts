@@ -152,3 +152,50 @@ describe("Markdown to blocks", () => {
     expect(toMarkdown(tree(blocks), reader)).toBe(markdown);
   });
 });
+
+describe("anchors and suggestions", () => {
+  const anchored: MarkdownReader = { ...reader, anchor: (id) => id.padEnd(8, "0") };
+
+  it("ends each block's first line with its anchor, nested ones too", () => {
+    const tree = [
+      node("h", "heading", [t("Goals")], { level: 2 }),
+      node("q", "quote", [t("one\ntwo")]),
+      node("b", "bulleted_list_item", [t("Ship it")], {}, [node("c", "bulleted_list_item", [t("Soon")])]),
+    ];
+    expect(toMarkdown(tree, anchored)).toBe("## Goals ^h0000000\n\n> one ^q0000000\n> two\n\n- Ship it ^b0000000\n  - Soon ^c0000000");
+    expect(toMarkdown(tree, reader)).not.toContain("^");
+  });
+
+  it("drops anchors when Markdown read with them is written back", () => {
+    const blocks = fromMarkdown("## Goals ^h0000000\n\n- Ship it ^b0000000\n  - Soon ^c0000000", writer);
+    expect(blocks.map((b) => b.content)).toEqual([[t("Goals")], [t("Ship it")]]);
+    expect(blocks[1]!.children![0]!.content).toEqual([t("Soon")]);
+  });
+
+  it("writes a suggestion as tag lines around its blocks, at its depth", () => {
+    const withSuggestions: MarkdownReader = {
+      ...reader,
+      suggestion: (id) =>
+        id === "s" ? { id: "s", by: "builder", action: "replace", target: "p", status: "outdated", note: 'Say "hi"' } : null,
+    };
+    const tree = [
+      node("p", "paragraph", [t("Hello")]),
+      node("s", "suggestion", [], { action: "replace", targetId: "p" }, [node("n", "paragraph", [t("Hi")])]),
+      node("tog", "toggle", [t("More")], {}, [node("s2", "suggestion", [], { action: "insert" }, [node("n2", "todo", [t("Do")], { checked: false })])]),
+    ];
+    expect(toMarkdown(tree, withSuggestions)).toBe(
+      [
+        "Hello",
+        "",
+        '<suggestion id="s" by="builder" action="replace" target="p" status="outdated" note="Say &quot;hi&quot;">',
+        "Hi",
+        "</suggestion>",
+        "",
+        "▸ More",
+        "  <suggestion>",
+        "  - [ ] Do",
+        "  </suggestion>",
+      ].join("\n"),
+    );
+  });
+});

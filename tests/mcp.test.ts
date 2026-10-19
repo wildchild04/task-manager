@@ -48,7 +48,7 @@ describe("MCP server", () => {
     }
   });
 
-  it("offers the thirteen tools, each describing its defaults", async () => {
+  it("offers the sixteen tools, each describing its defaults", async () => {
     const client = await connect(services);
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
@@ -56,6 +56,7 @@ describe("MCP server", () => {
       "comment",
       "create_page",
       "create_task",
+      "get_suggestion",
       "get_task",
       "list_comments",
       "list_projects",
@@ -64,7 +65,9 @@ describe("MCP server", () => {
       "read_description",
       "read_page",
       "search_pages",
+      "suggest",
       "transition",
+      "withdraw_suggestion",
     ]);
     expect(tools.find((t) => t.name === "list_tasks")!.description).toContain("default 10");
   });
@@ -102,6 +105,17 @@ describe("MCP server", () => {
     const { id } = JSON.parse(text(result));
     const page = await client.callTool({ name: "read_page", arguments: { id } });
     expect(JSON.parse(text(page))).toEqual({ title: "Architecture", markdown: "Three **layers**", more: false });
+  });
+
+  it("suggests at an anchor and reports the status", async () => {
+    const client = await connect(services);
+    await client.callTool({ name: "append_description", arguments: { id: "task0001", markdown: "First idea" } });
+    const read = JSON.parse(text(await client.callTool({ name: "read_description", arguments: { id: "task0001", anchors: true } })));
+    const after = /\^(\w{8})$/.exec(read.markdown)![1];
+    const made = await client.callTool({ name: "suggest", arguments: { task: "task0001", action: "insert", after, markdown: "Second idea" } });
+    expect(made.isError).toBeFalsy();
+    const { id } = JSON.parse(text(made));
+    expect(JSON.parse(text(await client.callTool({ name: "get_suggestion", arguments: { id } })))).toMatchObject({ status: "pending" });
   });
 
   it("works a task end to end as the agent", async () => {

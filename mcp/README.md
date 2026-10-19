@@ -34,14 +34,17 @@ Run it by hand with `npm run mcp` (the three variables must be set).
 | `list_tasks` | Filter by `project`, `kind`, `state`, `query`; `limit` (default 10), `cursor` |
 | `create_task` | A task of any kind in a project, with a Markdown `description`; chores take `urgency` and `schedule`, updates `iteratesOn` |
 | `get_task` | Summary: state, `transitions` you may apply now, `heldBy`, counts |
-| `read_description` | The description as Markdown; `maxChars` (default 2000), `offset` |
+| `read_description` | The description as Markdown; `maxChars` (default 2000), `offset`, `anchors` (block IDs) |
 | `list_comments` | Newest first; `limit` (default 5), `cursor`, `maxChars` per comment (default 1000) |
 | `list_references` | What the task references |
 | `transition` | `start`, `pause`, `complete`, `return` (with `reason`) on work tasks |
 | `comment` | Comment on a work task in Markdown; mention with `@[Title](task:id)` or `@[Title](page:id)` |
 | `append_description` | Add Markdown to the end of a work task's description |
 | `search_pages` | Knowledge library and workspace pages by title |
-| `read_page` | A page as Markdown; `maxChars`, `offset` |
+| `read_page` | A page as Markdown; `maxChars`, `offset`, `anchors` (block IDs) |
 | `create_page` | A page with Markdown content: global in the workspace, in a project's library (`project`), or inside another page (`parent`) |
+| `suggest` | Propose an insert, replace or delete in any page or description, at a block from `anchors`; a human approves or rejects it |
+| `get_suggestion` | A suggestion's status: pending, outdated, approved, rejected, withdrawn |
+| `withdraw_suggestion` | Take back your own pending suggestion |
 
-Agents can't cancel, change chores or explorations, edit existing pages, or delete anything.
+Agents can't cancel, change chores or explorations, or delete anything, and they change existing pages and descriptions only through suggestions a human approves.

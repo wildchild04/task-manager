@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { handleAgentRequest } from "../../app/lib/agent/request.server";
 import { workspacePageTree } from "../../app/lib/page-search.server";
 import { type AppServices, createInMemoryServices } from "~/composition";
+import { fromMarkdown } from "~/domain/blocks/markdown";
 
 const TOKEN = "secret-token";
 
@@ -297,6 +298,111 @@ describe("agent API", () => {
       expect(response).toMatchObject({ status, body: { error: { code } } });
       expect(workspacePageTree(services)).toEqual([]);
       expect(services.library.getLibraryTree(P)).toEqual([]);
+    });
+  });
+
+  describe("suggestions", () => {
+    const exploration = () => {
+      const task = services.tasks.create({ id: "expl0001-0000-0000-0000-000000000000", projectId: P, kind: "exploration", title: "Block editor v1" });
+      appendMarkdown(task.bodyPageId, "Known candidates:\n\n- Turn into\n- Backspace");
+      return task;
+    };
+    const appendMarkdown = (pageId: string, markdown: string) =>
+      services.blocks.apply(
+        fromMarkdown(markdown, { findTarget: () => null, newId: () => crypto.randomUUID() }).map((block, i, all) => ({
+          op: "insert" as const,
+          block,
+          parentId: pageId,
+          afterId: i === 0 ? null : all[i - 1]!.id,
+        })),
+      );
+
+    it("reads with anchors, suggests after a block, and reports the status", async () => {
+      exploration();
+      const read = await call("GET", "task/expl0001/description?anchors=true");
+      const lines = read.body.markdown.split("\n");
+      expect(lines.every((line: string) => / \^[0-9a-f]{8}$/.test(line) || line === "")).toBe(true);
+      const last = /\^([0-9a-f]{8})$/.exec(lines.at(-1))![1]!;
+
+      const made = await call(
+        "POST",
+        "suggest",
+        { task: "expl0001", action: "insert", after: last, markdown: "- Tables\n- Code blocks", note: "From the content audit" },
+        "planner",
+      );
+      expect(made.status).toBe(200);
+      expect(Object.keys(made.body).sort()).toEqual(["id", "ok"]);
+      expect((await call("GET", "task/expl0001/description")).body.markdown).toBe(
+        [
+          "Known candidates:",
+          "",
+          "- Turn into",
+          "- Backspace",
+          "",
+          `<suggestion id="${made.body.id}" by="planner" action="insert" status="pending" note="From the content audit">`,
+          "- Tables",
+          "- Code blocks",
+          "</suggestion>",
+        ].join("\n"),
+      );
+      expect((await call("GET", `suggestion/${made.body.id}`)).body).toEqual({
+        id: made.body.id,
+        action: "insert",
+        status: "pending",
+        place: "task:expl0001",
+      });
+    });
+
+    it("replaces on a page, reports approved after a human approves", async () => {
+      services.blocks.apply([{ op: "insert", block: { id: "page0001-x", type: "page", content: [{ text: "Roadmap" }] }, parentId: null }]);
+      appendMarkdown("page0001-x", "Ship on Monday");
+      const target = services.blocks.getChildren("page0001-x")[0]!.id.slice(0, 8);
+      const made = await call("POST", "suggest", { page: "page0001", action: "replace", target, markdown: "Ship on **Tuesday**" });
+      services.suggestions.approve(services.suggestions.idsStartingWith(made.body.id)[0]!);
+      const status = await call("GET", `suggestion/${made.body.id}`);
+      expect(status.body).toMatchObject({ status: "approved", place: "page:page0001", resolvedAt: expect.any(String) });
+      expect((await call("GET", "page/page0001")).body.markdown).toBe("Ship on **Tuesday**");
+    });
+
+    it("lets agents suggest on work held by another agent", async () => {
+      const task = work("aaaa0001-0000-0000-0000-000000000000");
+      await call("POST", "task/aaaa0001/transition", { name: "start" }, "builder");
+      const made = await call("POST", "suggest", { task: "aaaa0001", action: "insert", markdown: "A thought" }, "reviewer");
+      expect(made.status).toBe(200);
+      expect(services.suggestions.pendingOn(task.bodyPageId)).toHaveLength(1);
+    });
+
+    it("withdraws only the agent's own, and never approves or rejects", async () => {
+      exploration();
+      const { body } = await call("POST", "suggest", { task: "expl0001", action: "insert", markdown: "Idea" }, "builder");
+      expect(await call("POST", `suggestion/${body.id}/withdraw`, {}, "reviewer")).toMatchObject({ status: 403, body: { error: { code: "forbidden" } } });
+      expect(await call("POST", `suggestion/${body.id}/approve`, {}, "builder")).toMatchObject({ status: 403, body: { error: { code: "forbidden" } } });
+      expect(await call("POST", `suggestion/${body.id}/reject`, {}, "builder")).toMatchObject({ status: 403 });
+      expect(await call("POST", `suggestion/${body.id}/withdraw`, {}, "builder")).toMatchObject({ status: 200, body: { ok: true } });
+      expect((await call("GET", `suggestion/${body.id}`)).body.status).toBe("withdrawn");
+      expect(await call("POST", `suggestion/${body.id}/withdraw`, {}, "builder")).toMatchObject({ status: 409, body: { error: { code: "resolved" } } });
+    });
+
+    it.each([
+      [{ action: "replace", target: "BLOCK" }, 422, "validation"],
+      [{ action: "insert" }, 422, "validation"],
+      [{ action: "insert", markdown: "x", after: "BLOCK", inside: "BLOCK" }, 422, "validation"],
+      [{ action: "insert", markdown: "<suggestion>\nx\n</suggestion>" }, 422, "validation"],
+      [{ action: "insert", markdown: "x", note: "n".repeat(281) }, 400, "bad_request"],
+      [{ action: "delete", target: "zzzz9999" }, 404, "not_found"],
+      [{ action: "insert", markdown: "x", page: "nope0000", task: undefined }, 404, "not_found"],
+      [{ action: "insert", markdown: "x", page: "page", task: "expl0001" }, 422, "validation"],
+    ])("refuses %j, creating nothing", async (fields, status, code) => {
+      const task = exploration();
+      const blockId = services.blocks.getChildren(task.bodyPageId)[0]!.id.slice(0, 8);
+      const body = JSON.parse(JSON.stringify({ task: "expl0001", ...fields }).replaceAll("BLOCK", blockId));
+      expect(await call("POST", "suggest", body)).toMatchObject({ status, body: { error: { code } } });
+      expect(services.suggestions.listPending()).toEqual([]);
+    });
+
+    it("refuses suggestion tags in other Markdown", async () => {
+      work("aaaa0001-0000-0000-0000-000000000000");
+      expect(await call("POST", "task/aaaa0001/comment", { markdown: "<suggestion>" })).toMatchObject({ status: 422 });
     });
   });
 

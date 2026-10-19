@@ -17,6 +17,10 @@ export class MemorySuggestionRepository implements SuggestionRepository {
     this.insert(suggestion);
   }
 
+  findByPrefix(prefix: string): Suggestion[] {
+    return [...this.suggestions.values()].filter((s) => s.id.startsWith(prefix));
+  }
+
   listPending(): Suggestion[] {
     return [...this.suggestions.values()].filter((s) => s.status === "pending");
   }

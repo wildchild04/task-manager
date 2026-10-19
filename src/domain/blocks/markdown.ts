@@ -18,7 +18,19 @@ export type MarkdownReader = {
   appLink(href: string): string | undefined;
   /** How a sub-page's ID is written. */
   pageId(id: string): string;
+  /** When given, each block's first line ends with ` ^` and this (the block's anchor). */
+  anchor?(id: string): string;
+  /** A pending suggestion's attributes (`id`, `by`, `action`, `target`, `status`, `note`), written on its tag line. */
+  suggestion?(id: string): Record<string, string | undefined> | null;
 };
+
+/** A trailing block anchor, as written by `anchor`. */
+const ANCHOR = / \^[\w-]{8}$/;
+
+/** A suggestion's tag line, which agents read but can't write. */
+export const SUGGESTION_TAG = /^\s*<\/?suggestion\b/m;
+
+const attribute = (value: string) => value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/\n/g, " ");
 
 /** What writing needs: targets an agent names as `page:<id>` or `task:<id>`. */
 export type MarkdownWriter = {
@@ -88,6 +100,17 @@ function blockLines(node: TreeNode, reader: MarkdownReader, number: number): str
   }
 }
 
+/** A suggestion as a tag line, its proposed blocks at the same depth, and a closing tag line. */
+function suggestionMarkdown(node: TreeNode, reader: MarkdownReader, depth: number): string {
+  const indent = "  ".repeat(depth);
+  const attributes = Object.entries(reader.suggestion?.(node.block.id) ?? {})
+    .filter((entry): entry is [string, string] => entry[1] !== undefined)
+    .map(([name, value]) => ` ${name}="${attribute(value)}"`)
+    .join("");
+  const children = node.children?.length ? toMarkdown(node.children, reader, depth) : "";
+  return [`${indent}<suggestion${attributes}>`, children, `${indent}</suggestion>`].filter(Boolean).join("\n");
+}
+
 /** Blocks (a page's or comment's children) as Markdown. */
 export function toMarkdown(nodes: readonly TreeNode[], reader: MarkdownReader, depth = 0): string {
   const indent = "  ".repeat(depth);
@@ -97,9 +120,15 @@ export function toMarkdown(nodes: readonly TreeNode[], reader: MarkdownReader, d
   for (const node of nodes) {
     const type = node.block.type;
     number = type === "numbered_list_item" ? (previous === "numbered_list_item" ? number + 1 : 1) : 0;
-    const lines = blockLines(node, reader, number).map((line) => indent + line);
-    const children = node.children?.length ? toMarkdown(node.children, reader, depth + 1) : "";
-    const text = [lines.join("\n"), children].filter(Boolean).join("\n");
+    let text: string;
+    if (type === "suggestion") {
+      text = suggestionMarkdown(node, reader, depth);
+    } else {
+      const lines = blockLines(node, reader, number).map((line) => indent + line);
+      if (reader.anchor) lines[0] += ` ^${reader.anchor(node.block.id)}`;
+      const children = node.children?.length ? toMarkdown(node.children, reader, depth + 1) : "";
+      text = [lines.join("\n"), children].filter(Boolean).join("\n");
+    }
     // List items stay together; everything else is separated by a blank line.
     const together = previous !== undefined && LIST_TYPES.includes(previous) && LIST_TYPES.includes(type);
     parts.push(parts.length === 0 ? text : `${together ? "\n" : "\n\n"}${text}`);
@@ -225,7 +254,8 @@ export function fromMarkdown(markdown: string, writer: MarkdownWriter): Markdown
   };
 
   for (const raw of markdown.replace(/\r\n?/g, "\n").split("\n")) {
-    const line = parseLine(raw);
+    // Anchors name blocks when reading; Markdown read with them and written back doesn't keep them.
+    const line = parseLine(raw.replace(ANCHOR, ""));
     if (!line) {
       continuing = false;
       continue;

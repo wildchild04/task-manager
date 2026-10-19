@@ -182,6 +182,11 @@ export class SuggestionService {
     return suggestion && this.view(this.uow.repositories, suggestion);
   }
 
+  /** The IDs of suggestions starting with `prefix`. */
+  idsStartingWith(prefix: string): string[] {
+    return this.uow.repositories.suggestions.findByPrefix(prefix).map((s) => s.id);
+  }
+
   /** Pending suggestions still on their page, oldest first. */
   listPending(): SuggestionView[] {
     const repos = this.uow.repositories;

@@ -1,10 +1,12 @@
 import { z } from "zod";
 
 import type { AppServices } from "~/composition";
-import { fromMarkdown, type MarkdownReader, type MarkdownWriter, toMarkdown } from "~/domain/blocks/markdown";
+import { fromMarkdown, type MarkdownReader, type MarkdownWriter, SUGGESTION_TAG, toMarkdown } from "~/domain/blocks/markdown";
 import { plainText } from "~/domain/blocks/text";
 import type { Batch, TreeNode } from "~/domain/blocks/types";
 import { urgencySchema } from "~/domain/chores/schedule";
+import { SuggestionError } from "~/domain/suggestions/errors";
+import { NOTE_MAX } from "~/domain/suggestions/suggestion.service";
 import { TaskError } from "~/domain/tasks/errors";
 import { kinds } from "~/domain/tasks/kinds";
 import { TASK_KINDS, TASK_OWNER_KIND, type Actor, type TaskSummary } from "~/domain/tasks/types";
@@ -64,8 +66,28 @@ const toAgentError = (error: unknown): never => {
 
 // ----- Markdown -----
 
-function reader(services: AppServices): MarkdownReader {
+/** Where a page's content lives, as agents name it: a task (its description) or a page. */
+function placeOf(services: AppServices, pageId: string): string {
+  const owner = services.blocks.getBlock(pageId)?.owner;
+  return owner?.kind === TASK_OWNER_KIND ? `task:${short(owner.id)}` : `page:${short(pageId)}`;
+}
+
+function reader(services: AppServices, anchors = false): MarkdownReader {
   return {
+    ...(anchors ? { anchor: short } : {}),
+    suggestion: (id) => {
+      const suggestion = services.suggestions.get(id);
+      return suggestion
+        ? {
+            id: short(suggestion.id),
+            by: suggestion.author,
+            action: suggestion.action,
+            target: suggestion.targetId ? short(suggestion.targetId) : undefined,
+            status: suggestion.state,
+            note: suggestion.note ?? undefined,
+          }
+        : null;
+    },
     mentionTarget: (pageId) => {
       const page = services.blocks.getBlock(pageId);
       if (page?.type !== "page") return null;
@@ -110,7 +132,14 @@ function writer(services: AppServices): MarkdownWriter {
   };
 }
 
-const markdownOf = (services: AppServices, tree: TreeNode | undefined) => toMarkdown(tree?.children ?? [], reader(services));
+const markdownOf = (services: AppServices, tree: TreeNode | undefined, anchors = false) =>
+  toMarkdown(tree?.children ?? [], reader(services, anchors));
+
+/** Markdown an agent wrote, as blocks. Suggestions are read, never written as Markdown. */
+function blocksOf(services: AppServices, markdown: string) {
+  if (SUGGESTION_TAG.test(markdown)) throw new AgentError(422, "validation", "Suggestions can't be written as Markdown; use `suggest`");
+  return fromMarkdown(markdown, writer(services));
+}
 
 // ----- Reads -----
 
@@ -181,12 +210,13 @@ export function getTask(services: AppServices, actor: AgentActor, id: string) {
   };
 }
 
-const textQuery = (fallback: number) => z.object({ maxChars: maxCharsSchema(fallback), offset: offsetSchema });
+const flag = z.union([z.boolean(), z.enum(["true", "false"]).transform((v) => v === "true")]).default(false);
+const textQuery = (fallback: number) => z.object({ maxChars: maxCharsSchema(fallback), offset: offsetSchema, anchors: flag });
 
 export function readDescription(services: AppServices, id: string, input: unknown) {
   const q = parse(textQuery(2000), input);
   const task = findTask(services, id);
-  return cut(markdownOf(services, services.blocks.loadTree(task.bodyPageId)), q.maxChars, q.offset);
+  return cut(markdownOf(services, services.blocks.loadTree(task.bodyPageId), q.anchors), q.maxChars, q.offset);
 }
 
 const commentsQuery = z.object({ limit: limitSchema(5), cursor: z.string().optional(), maxChars: maxCharsSchema(1000) });
@@ -246,7 +276,7 @@ export function readPage(services: AppServices, id: string, input: unknown) {
   const page = services.blocks.getBlock(pageId)!;
   return {
     title: plainText(page.content) || "Untitled",
-    ...cut(markdownOf(services, services.blocks.loadTree(pageId)), q.maxChars, q.offset),
+    ...cut(markdownOf(services, services.blocks.loadTree(pageId), q.anchors), q.maxChars, q.offset),
   };
 }
 
@@ -279,7 +309,7 @@ export function createTask(services: AppServices, input: unknown) {
     "project",
   );
   const iteratesOn = body.iteratesOn ? findTask(services, body.iteratesOn).id : undefined;
-  const blocks = body.description ? fromMarkdown(body.description, writer(services)) : [];
+  const blocks = body.description ? blocksOf(services, body.description) : [];
   try {
     const task = services.tasks.create({
       id: crypto.randomUUID(),
@@ -338,7 +368,7 @@ export function createPage(services: AppServices, input: unknown) {
     parentId = services.projects.get(projectId)!.libraryRootId;
   }
   const siblings = parentId ? services.blocks.getChildren(parentId) : services.blocks.listRootPages();
-  const blocks = body.markdown ? fromMarkdown(body.markdown, writer(services)) : [];
+  const blocks = body.markdown ? blocksOf(services, body.markdown) : [];
   const id = crypto.randomUUID();
   try {
     services.blocks.apply([
@@ -378,7 +408,7 @@ export function comment(services: AppServices, actor: AgentActor, id: string, in
   const task = findTask(services, id);
   checkWork(task);
   checkHeld(services, task, actor);
-  const blocks = fromMarkdown(markdown, writer(services));
+  const blocks = blocksOf(services, markdown);
   if (blocks.length === 0) throw new AgentError(422, "validation", "The comment is empty");
   try {
     return {
@@ -395,10 +425,105 @@ export function appendDescription(services: AppServices, actor: AgentActor, id: 
   const task = findTask(services, id);
   checkWork(task);
   checkHeld(services, task, actor);
-  const blocks = fromMarkdown(markdown, writer(services));
+  const blocks = blocksOf(services, markdown);
   if (blocks.length === 0) throw new AgentError(422, "validation", "Nothing to add");
   appendBlocks(services, task.bodyPageId, blocks);
   return { ok: true as const };
+}
+
+// ----- Suggestions -----
+
+const suggestBody = z.object({
+  page: z.string().optional(),
+  task: z.string().optional(),
+  action: z.enum(["insert", "replace", "delete"]),
+  after: z.string().optional(),
+  inside: z.string().optional(),
+  target: z.string().optional(),
+  markdown: z.string().optional(),
+  note: z.string().max(NOTE_MAX).optional(),
+});
+
+const fromSuggestionError = (error: unknown): never => {
+  if (error instanceof SuggestionError) {
+    const status = { not_found: 404, validation: 422, outdated: 409, resolved: 409, forbidden: 403 }[error.code];
+    throw new AgentError(status, error.code, error.message);
+  }
+  throw error;
+};
+
+/** The block IDs in a page's tree, to resolve the short IDs an agent gives. */
+function blockIds(services: AppServices, pageId: string): string[] {
+  const ids: string[] = [];
+  const visit = (node: TreeNode) => {
+    for (const child of node.children ?? []) {
+      ids.push(child.block.id);
+      visit(child);
+    }
+  };
+  const tree = services.blocks.loadTree(pageId);
+  if (tree) visit(tree);
+  return ids;
+}
+
+/** Proposes a change to a page or a task's description, for a human to approve or reject. */
+export function suggest(services: AppServices, actor: AgentActor, input: unknown) {
+  const body = parse(suggestBody, input);
+  if (!body.page === !body.task) throw new AgentError(422, "validation", "Give `page` or `task`: where the suggestion goes");
+  const pageId = body.task
+    ? findTask(services, body.task).bodyPageId
+    : resolveId(
+        body.page!,
+        allPages(services).map((p) => p.id),
+        "page",
+      );
+  const ids = blockIds(services, pageId);
+  const block = (id: string | undefined) => (id === undefined ? undefined : resolveId(id, ids, "block"));
+  try {
+    const suggestion = services.suggestions.suggest({
+      pageId,
+      action: body.action,
+      afterId: block(body.after),
+      insideId: block(body.inside),
+      targetId: block(body.target),
+      blocks: body.markdown ? blocksOf(services, body.markdown) : [],
+      note: body.note,
+      author: actor.name,
+    });
+    return { ok: true as const, id: short(suggestion.id) };
+  } catch (error) {
+    return fromSuggestionError(error);
+  }
+}
+
+const findSuggestion = (services: AppServices, id: string) =>
+  services.suggestions.get(resolveId(id, services.suggestions.idsStartingWith(id), "suggestion"))!;
+
+export function getSuggestion(services: AppServices, id: string) {
+  const suggestion = findSuggestion(services, id);
+  return {
+    id: short(suggestion.id),
+    action: suggestion.action,
+    status: suggestion.state,
+    place: placeOf(services, suggestion.pageId),
+    ...(suggestion.resolvedAt ? { resolvedAt: suggestion.resolvedAt } : {}),
+  };
+}
+
+/** Takes back the agent's own pending suggestion. */
+export function withdrawSuggestion(services: AppServices, actor: AgentActor, id: string) {
+  const suggestion = findSuggestion(services, id);
+  try {
+    services.suggestions.withdraw(suggestion.id, actor.name);
+    return { ok: true as const };
+  } catch (error) {
+    return fromSuggestionError(error);
+  }
+}
+
+/** Approving and rejecting are for humans. */
+export function resolveSuggestion(): never {
+  throw new AgentError(403, "forbidden", "Only a human approves or rejects suggestions");
 }
 
 /** Inserts blocks (and their children) after a page's last block. */

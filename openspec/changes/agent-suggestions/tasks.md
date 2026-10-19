@@ -22,9 +22,9 @@
 
 ## 4. Agent API and MCP
 
-- [ ] 4.1 Markdown: `anchors` option in `toMarkdown`, suggestions written as `<suggestion …>` blocks, importer drops trailing anchors and refuses `<suggestion` lines; round-trip tests
-- [ ] 4.2 `anchors` on `GET page/:id` and `GET task/:id/description`; `POST suggest`, `GET suggestion/:id` and `POST suggestion/:id/withdraw` with routes; permissions (`forbidden` for approve and reject, allowed on held work); tests for the agent-api scenarios
-- [ ] 4.3 MCP tools `suggest`, `get_suggestion`, `withdraw_suggestion`, and `anchors` on `read_page` and `read_description`; README; MCP test
+- [x] 4.1 Markdown: `anchors` option in `toMarkdown`, suggestions written as `<suggestion …>` blocks, importer drops trailing anchors and refuses `<suggestion` lines; round-trip tests
+- [x] 4.2 `anchors` on `GET page/:id` and `GET task/:id/description`; `POST suggest`, `GET suggestion/:id` and `POST suggestion/:id/withdraw` with routes; permissions (`forbidden` for approve and reject, allowed on held work); tests for the agent-api scenarios
+- [x] 4.3 MCP tools `suggest`, `get_suggestion`, `withdraw_suggestion`, and `anchors` on `read_page` and `read_description`; README; MCP test
 
 ## 5. Screens
 

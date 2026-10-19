@@ -23,6 +23,11 @@ const ROUTES: { method: "GET" | "POST"; path: string; handler: Handler }[] = [
   { method: "GET", path: "pages", handler: (s, _a, _p, input) => api.searchPages(s, input) },
   { method: "POST", path: "pages", handler: (s, _a, _p, input) => api.createPage(s, input) },
   { method: "GET", path: "page/:id", handler: (s, _a, p, input) => api.readPage(s, p.id!, input) },
+  { method: "POST", path: "suggest", handler: (s, a, _p, input) => api.suggest(s, a, input) },
+  { method: "GET", path: "suggestion/:id", handler: (s, _a, p) => api.getSuggestion(s, p.id!) },
+  { method: "POST", path: "suggestion/:id/withdraw", handler: (s, a, p) => api.withdrawSuggestion(s, a, p.id!) },
+  { method: "POST", path: "suggestion/:id/approve", handler: () => api.resolveSuggestion() },
+  { method: "POST", path: "suggestion/:id/reject", handler: () => api.resolveSuggestion() },
 ];
 
 function match(method: string, path: string) {
