@@ -252,6 +252,15 @@ export function suggestionContract(name: string, factory: ServicesFactory) {
         expect(services.suggestions.listPending()).toEqual([]);
       });
 
+      it("finds suggestions by the start of their ID, resolved ones too", () => {
+        suggest({ id: "abc-1", blocks: [para("n1", "x")] });
+        suggest({ id: "abd-2", blocks: [para("n2", "y")] });
+        services.suggestions.reject("abd-2");
+        expect(services.suggestions.idsStartingWith("ab").sort()).toEqual(["abc-1", "abd-2"]);
+        expect(services.suggestions.idsStartingWith("abd")).toEqual(["abd-2"]);
+        expect(services.suggestions.idsStartingWith("zz")).toEqual([]);
+      });
+
       it("lists pending suggestions across pages, oldest first", () => {
         services.blocks.apply([{ op: "insert", block: { id: "Q", type: "page", content: [{ text: "Other" }] }, parentId: null }]);
         suggest({ id: "first", blocks: [para("n1", "x")] });
