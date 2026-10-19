@@ -89,6 +89,7 @@ Markdown has no container syntax models reliably know; a tag is unambiguous, can
 
 - `POST suggest` with `{ page | task, action, after? | inside?, target?, markdown?, note? }` returns `{ ok, id }`. `page` is a page ID (as for `read_page`), `task` a task ID (its description). Positions and targets are resolved by short ID *within that page's own content*.
 - `GET suggestion/:id` returns `{ id, action, status, place, resolvedAt? }`, where `place` is `page:<id>` or `task:<id>`.
+- `POST suggestion/:id/withdraw` takes back the calling agent's own pending (or outdated) suggestion: the same removal as `reject`, recorded as `withdrawn`. Another agent's suggestion is `forbidden`. Withdrawing has no undo; the agent can suggest again.
 - Agents may suggest on any page or task, including work held by another agent: suggestions don't change content, so claiming doesn't apply.
 
 ### 10. Pending content isn't content
@@ -103,7 +104,7 @@ A "Waiting for review" section lists each page or task with pending suggestions:
 
 ### 12. Storage
 
-Migration `005_suggestions.sql`: `suggestions (id PK, place_page_id, action, target_id, note, actor_name, base JSON, status CHECK IN ('pending','approved','rejected'), snapshot JSON, created_at, resolved_at)`, indexed on `(status, place_page_id)`. `place_page_id` is the page whose own content holds the suggestion (a workspace page, a library document or a task's body page). It has an in-memory twin with the shared repository contract, as every repository does. Suggestions are only created by agents, so the author is always an agent and its name is required. The human resolver needs no name in a single-user app.
+Migration `005_suggestions.sql`: `suggestions (id PK, place_page_id, action, target_id, note, actor_name, base JSON, status CHECK IN ('pending','approved','rejected','withdrawn'), snapshot JSON, created_at, resolved_at)`, indexed on `(status, place_page_id)`. `place_page_id` is the page whose own content holds the suggestion (a workspace page, a library document or a task's body page). It has an in-memory twin with the shared repository contract, as every repository does. Suggestions are only created by agents, so the author is always an agent and its name is required. The human resolver needs no name in a single-user app.
 
 ## Risks / Trade-offs
 
@@ -120,5 +121,4 @@ Additive: a new table and a new block type, and existing blocks are unaffected. 
 
 ## Open Questions
 
-- Should agents be able to **withdraw** their own pending suggestion? It's cheap (`reject` limited to the author) and helps an agent that changes its mind. It's not in this change unless wanted.
-- Should a human be able to **edit the proposed blocks before approving**? Left out (see Non-Goals). It is the most likely follow-up.
+- **Revising a suggestion before approving it**: the human edits the proposed blocks, or leaves inline comments on them that the author agent picks up and answers with an updated suggestion. Moved to the exploration "Revising suggestions before approval"; nothing in this change should make either harder (the record already ties a suggestion to its author).

@@ -11,8 +11,9 @@ Agents can read every page and description but can only write to work tasks they
 - **Approve** applies the change in one step; **Reject** removes the suggestion. Either can be undone right after. Every suggestion keeps a record (author, action, status, who resolved it and when) after it leaves the page.
 - A replace or delete whose target changed after it was proposed is **outdated**: shown as such and can't be approved, only rejected.
 - **Approve all** / **Reject all** on a page with several pending suggestions.
+- An agent can **withdraw** its own pending suggestion, which removes it from the page as a rejection would.
 - Pending suggestions are not content yet: mentions and references inside them don't count as backlinks, and editing never puts the caret inside them or changes them.
-- Agent API and MCP: reads can return **block anchors** (short block IDs in the Markdown) so agents can point at a block; a new `suggest` function (and `suggest` tool) proposes a change to any page or task description; a `suggestion` function reports a suggestion's status. Agents see pending suggestions, theirs and others', in the Markdown they read. Agents can't approve or reject.
+- Agent API and MCP: reads can return **block anchors** (short block IDs in the Markdown) so agents can point at a block; a new `suggest` function (and `suggest` tool) proposes a change to any page or task description; a `suggestion` function reports a suggestion's status, and `withdraw` takes back the agent's own pending suggestion. Agents see pending suggestions, theirs and others', in the Markdown they read. Agents can't approve or reject.
 - The home dashboard lists pages and tasks with suggestions waiting for review.
 
 ## Capabilities
@@ -26,13 +27,13 @@ Agents can read every page and description but can only write to work tasks they
 - `page-viewer`: suggestions rendered on read-only pages; "Mentioned in" ignores pending suggestions.
 - `task-screen`: a task's "Mentioned in" ignores pending suggestions.
 - `agent-api`: permissions (suggest on any page or task description), the `suggest` and `suggestion` functions, block anchors on reads, suggestions in the Markdown conversion.
-- `agent-mcp`: the `suggest` and `get_suggestion` tools; `anchors` on `read_page` and `read_description`.
+- `agent-mcp`: the `suggest`, `get_suggestion` and `withdraw_suggestion` tools; `anchors` on `read_page` and `read_description`.
 - `project-screens`: the home dashboard lists suggestions waiting for review.
 
 ## Non-goals
 
 - Word-level tracked changes inside a block: a replace swaps whole blocks.
-- Suggestions from humans (a "suggesting" editing mode), or humans editing a suggestion before approving it. A human edits the result after approving.
+- Suggestions from humans (a "suggesting" editing mode). Revising a suggestion before approving it, by editing it or by commenting on it inline for the agent to update, is left to the exploration "Revising suggestions before approval"; for now a human edits the result after approving, or rejects and asks again.
 - Suggesting new pages, deleting pages, moving blocks, or changing a page's title.
 - Suggestions on comments or on a project's home page.
 - Notifications beyond the dashboard list (see the Notifications exploration).

@@ -6,14 +6,14 @@
 ## 1. Block type and storage
 
 - [ ] 1.1 `suggestion` block type: props schema (`action`, `targetId` required for replace and delete), no content, no `page`/`comment`/`suggestion` descendants; validation tests
-- [ ] 1.2 Migration `005_suggestions.sql` and the `suggestions` repository (SQLite and in-memory, shared contract tests): create, get, list pending by place, resolve, reopen
+- [ ] 1.2 Migration `005_suggestions.sql` and the `suggestions` repository (SQLite and in-memory, shared contract tests): create, get, list pending by place, resolve (approved, rejected, withdrawn), reopen
 
 ## 2. Suggestion service
 
 - [ ] 2.1 `SuggestionService.suggest`: resolve the place (page or task body page), check position and target are in the page's own content, build the suggestion block and its children, store `base` for replace and delete; one transaction; tests for each action and each refusal
 - [ ] 2.2 Status with computed `outdated` (target missing or differs from `base`); tests for edit, delete, unchanged save
 - [ ] 2.3 `approve` (insert, replace with children moving under the first new block, delete; refuses outdated) and `reject`, each one batch plus the record update with a `snapshot`; tests for the agent-suggestions scenarios
-- [ ] 2.4 `reopen` from the snapshot; `approveAll` / `rejectAll` for a page in document order, skipping outdated; tests
+- [ ] 2.4 `withdraw` (author only, pending or outdated, no snapshot needed); `reopen` from the snapshot; `approveAll` / `rejectAll` for a page in document order, skipping outdated; tests
 
 ## 3. Edits and backlinks
 
@@ -23,8 +23,8 @@
 ## 4. Agent API and MCP
 
 - [ ] 4.1 Markdown: `anchors` option in `toMarkdown`, suggestions written as `<suggestion …>` blocks, importer drops trailing anchors and refuses `<suggestion` lines; round-trip tests
-- [ ] 4.2 `anchors` on `GET page/:id` and `GET task/:id/description`; `POST suggest` and `GET suggestion/:id` with routes; permissions (`forbidden` for approve and reject, allowed on held work); tests for the agent-api scenarios
-- [ ] 4.3 MCP tools `suggest`, `get_suggestion`, and `anchors` on `read_page` and `read_description`; README; MCP test
+- [ ] 4.2 `anchors` on `GET page/:id` and `GET task/:id/description`; `POST suggest`, `GET suggestion/:id` and `POST suggestion/:id/withdraw` with routes; permissions (`forbidden` for approve and reject, allowed on held work); tests for the agent-api scenarios
+- [ ] 4.3 MCP tools `suggest`, `get_suggestion`, `withdraw_suggestion`, and `anchors` on `read_page` and `read_description`; README; MCP test
 
 ## 5. Screens
 

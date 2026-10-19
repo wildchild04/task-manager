@@ -12,7 +12,7 @@ Blocks SHALL be read as Markdown: paragraphs, headings (`#`–`###`), bulleted a
 - **THEN** the Markdown contains `<suggestion id="…" by="builder" action="insert" status="pending" note="Add tables">`, the proposed blocks, and `</suggestion>`, where the suggestion is
 
 ### Requirement: Agent permissions and claiming
-Agents SHALL be able to read projects, tasks, descriptions, comments, references, pages and suggestions; create tasks of any kind in existing projects; create pages; suggest changes to any page or task description; apply `start`, `pause`, `complete` and `return` to work tasks; comment on work tasks; and append to a work task's description. Approving or rejecting a suggestion, and any other change, SHALL be refused with status 403 (code `forbidden`). A work task an agent started SHALL be held by that agent while it is in progress: `pause`, `complete`, `return`, comments and description additions by another agent SHALL be refused with status 409 (code `claimed`, naming the holder); suggestions on its description SHALL be allowed. Transitions not allowed from the current state SHALL be refused with status 409 (code `invalid_transition`).
+Agents SHALL be able to read projects, tasks, descriptions, comments, references, pages and suggestions; create tasks of any kind in existing projects; create pages; suggest changes to any page or task description and withdraw their own suggestions; apply `start`, `pause`, `complete` and `return` to work tasks; comment on work tasks; and append to a work task's description. Approving or rejecting a suggestion, and any other change, SHALL be refused with status 403 (code `forbidden`). A work task an agent started SHALL be held by that agent while it is in progress: `pause`, `complete`, `return`, comments and description additions by another agent SHALL be refused with status 409 (code `claimed`, naming the holder); suggestions on its description SHALL be allowed. Transitions not allowed from the current state SHALL be refused with status 409 (code `invalid_transition`).
 
 #### Scenario: Cancel is refused
 - **WHEN** an agent tries to cancel a work task
@@ -50,6 +50,7 @@ The API SHALL offer exactly these functions, each returning only the listed fiel
 | `GET page/:id` | `maxChars?`, `offset?`, `anchors?` | `{ title, markdown, more, offset? }` |
 | `POST suggest` | `{ page? , task?, action, after?, inside?, target?, markdown?, note? }` | `{ ok: true, id }` |
 | `GET suggestion/:id` | | `{ id, action, status, place, resolvedAt? }` (`place`: `page:<id>` or `task:<id>`) |
+| `POST suggestion/:id/withdraw` | | `{ ok: true }` |
 
 #### Scenario: A work loop
 - **WHEN** an agent lists to-do work, gets one task, reads its description, starts it, comments and completes it
@@ -65,7 +66,7 @@ The API SHALL offer exactly these functions, each returning only the listed fiel
 - **THEN** the Markdown is "## Goals ^1a2b3c4d\n\nShip it ^5e6f7a8b", where the IDs are those of the two blocks
 
 ### Requirement: Agents suggest changes
-`POST suggest` SHALL create a suggestion (see agent-suggestions) by the calling agent, on `page` (a page ID as for `GET page/:id`) or on `task` (a task ID: its description), exactly one of them. For `insert`, `after` (a block to follow) or `inside` (a block to append under) MAY be given, at most one, and the end of the page is the default; `markdown` holds the proposed blocks. For `replace`, `target` and `markdown` are required; for `delete`, `target` is required and `markdown` SHALL NOT be given. Block IDs SHALL be resolved by their 8-character prefix within the page's own content. `note` SHALL be at most 280 characters. A request that breaks these rules or the placement rules of agent-suggestions SHALL be refused with status 422 (code `validation`); an unknown page, task or block with status 404 (code `not_found`); nothing SHALL be created when a request is refused. `GET suggestion/:id` SHALL report the suggestion's status: `pending`, `outdated`, `approved` or `rejected`.
+`POST suggest` SHALL create a suggestion (see agent-suggestions) by the calling agent, on `page` (a page ID as for `GET page/:id`) or on `task` (a task ID: its description), exactly one of them. For `insert`, `after` (a block to follow) or `inside` (a block to append under) MAY be given, at most one, and the end of the page is the default; `markdown` holds the proposed blocks. For `replace`, `target` and `markdown` are required; for `delete`, `target` is required and `markdown` SHALL NOT be given. Block IDs SHALL be resolved by their 8-character prefix within the page's own content. `note` SHALL be at most 280 characters. A request that breaks these rules or the placement rules of agent-suggestions SHALL be refused with status 422 (code `validation`); an unknown page, task or block with status 404 (code `not_found`); nothing SHALL be created when a request is refused. `GET suggestion/:id` SHALL report the suggestion's status: `pending`, `outdated`, `approved`, `rejected` or `withdrawn`. `POST suggestion/:id/withdraw` SHALL withdraw the calling agent's own pending or outdated suggestion; another agent's SHALL be refused with status 403 (code `forbidden`), and a resolved one with status 409 (code `resolved`).
 
 #### Scenario: Suggest bullets into an exploration
 - **WHEN** "planner" reads exploration "Block editor v1" with anchors and suggests inserting "- Tables\n- Code blocks" after its last bullet, with the note "From the content audit"
@@ -74,6 +75,10 @@ The API SHALL offer exactly these functions, each returning only the listed fiel
 #### Scenario: Replace needs Markdown
 - **WHEN** an agent suggests a `replace` with a target and no `markdown`
 - **THEN** it is refused with code `validation` and nothing is created
+
+#### Scenario: Withdraw another agent's suggestion
+- **WHEN** "reviewer" calls `POST suggestion/:id/withdraw` on a suggestion by "builder"
+- **THEN** it is refused with code `forbidden` and the suggestion stays pending
 
 #### Scenario: Status after approval
 - **WHEN** the human approves a suggestion and its agent asks for its status

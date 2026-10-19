@@ -17,7 +17,7 @@ Insert and replace SHALL have at least one proposed block. Positions and targets
 - **THEN** it is refused and nothing is created
 
 ### Requirement: Suggestion record and status
-Every suggestion SHALL have a record with its author (the agent's name), action, target (for replace and delete), an optional note, when it was made, and its status: `pending`, `approved` or `rejected`, with when it was resolved. The record SHALL remain after the suggestion leaves the page. A pending replace or delete SHALL additionally be reported as `outdated` when its target no longer exists, or when the target's type, props or content (for delete, its whole subtree) differ from when the suggestion was made.
+Every suggestion SHALL have a record with its author (the agent's name), action, target (for replace and delete), an optional note, when it was made, and its status: `pending`, `approved`, `rejected` or `withdrawn`, with when it was resolved. The record SHALL remain after the suggestion leaves the page. A pending replace or delete SHALL additionally be reported as `outdated` when its target no longer exists, or when the target's type, props or content (for delete, its whole subtree) differ from when the suggestion was made.
 
 #### Scenario: Target edited after the suggestion
 - **WHEN** an agent suggests replacing the paragraph "Ship on Monday", and the human then changes it to "Ship on Tuesday"
@@ -48,6 +48,17 @@ Rejecting a pending or outdated suggestion SHALL remove the suggestion block and
 #### Scenario: Reject a delete
 - **WHEN** the human rejects a suggestion to delete the paragraph "Legacy notes"
 - **THEN** "Legacy notes" is still there and no suggestion remains
+
+### Requirement: Withdrawing a suggestion
+The agent that made a pending or outdated suggestion SHALL be able to withdraw it: the suggestion block and its proposed blocks are removed, the rest of the page is unchanged, and its record is set to `withdrawn`. Withdrawing another agent's suggestion, or one that is already resolved, SHALL be refused. Withdrawing SHALL offer no undo.
+
+#### Scenario: Withdraw own suggestion
+- **WHEN** "builder" withdraws its pending insert suggestion
+- **THEN** the suggestion is no longer on the page and its record is `withdrawn`
+
+#### Scenario: Another agent's suggestion
+- **WHEN** "reviewer" tries to withdraw a suggestion made by "builder"
+- **THEN** it is refused and the suggestion stays pending
 
 ### Requirement: Undoing an approval or rejection
 After approving or rejecting a suggestion, the page SHALL offer **Undo** until the next edit to that page. Undo SHALL restore the page as it was before, with the suggestion pending again.
