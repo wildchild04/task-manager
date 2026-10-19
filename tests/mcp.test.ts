@@ -48,12 +48,13 @@ describe("MCP server", () => {
     }
   });
 
-  it("offers the twelve tools, each describing its defaults", async () => {
+  it("offers the thirteen tools, each describing its defaults", async () => {
     const client = await connect(services);
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
       "append_description",
       "comment",
+      "create_page",
       "create_task",
       "get_task",
       "list_comments",
@@ -89,6 +90,18 @@ describe("MCP server", () => {
     expect(state).toBe("open");
     const description = await client.callTool({ name: "read_description", arguments: { id } });
     expect(JSON.parse(text(description)).markdown).toBe("Look at **FTS5**");
+  });
+
+  it("creates a page in a project's library", async () => {
+    const client = await connect(services);
+    const result = await client.callTool({
+      name: "create_page",
+      arguments: { title: "Architecture", project: "proj0001", markdown: "Three **layers**" },
+    });
+    expect(result.isError).toBeFalsy();
+    const { id } = JSON.parse(text(result));
+    const page = await client.callTool({ name: "read_page", arguments: { id } });
+    expect(JSON.parse(text(page))).toEqual({ title: "Architecture", markdown: "Three **layers**", more: false });
   });
 
   it("works a task end to end as the agent", async () => {

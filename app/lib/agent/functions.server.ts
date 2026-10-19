@@ -303,6 +303,54 @@ export function createTask(services: AppServices, input: unknown) {
   }
 }
 
+const pageBody = z.object({
+  title: z.string(),
+  project: z.string().optional(),
+  parent: z.string().optional(),
+  markdown: z.string().optional(),
+});
+
+/**
+ * Creates a page as the web forms do: a workspace page by default, a document
+ * at the top of `project`'s library, or a page inside `parent` (any page),
+ * after the existing ones, with optional Markdown content.
+ */
+export function createPage(services: AppServices, input: unknown) {
+  const body = parse(pageBody, input);
+  const title = body.title.trim();
+  if (!title) throw new AgentError(422, "validation", "A page needs a title");
+  if (body.project && body.parent)
+    throw new AgentError(422, "validation", "Give `project` or `parent`, not both: a parent page already sets the place");
+
+  let parentId: string | null = null;
+  if (body.parent) {
+    parentId = resolveId(
+      body.parent,
+      allPages(services).map((p) => p.id),
+      "page",
+    );
+  } else if (body.project) {
+    const projectId = resolveId(
+      body.project,
+      services.projects.list().map((p) => p.id),
+      "project",
+    );
+    parentId = services.projects.get(projectId)!.libraryRootId;
+  }
+  const siblings = parentId ? services.blocks.getChildren(parentId) : services.blocks.listRootPages();
+  const blocks = body.markdown ? fromMarkdown(body.markdown, writer(services)) : [];
+  const id = crypto.randomUUID();
+  try {
+    services.blocks.apply([
+      { op: "insert", block: { id, type: "page", content: [{ text: title }] }, parentId, afterId: siblings.at(-1)?.id ?? null },
+      ...insertOps(blocks, id, null),
+    ]);
+  } catch (error) {
+    throw new AgentError(422, "validation", error instanceof Error ? error.message : "The page couldn't be created");
+  }
+  return { ok: true as const, id: short(id) };
+}
+
 const transitionBody = z.object({ name: z.string().min(1), reason: z.string().optional() });
 
 export function transition(services: AppServices, actor: AgentActor, id: string, input: unknown) {
@@ -355,19 +403,25 @@ export function appendDescription(services: AppServices, actor: AgentActor, id: 
 
 /** Inserts blocks (and their children) after a page's last block. */
 function appendBlocks(services: AppServices, pageId: string, blocks: ReturnType<typeof fromMarkdown>) {
-  const ops: Batch[number][] = [];
-  const add = (list: typeof blocks, parentId: string, afterId: string | null) => {
-    let previous = afterId;
-    for (const { children, ...block } of list) {
-      ops.push({ op: "insert", block, parentId, afterId: previous });
-      if (children?.length) add(children, block.id, null);
-      previous = block.id;
-    }
-  };
-  add(blocks, pageId, services.blocks.getChildren(pageId).at(-1)?.id ?? null);
+  const ops = insertOps(blocks, pageId, services.blocks.getChildren(pageId).at(-1)?.id ?? null);
   try {
     services.blocks.apply(ops);
   } catch (error) {
     throw new AgentError(422, "validation", error instanceof Error ? error.message : "The description couldn't be changed");
   }
+}
+
+/** The operations inserting blocks (and their children) into `parentId`, starting after `afterId`. */
+function insertOps(blocks: ReturnType<typeof fromMarkdown>, parentId: string, afterId: string | null): Batch[number][] {
+  const ops: Batch[number][] = [];
+  const add = (list: typeof blocks, parent: string, after: string | null) => {
+    let previous = after;
+    for (const { children, ...block } of list) {
+      ops.push({ op: "insert", block, parentId: parent, afterId: previous });
+      if (children?.length) add(children, block.id, null);
+      previous = block.id;
+    }
+  };
+  add(blocks, parentId, afterId);
+  return ops;
 }

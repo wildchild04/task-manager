@@ -42,5 +42,6 @@ Run it by hand with `npm run mcp` (the three variables must be set).
 | `append_description` | Add Markdown to the end of a work task's description |
 | `search_pages` | Knowledge library and workspace pages by title |
 | `read_page` | A page as Markdown; `maxChars`, `offset` |
+| `create_page` | A page with Markdown content: global in the workspace, in a project's library (`project`), or inside another page (`parent`) |
 
-Agents can't cancel, touch chores or explorations, delete anything, or create tasks.
+Agents can't cancel, change chores or explorations, edit existing pages, or delete anything.

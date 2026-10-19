@@ -21,6 +21,7 @@ const ROUTES: { method: "GET" | "POST"; path: string; handler: Handler }[] = [
   { method: "POST", path: "task/:id/comment", handler: (s, a, p, input) => api.comment(s, a, p.id!, input) },
   { method: "POST", path: "task/:id/description", handler: (s, a, p, input) => api.appendDescription(s, a, p.id!, input) },
   { method: "GET", path: "pages", handler: (s, _a, _p, input) => api.searchPages(s, input) },
+  { method: "POST", path: "pages", handler: (s, _a, _p, input) => api.createPage(s, input) },
   { method: "GET", path: "page/:id", handler: (s, _a, p, input) => api.readPage(s, p.id!, input) },
 ];
 

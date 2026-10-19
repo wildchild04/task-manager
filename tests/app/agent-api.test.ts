@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { handleAgentRequest } from "../../app/lib/agent/request.server";
+import { workspacePageTree } from "../../app/lib/page-search.server";
 import { type AppServices, createInMemoryServices } from "~/composition";
 
 const TOKEN = "secret-token";
@@ -251,6 +252,51 @@ describe("agent API", () => {
       const response = await call("POST", "tasks", { project: P, ...fields });
       expect(response).toMatchObject({ status, body: { error: { code } } });
       expect(services.tasks.list(P)).toHaveLength(0);
+    });
+  });
+
+  describe("creating pages", () => {
+    it("creates a workspace page by default, after the existing ones, with content", async () => {
+      services.blocks.apply([
+        { op: "insert", block: { id: "root0001-x", type: "page", content: [{ text: "Inbox" }] }, parentId: null },
+      ]);
+      const { status, body } = await call("POST", "pages", { title: "Runbook", markdown: "## Deploy\n\n- [ ] Tag the release" });
+      expect(status).toBe(200);
+      expect(Object.keys(body).sort()).toEqual(["id", "ok"]);
+      expect(workspacePageTree(services).map((p) => p.title)).toEqual(["Inbox", "Runbook"]);
+      expect((await call("GET", `page/${body.id}`)).body).toEqual({
+        title: "Runbook",
+        markdown: "## Deploy\n\n- [ ] Tag the release",
+        more: false,
+      });
+    });
+
+    it("creates a document in a project's library, and pages inside pages", async () => {
+      const doc = (await call("POST", "pages", { title: "Architecture", project: "proj0001" })).body;
+      const nested = (await call("POST", "pages", { title: "Layers", parent: doc.id })).body;
+      expect(services.library.getLibraryTree(P)).toEqual([
+        {
+          id: expect.stringMatching(`^${doc.id}`),
+          title: "Architecture",
+          children: [{ id: expect.stringMatching(`^${nested.id}`), title: "Layers", children: [] }],
+        },
+      ]);
+      expect((await call("GET", "pages?query=layers")).body.pages).toEqual([
+        { id: nested.id, title: "Layers", place: "Taskhub › Architecture" },
+      ]);
+      expect(workspacePageTree(services)).toEqual([]);
+    });
+
+    it.each([
+      [{ title: "  " }, 422, "validation"],
+      [{ title: "X", project: "proj0001", parent: "proj0001" }, 422, "validation"],
+      [{ title: "X", project: "nope0000" }, 404, "not_found"],
+      [{ title: "X", parent: "nope0000" }, 404, "not_found"],
+    ])("refuses %j", async (fields, status, code) => {
+      const response = await call("POST", "pages", fields);
+      expect(response).toMatchObject({ status, body: { error: { code } } });
+      expect(workspacePageTree(services)).toEqual([]);
+      expect(services.library.getLibraryTree(P)).toEqual([]);
     });
   });
 

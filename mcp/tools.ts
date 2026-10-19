@@ -178,5 +178,20 @@ export function createAgentServer(call: AgentCall): McpServer {
     ({ id, ...rest }) => run(call, "GET", `page/${enc(id)}`, rest),
   );
 
+  server.registerTool(
+    "create_page",
+    {
+      description:
+        "Create a page titled `title`, with optional Markdown content (same as `comment`; mention with `@[Title](page:id)`). Where it goes: a workspace page by default; with `project`, a document at the top of that project's library; with `parent`, a page inside that page (workspace or library). Give `project` or `parent`, not both. It's added after the existing pages there. Returns { ok, id }.",
+      inputSchema: {
+        title: z.string(),
+        project: z.string().optional().describe("Project ID from list_projects: create in its knowledge library"),
+        parent: z.string().optional().describe("Page ID from search_pages: create inside that page"),
+        markdown: z.string().optional().describe("The page's content, in Markdown"),
+      },
+    },
+    (input) => run(call, "POST", "pages", input),
+  );
+
   return server;
 }
