@@ -46,6 +46,22 @@ describe("page backlinks", () => {
     expect(pageBacklinks(services, body)).toEqual([{ kind: "page", id: "pers", title: "Persistence", href: "/pages/pers", count: 1 }]);
   });
 
+  it("skips mentions inside pending suggestions until they're approved", () => {
+    const body = services.tasks.get("W")!.bodyPageId;
+    services.blocks.apply([{ op: "insert", block: { id: "plan", type: "page", content: [{ text: "Release plan" }] }, parentId: null }]);
+    services.suggestions.suggest({
+      id: "s",
+      pageId: "plan",
+      action: "insert",
+      blocks: [{ id: "sp", type: "paragraph", content: [m("pers"), { text: " and " }, m(body)] }],
+      author: "builder",
+    });
+    expect(pageBacklinks(services, "pers")).toEqual([]);
+    expect(pageBacklinks(services, body)).toEqual([]);
+    services.suggestions.approve("s");
+    expect(pageBacklinks(services, "pers")).toEqual([{ kind: "page", id: "plan", title: "Release plan", href: "/pages/plan", count: 1 }]);
+  });
+
   it("skips comments", () => {
     services.comments.add({ id: "c", taskId: "W", blocks: [{ id: "cp", type: "paragraph", content: [m("pers")] }] });
     expect(pageBacklinks(services, "pers")).toEqual([]);

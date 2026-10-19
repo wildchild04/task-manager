@@ -39,8 +39,10 @@ export type PageEditOptions = {
  * Checks that an edit batch stays inside one page's own content: the root and
  * the blocks under it, but not inside sub-pages. Sub-pages can be moved
  * within the page but never deleted (also not along with a block containing
- * one), retyped or retitled from here; no page or comment blocks are created;
- * the root only changes its title, when allowed. Returns the reason a batch
+ * one), retyped or retitled from here; no page, comment or suggestion blocks
+ * are created; suggestions and the blocks inside them aren't touched (they
+ * change only by being approved or rejected), nor deleted along with a block
+ * containing one; the root only changes its title, when allowed. Returns the reason a batch
  * is refused, or `undefined` when it may be applied.
  */
 export function checkPageEdit(tree: TreeNode, batch: Batch, options: PageEditOptions = {}): string | undefined {
@@ -60,12 +62,23 @@ export function checkPageEdit(tree: TreeNode, batch: Batch, options: PageEditOpt
   const canHoldChildren = (id: string) => parent.has(id) && !isSubPage(id);
   const containsSubPage = (id: string): boolean =>
     isSubPage(id) || [...parent].some(([child, p]) => p === id && containsSubPage(child));
+  // A suggestion or a block inside one.
+  const isSuggested = (id: string): boolean => {
+    for (let at: string | null | undefined = id; at; at = parent.get(at)) if (type.get(at) === "suggestion") return true;
+    return false;
+  };
+  const containsSuggestion = (id: string): boolean =>
+    type.get(id) === "suggestion" || [...parent].some(([child, p]) => p === id && containsSuggestion(child));
+  const SUGGESTED = "Suggestions change only by being approved or rejected";
 
   for (const op of batch) {
     switch (op.op) {
       case "insert": {
         if (!("parentId" in op) || op.parentId === null || !canHoldChildren(op.parentId)) return "Edits must stay inside the page";
-        if (op.block.type === "page" || op.block.type === "comment") return `A ${op.block.type} block can't be created here`;
+        if (op.block.type === "page" || op.block.type === "comment" || op.block.type === "suggestion") {
+          return `A ${op.block.type} block can't be created here`;
+        }
+        if (isSuggested(op.parentId)) return SUGGESTED;
         if (parent.has(op.block.id)) return `Block ${op.block.id} already exists`;
         parent.set(op.block.id, op.parentId);
         type.set(op.block.id, op.block.type);
@@ -79,6 +92,7 @@ export function checkPageEdit(tree: TreeNode, batch: Batch, options: PageEditOpt
           break;
         }
         if (isSubPage(op.id)) return "A sub-page is edited on its own page";
+        if (isSuggested(op.id) || op.type === "suggestion") return SUGGESTED;
         if (op.type === "page" || op.type === "comment") return `A block can't be turned into a ${op.type}`;
         if (op.type !== undefined) type.set(op.id, op.type);
         break;
@@ -86,12 +100,15 @@ export function checkPageEdit(tree: TreeNode, batch: Batch, options: PageEditOpt
       case "move": {
         if (!parent.has(op.id) || op.id === rootId) return "Edits must stay inside the page";
         if (op.parentId === null || !canHoldChildren(op.parentId)) return "Edits must stay inside the page";
+        if (isSuggested(op.id) || isSuggested(op.parentId)) return SUGGESTED;
         parent.set(op.id, op.parentId);
         break;
       }
       case "delete": {
         if (!parent.has(op.id) || op.id === rootId) return "Edits must stay inside the page";
         if (containsSubPage(op.id)) return "Sub-pages can't be deleted by editing; delete the page itself";
+        if (isSuggested(op.id)) return SUGGESTED;
+        if (containsSuggestion(op.id)) return "Approve or reject the suggestion inside first";
         const removed = new Set([op.id]);
         let grew = true;
         while (grew) {

@@ -17,8 +17,8 @@
 
 ## 3. Edits and backlinks
 
-- [ ] 3.1 `checkPageEdit`: refuse inserting suggestions, touching a suggestion or anything inside one, and deleting a block that contains one; allow moving it and editing its target; tests for the block-editor scenarios
-- [ ] 3.2 "Mentioned in" for pages and tasks skips sources with a suggestion ancestor; tests
+- [x] 3.1 `checkPageEdit`: refuse inserting suggestions, touching a suggestion or anything inside one, and deleting a block that contains one; allow moving it and editing its target; tests for the block-editor scenarios
+- [x] 3.2 "Mentioned in" for pages and tasks skips sources with a suggestion ancestor; tests
 
 ## 4. Agent API and MCP
 

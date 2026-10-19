@@ -34,15 +34,25 @@ function placeOf(services: AppServices, block: Block): Place | undefined {
   return { kind: "page", id: page.id, title: plainText(page.content) || "Untitled", href: `/pages/${page.id}` };
 }
 
+/** Whether a block is inside a suggestion, which isn't content until it's approved. */
+function isSuggested(services: AppServices, block: Block): boolean {
+  for (let at: Block | undefined = block; at; at = at.parentId ? services.blocks.getBlock(at.parentId) : undefined) {
+    if (at.type === "suggestion") return true;
+  }
+  return false;
+}
+
 /**
  * The places that mention a page inline or reference it with a reference
  * block, one entry per place with how many times it does. The page itself (or,
- * for a task's description page, the task) is left out. Pages come first, then tasks, each by title.
+ * for a task's description page, the task) is left out, and so are pending
+ * suggestions. Pages come first, then tasks, each by title.
  */
 export function pageBacklinks(services: AppServices, pageId: string): Backlink[] {
   const sources = [...services.blocks.listMentioning(pageId), ...services.blocks.listIncomingReferences(pageId)];
   const places = new Map<string, Backlink>();
   for (const block of sources) {
+    if (isSuggested(services, block)) continue;
     const place = placeOf(services, block);
     // The page itself, or the task whose description it is, doesn't point at itself.
     if (!place || (place.kind === "page" && place.id === pageId)) continue;

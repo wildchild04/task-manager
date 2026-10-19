@@ -56,6 +56,56 @@ describe("page edits", () => {
     expect(edit([{ op: "delete", id: "a" }])).toEqual({ ok: false, message: "Sub-pages can't be deleted by editing; delete the page itself" });
   });
 
+  describe("suggestions", () => {
+    beforeEach(() => {
+      services.suggestions.suggest({
+        id: "sg",
+        pageId: "doc",
+        action: "replace",
+        targetId: "a",
+        blocks: [{ id: "n", type: "paragraph", content: [{ text: "A!" }] }],
+        author: "builder",
+      });
+    });
+    const SUGGESTED = { ok: false, message: "Suggestions change only by being approved or rejected" };
+
+    it.each([
+      ["changing a block inside", { op: "update", id: "n", content: [{ text: "edited" }] }],
+      ["adding into", { op: "insert", block: { id: "x", type: "paragraph" }, parentId: "sg" }],
+      ["moving one out", { op: "move", id: "n", parentId: "doc", afterId: null }],
+      ["moving into", { op: "move", id: "a", parentId: "sg", afterId: null }],
+      ["deleting it", { op: "delete", id: "sg" }],
+    ])("refuses %s", (_name, op) => {
+      expect(edit([op as Operation])).toEqual(SUGGESTED);
+      expect(services.suggestions.get("sg")?.state).toBe("pending");
+    });
+
+    it("refuses creating one", () => {
+      expect(edit([{ op: "insert", block: { id: "x", type: "suggestion", props: { action: "insert" } }, parentId: "doc" }])).toEqual({
+        ok: false,
+        message: "A suggestion block can't be created here",
+      });
+    });
+
+    it("lets the target be edited, which outdates the suggestion", () => {
+      expect(edit([{ op: "update", id: "a", content: [{ text: "Changed" }] }])).toMatchObject({ ok: true });
+      expect(services.suggestions.get("sg")?.state).toBe("outdated");
+    });
+
+    it("moves a block containing a suggestion, but won't delete it", () => {
+      expect(edit([{ op: "insert", block: { id: "t", type: "toggle" }, parentId: "doc", afterId: null }])).toMatchObject({ ok: true });
+      services.suggestions.suggest({
+        pageId: "doc",
+        action: "insert",
+        insideId: "t",
+        blocks: [{ id: "m", type: "paragraph", content: [{ text: "x" }] }],
+        author: "builder",
+      });
+      expect(edit([{ op: "move", id: "t", parentId: "doc", afterId: "a" }])).toMatchObject({ ok: true });
+      expect(edit([{ op: "delete", id: "t" }])).toEqual({ ok: false, message: "Approve or reject the suggestion inside first" });
+    });
+  });
+
   it("reports domain rejections and malformed input", () => {
     expect(edit([{ op: "update", id: "a", type: "divider" }])).toMatchObject({ ok: false, message: expect.stringContaining("cannot be turned into") });
     expect(applyEdit(services, { surface: "page", id: "doc", batch: [{ op: "explode" }] })).toEqual({ ok: false, message: "The edit couldn't be read" });
