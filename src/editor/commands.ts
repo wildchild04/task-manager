@@ -27,6 +27,7 @@ import {
   getBlock,
   isCollapsed,
   previousSibling,
+  selectableOf,
   type Selection,
   selectionEnd,
   selectionStart,
@@ -498,15 +499,31 @@ export function indentCode(state: EditorState, selection: Selection, backward: b
   };
 }
 
-/** Cmd/Ctrl+Enter in code: an empty paragraph after the code block, holding the caret. */
-export function exitCode(state: EditorState, selection: Selection, context: CommandContext): CommandResult | null {
-  const block = getBlock(state, selection.blockId);
-  if (block.type !== "code") return null;
+/**
+ * Leaves a code block or a table (Cmd/Ctrl+Enter, or ↓ with nothing below): an
+ * empty paragraph after it, holding the caret.
+ */
+export function exitBlock(state: EditorState, selection: Selection, context: CommandContext): CommandResult | null {
+  const { type } = getBlock(state, selection.blockId);
+  if (type !== "code" && type !== "table_cell") return null;
+  // A cell leaves its whole table.
+  const block = getBlock(state, selectableOf(state, selection.blockId));
   const id = context.newId();
   return {
     ops: [{ op: "insert", block: { id, type: "paragraph" }, parentId: block.parentId!, afterId: block.id }],
     selection: caret(id, 0),
   };
+}
+
+/** Clicking below the last block: the caret goes to a trailing empty paragraph, added when the page doesn't end with one. */
+export function appendParagraph(state: EditorState, context: CommandContext): CommandResult {
+  const last = getBlock(state, state.rootId).children.at(-1);
+  const block = last === undefined ? undefined : getBlock(state, last);
+  if (block?.type === "paragraph" && text.length(block.content) === 0 && block.children.length === 0) {
+    return { ops: [], selection: caret(block.id, 0) };
+  }
+  const id = context.newId();
+  return { ops: [{ op: "insert", block: { id, type: "paragraph" }, parentId: state.rootId, afterId: last ?? null }], selection: caret(id, 0) };
 }
 
 /** Sets a code block's language (empty for plain text). */

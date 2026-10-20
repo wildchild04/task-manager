@@ -254,9 +254,9 @@ export class Editor {
     return backward ? this.outdent() : this.indent();
   }
 
-  /** Cmd/Ctrl+Enter: leaves a code block for a new paragraph after it. Returns false outside code. */
+  /** Leaves a code block or table for a new paragraph after it. Returns false elsewhere. */
   exitBlock(): boolean {
-    return this.run(commands.exitCode(this.state, this.selection, this.context));
+    return this.run(commands.exitBlock(this.state, this.selection, this.context));
   }
 
   // ----- Whole blocks (each one undo step) -----
@@ -363,6 +363,11 @@ export class Editor {
   /** Drops blocks (the selection, or one block that becomes the selection) at a target. */
   dropBlocks(roots: readonly string[], target: DropTarget): boolean {
     return this.runOnBlocks(across.dropBlocks(this.state, roots, target), { anchor: roots[0]!, focus: roots.at(-1)! });
+  }
+
+  /** Clicking below the last block: the caret goes to a trailing empty paragraph (added if needed). */
+  appendParagraph(): void {
+    this.run(commands.appendParagraph(this.state, this.context));
   }
 
   // ----- Tables (each one undo step) -----

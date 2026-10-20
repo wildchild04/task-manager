@@ -364,6 +364,28 @@ describe("selections beyond one block", () => {
     });
   });
 
+  describe("leaving the end of the page", () => {
+    it("leaves a table for a new paragraph after it, from any cell", () => {
+      seed([p("a", "A"), table("t")]);
+      editor.setSelection(caret("t-b", 1));
+      expect(editor.exitBlock()).toBe(true);
+      expect(outline()).toEqual(["paragraph:A", "table:", "paragraph:"]);
+      expect(editor.selection).toEqual(caret("n1", 0));
+      editor.setSelection(caret("a", 0));
+      expect(editor.exitBlock()).toBe(false);
+    });
+
+    it("adds a trailing paragraph when the page doesn't end with an empty one, else goes to it", () => {
+      seed([p("a", "A"), table("t")]);
+      editor.appendParagraph();
+      expect(outline()).toEqual(["paragraph:A", "table:", "paragraph:"]);
+      expect(editor.selection).toEqual(caret("n1", 0));
+      editor.appendParagraph();
+      expect(outline()).toEqual(["paragraph:A", "table:", "paragraph:"]);
+      expect(editor.selection).toEqual(caret("n1", 0));
+    });
+  });
+
   describe("clipboard", () => {
     it("copies selected blocks whole, with their children", () => {
       seed([p("a", "Intro"), li("l1", "one"), toggle("g", "Toggle", [p("c", "inside")])]);

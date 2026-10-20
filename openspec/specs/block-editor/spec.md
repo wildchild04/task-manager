@@ -136,7 +136,7 @@ Tab SHALL nest a block as the last child of its previous sibling, keeping its ow
 - **THEN** that item follows the parent, and the other two become its children
 
 ### Requirement: Moving between blocks with the keyboard
-↑ on the first visual line of a block SHALL move the caret to the last line of the previous text block at about the same horizontal position; ↓ on the last line SHALL move to the first line of the next text block. ← at the start of a block SHALL move to the end of the previous text block; → at the end SHALL move to the start of the next. Blocks that can't hold the caret, and the children of closed toggles, SHALL be skipped. ↑ in the first block SHALL move into the title.
+↑ on the first visual line of a block SHALL move the caret to the last line of the previous text block at about the same horizontal position; ↓ on the last line SHALL move to the first line of the next text block. ← at the start of a block SHALL move to the end of the previous text block; → at the end SHALL move to the start of the next. Blocks that can't hold the caret, and the children of closed toggles, SHALL be skipped. ↑ in the first block SHALL move into the title. When no text block follows a table or code block, ↓ on its last line (in a table, its last row) and → at its end SHALL add an empty paragraph after it and move the caret there. Clicking the space below the last block SHALL put the caret in an empty paragraph at the end of the page, adding one when the page doesn't end with one.
 
 #### Scenario: Up across wrapped lines
 - **WHEN** ↑ is pressed on the second visual line of a wrapped paragraph
@@ -145,6 +145,10 @@ Tab SHALL nest a block as the last child of its previous sibling, keeping its ow
 #### Scenario: Skipping a divider
 - **WHEN** ↓ is pressed on the last line of a paragraph followed by a divider and another paragraph
 - **THEN** the caret moves into the paragraph after the divider
+
+#### Scenario: Out of a table at the end of the page
+- **WHEN** ↓ is pressed in the last row of a table that is the page's last block
+- **THEN** an empty paragraph is added after the table and holds the caret, and Cmd/Ctrl+Z removes it
 
 ### Requirement: Markdown shortcuts change the type
 Typing one of these at the start of a paragraph, followed by a space, SHALL remove the typed characters and change the block's type, keeping the rest of its text: `#` heading 1, `##` heading 2, `###` heading 3, `####` heading 4, `#####` heading 5, `######` heading 6, `-` or `*` bulleted list item, `1.` numbered list item, `[]` unchecked todo, `>` quote. Typing `---` in an empty paragraph SHALL turn it into a divider followed by a new empty paragraph holding the caret. Typing ```` ``` ```` (optionally followed by a language) in an empty paragraph and pressing Enter SHALL turn it into an empty code block of that language holding the caret. Undo right after a shortcut SHALL restore the typed characters and the paragraph.
@@ -279,7 +283,7 @@ In a table cell, Tab SHALL move the caret to the start of the next cell in readi
 - **THEN** nothing changes
 
 ### Requirement: Editing code blocks
-In a code block, Enter SHALL insert a new line, Tab SHALL insert two spaces, and Shift+Tab SHALL remove up to two spaces at the start of the caret's line. Cmd/Ctrl+Enter SHALL add a paragraph after the code block and move the caret there. Mark shortcuts, links, the `/` menu and the `@` menu SHALL NOT apply in code; pasted text SHALL be kept as plain text, line breaks included. A code block SHALL offer choosing its language from common languages and "Plain text", showing any other language it has as written.
+In a code block, Enter SHALL insert a new line, Tab SHALL insert two spaces, and Shift+Tab SHALL remove up to two spaces at the start of the caret's line. Cmd/Ctrl+Enter SHALL add a paragraph after the code block and move the caret there; in a table cell it SHALL do the same after the table. Mark shortcuts, links, the `/` menu and the `@` menu SHALL NOT apply in code; pasted text SHALL be kept as plain text, line breaks included. A code block SHALL offer choosing its language from common languages and "Plain text", showing any other language it has as written.
 
 #### Scenario: Indent a line
 - **WHEN** the caret is in a code block and Tab is pressed

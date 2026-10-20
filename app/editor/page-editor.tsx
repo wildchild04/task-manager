@@ -1039,7 +1039,7 @@ export function PageEditor({
         draftRef.current.onSubmit();
         return;
       }
-      if (event.key === "Enter" && mod && getBlock(editor.state, selection.blockId).type === "code") {
+      if (event.key === "Enter" && mod && ["code", "table_cell"].includes(getBlock(editor.state, selection.blockId).type)) {
         editor.exitBlock();
       } else if (event.key === "Enter" && !mod) {
         if (event.shiftKey) editor.lineBreak();
@@ -1108,6 +1108,10 @@ export function PageEditor({
               goalX.current ??= caretRect()?.left ?? element.getBoundingClientRect().left;
               moveTo(caret(target, offsetAtX(editableOf(root, target)!, goalX.current, up ? "last" : "first")));
               event.preventDefault();
+            } else if (!up && editor.exitBlock()) {
+              // Nothing below a table or code block: ↓ leaves it for a new paragraph.
+              event.preventDefault();
+              edited();
             }
           }
           return;
@@ -1123,6 +1127,9 @@ export function PageEditor({
           if (target) {
             moveTo(caret(target, 0));
             event.preventDefault();
+          } else if (editor.exitBlock()) {
+            event.preventDefault();
+            edited();
           }
         }
         if (!event.key.startsWith("Arrow")) goalX.current = null;
@@ -1576,7 +1583,21 @@ export function PageEditor({
                 <Typography color="text.secondary">{emptyText}</Typography>
               </button>
             ) : (
-              <EditorBlocks state={state} ids={root.children} closed={closed} references={page.references} actions={actions} />
+              <>
+                <EditorBlocks state={state} ids={root.children} closed={closed} references={page.references} actions={actions} />
+                {/* Below the last block: a click writes on, in a trailing empty paragraph (added if needed). */}
+                {!draft && page.surface !== "comment" && (
+                  <div
+                    className="editor-tail"
+                    aria-hidden="true"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      editor.appendParagraph();
+                      restoreSelection.current = true;
+                    }}
+                  />
+                )}
+              </>
             )}
           </div>
 

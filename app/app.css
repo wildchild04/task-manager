@@ -187,6 +187,12 @@ body {
   opacity: 0.6;
 }
 
+/* The space under the last block, which adds a paragraph when clicked. */
+.editor-tail {
+  min-height: 4rem;
+  cursor: text;
+}
+
 .editor-empty {
   all: unset;
   display: block;
