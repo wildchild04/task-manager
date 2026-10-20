@@ -27,4 +27,4 @@
 
 ## 6. Check
 
-- [ ] 6.1 Headless check in Chromium, Firefox and WebKit: drag-select across three blocks and type over it; Shift+↓ across blocks and cut, then paste elsewhere; Escape, Shift+↓, Cmd/Ctrl+D, Cmd/Ctrl+Shift+↑, Backspace and undo of each; drag a block into a toggle; handle menu at phone width; light and dark; typecheck and full test run
+- [x] 6.1 Headless check in Chromium, Firefox and WebKit (WebKit not run: the host lacks its GTK 4 libraries): drag-select across three blocks and type over it; Shift+↓ across blocks and cut, then paste elsewhere; Escape, Shift+↓, Cmd/Ctrl+D, Cmd/Ctrl+Shift+↑, Backspace and undo of each; drag a block into a toggle; handle menu at phone width; light and dark; typecheck and full test run

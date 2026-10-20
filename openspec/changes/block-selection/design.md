@@ -92,7 +92,7 @@ Escape in a text block selects it, unless a menu, the link dialog or the link ca
 
 ### 7. The handle and dragging
 
-Every top-level and nested block in `EditorBlocks` gets a gutter handle (`IconButton`, `drag_indicator`, size small, `aria-label` "Drag to move, or open block actions"), shown on pointer hover of the block's row and while its block is selected or holds the caret on coarse pointers (`@media (pointer: coarse)`). Rows and cells of tables, the blocks inside suggestions and the title have none. Comment editors don't render handles (their blocks are short and the space is tight); keyboard block selection works there too.
+Every top-level and nested block in `EditorBlocks` gets a gutter handle (`IconButton`, `drag_indicator`, size small, `aria-label` "Drag to move, or open block actions"), shown on pointer hover of the block's row and while its block is selected or holds the caret on coarse pointers (`@media (pointer: coarse)`). On coarse pointers the handle sits in a 32px column at the right of the blocks instead of the left margin, which phones don't have. Rows and cells of tables, the blocks inside suggestions and the title have none. Comment editors don't render handles (their blocks are short and the space is tight); keyboard block selection works there too.
 
 A click (pointerup without moving more than 4px) selects the block — or keeps a block selection it's part of — and opens the `Menu`: Delete, Duplicate, Move up, Move down, Copy. Items that would do nothing (Move up on the first block) are disabled.
 

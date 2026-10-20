@@ -106,6 +106,17 @@ body {
   .editor-block:focus-within:not(:has(.editor-block:focus-within)) > .block-handle {
     opacity: 1;
   }
+
+  /* Phones have no left margin to spare: handles get a column on the right. */
+  .page-editor .editor-body {
+    padding-inline-end: 32px;
+  }
+
+  .block-handle,
+  .block-list > .editor-block > .block-handle {
+    left: auto;
+    right: -32px;
+  }
 }
 
 .dragging-blocks,
