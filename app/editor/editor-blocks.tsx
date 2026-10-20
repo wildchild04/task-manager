@@ -78,7 +78,9 @@ function BlockHandle({ id, actions }: { id: string; actions: HandleActions }) {
         open={menu !== null}
         anchorEl={menu?.anchor ?? null}
         options={menu?.items ?? []}
-        onClose={() => {
+        onClose={(_, reason) => {
+          // Choosing an item closes the menu too, after `onSelect` has handled it (and maybe opened a submenu).
+          if (reason === "itemClick") return;
           setMenu(null);
           // The menu hands focus back to the handle as it closes; the editor takes it back after.
           requestAnimationFrame(actions.refocus);

@@ -12,4 +12,4 @@
 
 ## 3. Check
 
-- [ ] 3.1 Headless check in Chromium and Firefox: Turn into from the handle on two blocks, the shortcuts with a caret and over a range, undo; `/page` from an empty block and after text, landing in the new title, the sidebar listing it; undo of `/page` before leaving; no Page command in a task body; typecheck and full test run
+- [x] 3.1 Headless check in Chromium and Firefox: Turn into from the handle on two blocks, the shortcuts with a caret and over a range, undo; `/page` from an empty block and after text, landing in the new title, the sidebar listing it; undo of `/page` before leaving; no Page command in a task body; typecheck and full test run

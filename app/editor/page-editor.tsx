@@ -693,8 +693,13 @@ export function PageEditor({
       setSlash(null);
       const created = editor.slash(menu.start, item.command);
       edited();
-      // A new sub-page opens at once; leaving waits until the edit creating it is saved.
-      if (created) void navigateRef.current(`/pages/${created}`);
+      // A new sub-page opens once the edit creating it is saved (if it can't be, the page stays here with the error).
+      if (created) {
+        queue.flush();
+        void queue.idle().then(() => {
+          if (!queue.dirty) void navigateRef.current(`/pages/${created}`);
+        });
+      }
     };
 
     /**
@@ -722,7 +727,8 @@ export function PageEditor({
     };
 
     const onSelectionChange = () => {
-      if (composing.current) return;
+      // While a drag selects across blocks, the editor's range stands for the browser's narrower selection.
+      if (composing.current || dragRange) return;
       sync();
       refreshSlash();
     };
@@ -911,6 +917,12 @@ export function PageEditor({
       }
       if (event.key === "Backspace" || event.key === "Delete") {
         editor.removeSelection();
+        edited();
+        return true;
+      }
+      // Typing replaces the range here: Firefox sends no input events while the selection spans blocks.
+      if (event.key.length === 1 && !mod && !event.altKey) {
+        editor.type(event.key);
         edited();
         return true;
       }
@@ -1250,27 +1262,44 @@ export function PageEditor({
     // ----- Selecting across blocks with the pointer -----
 
     // Browsers keep a drag-selection inside the block it starts in: past it, the editor selects across blocks itself.
+    // It does so on mousemove, which follows pointermove, so that cancelling it also stops the browser's own
+    // selecting (Firefox narrows the selection back to one block on its mousemove otherwise).
     let dragFrom: Point | null = null;
+    /** The range across blocks a drag has selected so far; the browser's own (narrower) selection is ignored meanwhile. */
+    let dragRange: TextRange | null = null;
     const onPointerDown = (event: PointerEvent) => {
       dragFrom = null;
+      dragRange = null;
       if (event.button !== 0 || event.pointerType === "touch" || event.shiftKey) return;
       if (!(event.target as HTMLElement).closest?.(".editable")) return;
       const from = pointAt(root, event.clientX, event.clientY);
       if (from && from.blockId !== editor.state.rootId) dragFrom = from;
     };
-    const onPointerMove = (event: PointerEvent) => {
+    const onMouseMove = (event: MouseEvent) => {
       if (!dragFrom || (event.buttons & 1) === 0) return;
       // Near the window's top or bottom, the page scrolls on.
       if (event.clientY < 40) window.scrollBy(0, -16);
       else if (event.clientY > window.innerHeight - 40) window.scrollBy(0, 16);
       const to = pointAt(root, event.clientX, event.clientY);
       if (!to || to.blockId === editor.state.rootId) return;
-      if (to.blockId === dragFrom.blockId && !editor.range) return;
+      if (to.blockId === dragFrom.blockId && !dragRange) return;
       event.preventDefault();
+      dragRange = to.blockId === dragFrom.blockId ? null : { anchor: dragFrom, focus: to };
       selectBetween(dragFrom, to);
     };
-    const onPointerUp = () => {
+    const onMouseUp = (event: MouseEvent) => {
+      const range = dragRange;
       dragFrom = null;
+      dragRange = null;
+      if (!range) return;
+      // Releasing the button may narrow the selection to one block again (Firefox); the range stands.
+      event.preventDefault();
+      editor.setRange(range);
+      writeRange(root, range);
+      requestAnimationFrame(() => {
+        if (editor.range !== range) return;
+        writeRange(root, range);
+      });
     };
     /** A click outside the editor ends a block selection; menus opened from the editor keep it. */
     const onDocumentPointerDown = (event: PointerEvent) => {
@@ -1303,9 +1332,9 @@ export function PageEditor({
     root.addEventListener("cut", onCut);
     root.addEventListener("pointerdown", onPointerDown);
     root.addEventListener("mousedown", onMouseDown);
-    document.addEventListener("pointermove", onPointerMove);
+    document.addEventListener("mousemove", onMouseMove);
     document.addEventListener("pointerdown", onDocumentPointerDown);
-    document.addEventListener("pointerup", onPointerUp);
+    document.addEventListener("mouseup", onMouseUp);
     root.addEventListener("keydown", onKeyDown);
     root.addEventListener("compositionstart", onCompositionStart);
     root.addEventListener("compositionend", onCompositionEnd);
@@ -1323,9 +1352,9 @@ export function PageEditor({
       root.removeEventListener("cut", onCut);
       root.removeEventListener("pointerdown", onPointerDown);
       root.removeEventListener("mousedown", onMouseDown);
-      document.removeEventListener("pointermove", onPointerMove);
+      document.removeEventListener("mousemove", onMouseMove);
       document.removeEventListener("pointerdown", onDocumentPointerDown);
-      document.removeEventListener("pointerup", onPointerUp);
+      document.removeEventListener("mouseup", onMouseUp);
       root.removeEventListener("keydown", onKeyDown);
       root.removeEventListener("compositionstart", onCompositionStart);
       root.removeEventListener("compositionend", onCompositionEnd);

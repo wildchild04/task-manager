@@ -21,11 +21,11 @@ const MARK_TAGS: Record<Exclude<Mark, object>, string> = {
 
 /**
  * Replaces an editable element's content with the rich text. React never
- * renders inside it. A selection inside the element is kept at the same offsets.
+ * renders inside it. The ends of the selection inside the element (one or
+ * both, when it spans blocks) are kept at the same offsets.
  */
 export function renderRichText(element: HTMLElement, content: RichText, mentions: MentionTargets = {}): void {
-  const selection = readSelection();
-  const kept = selection?.blockId === element.dataset.blockId ? selection : null;
+  const kept = keptEnds(element);
   const nodes: Node[] = content.map((span) => {
     let node: Node = span.mention
       ? mentionElement(span.mention.pageId, mentions[span.mention.pageId])
@@ -45,7 +45,28 @@ export function renderRichText(element: HTMLElement, content: RichText, mentions
   if (text === "" || text.endsWith("\n")) nodes.push(Object.assign(document.createElement("br"), { className: "editor-filler" }));
   element.replaceChildren(...nodes);
   element.dataset.empty = String(text === "");
-  if (kept) setSelectionIn(element, kept.anchor, kept.focus);
+  kept?.();
+}
+
+/**
+ * Notes where the DOM selection's ends inside `element` are, as text offsets;
+ * returns a function putting them back after its content is replaced (an end
+ * elsewhere stays where it is), or `null` when neither end is inside.
+ */
+function keptEnds(element: HTMLElement): (() => void) | null {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || !selection.anchorNode || !selection.focusNode) return null;
+  const { anchorNode, anchorOffset, focusNode, focusOffset } = selection;
+  type End = { node: Node; offset: number; inside: number | null };
+  const ends: End[] = [
+    { node: anchorNode, offset: anchorOffset, inside: null },
+    { node: focusNode, offset: focusOffset, inside: null },
+  ].map((end) => ({ ...end, inside: element.contains(end.node) ? offsetOf(element, end.node, end.offset) : null }));
+  if (ends.every((end) => end.inside === null)) return null;
+  return () => {
+    const [anchor, focus] = ends.map((end) => (end.inside === null ? end : positionOf(element, end.inside)));
+    selection.setBaseAndExtent(anchor!.node, anchor!.offset, focus!.node, focus!.offset);
+  };
 }
 
 function setSelectionIn(element: HTMLElement, anchorOffset: number, focusOffset: number) {

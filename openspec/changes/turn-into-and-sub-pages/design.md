@@ -34,7 +34,7 @@ Which blocks: the selected roots in a block selection (not their children, as No
 
 ### 4. `/page` creates the sub-page through an edit
 
-A `page` slash action: like Table, it replaces an empty block (or follows a block with text, after removing the `/query` text) with `{ type: "page", content: [] }` and a fresh ID. The caret goes to the end of the text block before it (or the block it followed); the editor then navigates to `/pages/:id`. The existing leave guard flushes the save queue and waits for it before navigating, so the page exists when it opens.
+A `page` slash action: like Table, it replaces an empty block (or follows a block with text, after removing the `/query` text) with `{ type: "page", content: [] }` and a fresh ID. The caret goes to the end of the text block before it (or the block it followed); the editor then flushes the save queue, waits for it to be idle, and navigates to `/pages/:id` if nothing failed, so the page exists when it opens. (Navigating at once and leaving it to the leave guard raced with the route data re-read of decision 5 in Firefox, which dropped the navigation.)
 
 The server accepts this because `checkPageEdit` gains an option `subPages` (true for the page and project surfaces, false for tasks and comments): with it, inserting a `page` block is allowed where any block may go, holding only its title; and deleting a sub-page is allowed when `isEmptyPage(id)` says it has no blocks of its own, which `applyEdit` answers from the block service. That delete is what undoing a `/page` sends. A sub-page with content still can't be deleted through an edit, nor can a block containing one; the editor's own commands never delete sub-pages (they're kept by Backspace and block deletion), so only undo sends such a delete.
 
