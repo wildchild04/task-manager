@@ -9,11 +9,17 @@ import {
   type EditorBlock,
   type EditorState,
   getBlock,
+  type Point,
+  previousSibling,
+  selectableOf,
   type Selection,
   selectionEnd,
   selectionStart,
 } from "./editor-state";
 import * as text from "./rich-text";
+import { containsProtected } from "./selection";
+
+export type { Point };
 
 const isText = (type: string) => behaviorOf(type as Block["type"]).text;
 
@@ -102,8 +108,24 @@ export function pasteBlocks(
   return { ops, selection: caret(end.id, end.length) };
 }
 
-/** A point in the editor: a block and an offset in its text. */
-export type Point = { blockId: string; offset: number };
+/**
+ * Pastes blocks in place of selected blocks, as one batch. Selected sub-pages
+ * and suggestions (and blocks holding them) stay, after the pasted blocks.
+ */
+export function pasteOverBlocks(
+  state: EditorState,
+  roots: readonly string[],
+  blocks: readonly MarkdownBlock[],
+): CommandResult | null {
+  if (roots.length === 0 || blocks.length === 0) return null;
+  const first = getBlock(state, roots[0]!);
+  const ops = [
+    ...insertOps(blocks, first.parentId!, previousSibling(state, first.id)),
+    ...roots.filter((id) => !containsProtected(state, id)).map((id): Operation => ({ op: "delete", id })),
+  ];
+  const end = lastText(blocks);
+  return { ops, selection: end ? caret(end.id, end.length) : caret(blocks[0]!.id, 0) };
+}
 
 const asBlock = (block: EditorBlock, content: RichText = block.content): Block =>
   ({
@@ -117,6 +139,15 @@ const asBlock = (block: EditorBlock, content: RichText = block.content): Block =
     updatedAt: "",
   }) as Block;
 
+/** Selected blocks whole, with everything inside them, as trees for Markdown. */
+export function blockTrees(state: EditorState, roots: readonly string[]): TreeNode[] {
+  const tree = (id: string): TreeNode => {
+    const block = getBlock(state, id);
+    return { block: asBlock(block), children: block.children.map(tree) };
+  };
+  return roots.map(tree);
+}
+
 /**
  * The blocks between two points, in document order, as trees for Markdown:
  * the first and last text blocks cut to the selected text, tables and code
@@ -127,12 +158,7 @@ export function selectedTrees(state: EditorState, from: Point, to: Point): TreeN
   const order = documentOrder(state);
   let [start, end] = [from, to];
   if (order.indexOf(start.blockId) > order.indexOf(end.blockId)) [start, end] = [end, start];
-  const tableOf = (id: string) => {
-    for (let at: EditorBlock | undefined = getBlock(state, id); at; at = at.parentId ? state.blocks[at.parentId] : undefined) {
-      if (at.type === "table") return at.id;
-    }
-    return id;
-  };
+  const tableOf = (id: string) => selectableOf(state, id);
 
   // The blocks in the range, each with its descendants; parts of a table stand for the table.
   const included = new Set<string>();

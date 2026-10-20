@@ -19,6 +19,7 @@ import {
 } from "./block-types";
 import {
   applyOps,
+  type BlockRange,
   caret,
   caretOrder,
   documentOrder,
@@ -29,6 +30,7 @@ import {
   type Selection,
   selectionEnd,
   selectionStart,
+  type TextRange,
 } from "./editor-state";
 import * as text from "./rich-text";
 import { cellBelow, newTable } from "./tables";
@@ -36,8 +38,11 @@ import { cellBelow, newTable } from "./tables";
 /** A table, its rows and its cells: Backspace and Delete never merge into or out of them. */
 const isTablePart = (type: BlockType) => (TABLE_TYPES as readonly BlockType[]).includes(type);
 
-/** What a command produces: the operations to apply and where the selection goes. */
-export type CommandResult = { ops: Operation[]; selection: Selection };
+/**
+ * What a command produces: the operations to apply and where the selection
+ * goes; with `range` or `blocks`, text across blocks or whole blocks end up selected.
+ */
+export type CommandResult = { ops: Operation[]; selection: Selection; range?: TextRange; blocks?: BlockRange };
 
 /** Context a command needs besides the state: fresh IDs and which toggles are closed. */
 export type CommandContext = { newId: () => string; closed?: ReadonlySet<string> };

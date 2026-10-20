@@ -1,13 +1,13 @@
 import type { Operation } from "~/domain/blocks/types";
 
-import type { Selection } from "./editor-state";
+import type { SelectionSnapshot } from "./editor-state";
 
-/** One undoable step: what it did, how to undo it, and the selection around it. */
+/** One undoable step: what it did, how to undo it, and what was selected before and after it. */
 export type HistoryEntry = {
   ops: Operation[];
   inverse: Operation[];
-  before: Selection;
-  after: Selection;
+  before: SelectionSnapshot;
+  after: SelectionSnapshot;
   /** Steps with the same key close together merge (typing in one block). */
   key?: string;
   at: number;

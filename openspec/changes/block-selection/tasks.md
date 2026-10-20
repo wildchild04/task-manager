@@ -1,18 +1,18 @@
 ## 1. Design system
 
-- [ ] 1.1 Feature request `~/dev/design-system/feature-requests/drag-indicator-icon.md` (written with the proposal; check it's still accurate before starting)
+- [x] 1.1 Feature request `~/dev/design-system/feature-requests/drag-indicator-icon.md` (written with the proposal; check it's still accurate before starting)
 
 ## 2. Selection model
 
-- [ ] 2.1 `editor-state.ts`: `Point` (moved from `clipboard.ts`), `TextRange`, `BlockRange`; `selectableOrder` and `selectedRoots` (tables as one stop, suggestions whole, closed toggles' children skipped, covered parents implying children); tests
-- [ ] 2.2 `Editor` and `History`: `range` and `blocks` alongside `selection` (at most one set; a caret clears both); `SelectionSnapshot` recorded before and after each step and restored by undo and redo; tests
+- [x] 2.1 `editor-state.ts`: `Point` (moved from `clipboard.ts`), `TextRange`, `BlockRange`; `selectableOrder` and `selectedRoots` (tables as one stop, suggestions whole, closed toggles' children skipped, covered parents implying children); tests
+- [x] 2.2 `Editor` and `History`: `range` and `blocks` alongside `selection` (at most one set; a caret clears both); `SelectionSnapshot` recorded before and after each step and restored by undo and redo; tests
 
 ## 3. Commands
 
-- [ ] 3.1 `src/editor/selection.ts`: `replaceRange` (partial first and last blocks, marks kept at the join, tables removed whole, kept sub-pages and suggestions, survivors moving under the first block or after it, code joins as Backspace's merge); tests for the spec scenarios against the in-memory store
-- [ ] 3.2 `Editor` over a range: `type`, `enter`, `lineBreak`, `paste`, `deleteBackward`/`deleteForward` composed with `replaceRange` as one batch and one undo step; Markdown shortcut check after typing; tests
-- [ ] 3.3 Block commands: `deleteBlocks` (caret placement, empty page gets a paragraph), `duplicateBlocks` (new IDs, sub-pages and suggestions left out), `moveBlocks` (siblings, out to the parent's level at the edges, caret block, table row), `dropBlocks` (invalid targets refused), `nestBlocks`/`unnestBlocks`; each one undo step that reselects the blocks; tests
-- [ ] 3.4 Clipboard: `blockTrees` for a block selection, paste replacing a block selection, cut for a range and for blocks; tests for the Markdown produced and the batches
+- [x] 3.1 `src/editor/selection.ts`: `replaceRange` (partial first and last blocks, marks kept at the join, tables removed whole, kept sub-pages and suggestions, survivors moving under the first block or after it, code joins as Backspace's merge); tests for the spec scenarios against the in-memory store
+- [x] 3.2 `Editor` over a range: `type`, `enter`, `lineBreak`, `paste`, `deleteBackward`/`deleteForward` composed with `replaceRange` as one batch and one undo step; Markdown shortcut check after typing; tests
+- [x] 3.3 Block commands: `deleteBlocks` (caret placement, empty page gets a paragraph), `duplicateBlocks` (new IDs, sub-pages and suggestions left out), `moveBlocks` (siblings, out to the parent's level at the edges, caret block, table row), `dropBlocks` (invalid targets refused), `nestBlocks`/`unnestBlocks`; each one undo step that reselects the blocks; tests
+- [x] 3.4 Clipboard: `blockTrees` for a block selection, paste replacing a block selection, cut for a range and for blocks; tests for the Markdown produced and the batches
 
 ## 4. Text selection across blocks (DOM)
 

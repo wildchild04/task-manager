@@ -21,6 +21,21 @@ export type EditorState = { rootId: string; blocks: Readonly<Record<string, Edit
 /** A caret (`anchor === focus`) or text selection inside one block, as plain-text offsets. */
 export type Selection = { blockId: string; anchor: number; focus: number };
 
+/** A point in the editor: a block and an offset in its text. */
+export type Point = { blockId: string; offset: number };
+
+/** Text selected across blocks: `anchor` and `focus` are in different blocks. */
+export type TextRange = { anchor: Point; focus: Point };
+
+/** Whole blocks selected: the run of selectable blocks from `anchor` to `focus` (block IDs), in reading order. */
+export type BlockRange = { anchor: string; focus: string };
+
+/**
+ * Everything selected: the caret or text in one block, and while active, text
+ * across blocks or whole blocks. `selection` is then where the caret goes back to.
+ */
+export type SelectionSnapshot = { selection: Selection; range: TextRange | null; blocks: BlockRange | null };
+
 export const caret = (blockId: string, offset: number): Selection => ({ blockId, anchor: offset, focus: offset });
 
 export const selectionStart = (s: Selection) => Math.min(s.anchor, s.focus);
@@ -82,6 +97,54 @@ export function documentOrder(state: EditorState, closed: ReadonlySet<string> = 
 /** Blocks that can hold the caret, in reading order, starting with the title (the root). */
 export function caretOrder(state: EditorState, closed: ReadonlySet<string> = new Set()): string[] {
   return [state.rootId, ...documentOrder(state, closed).filter((id) => behaviorOf(getBlock(state, id).type).text)];
+}
+
+/**
+ * The blocks a block selection can stop at, in reading order: every block of
+ * the page, except that a table stands for its rows and cells, a suggestion
+ * for the blocks inside it, and a closed toggle for its children.
+ */
+export function selectableOrder(state: EditorState, closed: ReadonlySet<string> = new Set()): string[] {
+  const out: string[] = [];
+  const visit = (id: string) => {
+    for (const child of getBlock(state, id).children) {
+      out.push(child);
+      const { type } = getBlock(state, child);
+      if (!closed.has(child) && type !== "table" && type !== "suggestion") visit(child);
+    }
+  };
+  visit(state.rootId);
+  return out;
+}
+
+/** The selectable block standing for `id`: its table for a row or cell, itself otherwise. */
+export function selectableOf(state: EditorState, id: string): string {
+  for (let at = state.blocks[id]; at; at = at.parentId ? state.blocks[at.parentId] : undefined) {
+    if (at.type === "table") return at.id;
+  }
+  return id;
+}
+
+/** The blocks a block range covers, in reading order. */
+export function coveredBlocks(state: EditorState, range: BlockRange, closed?: ReadonlySet<string>): string[] {
+  const order = selectableOrder(state, closed);
+  let from = order.indexOf(range.anchor);
+  let to = order.indexOf(range.focus);
+  if (from < 0 || to < 0) return [];
+  if (from > to) [from, to] = [to, from];
+  return order.slice(from, to + 1);
+}
+
+/** The blocks a block range acts on: the covered blocks whose parent isn't covered (a covered block brings its children). */
+export function selectedRoots(state: EditorState, range: BlockRange, closed?: ReadonlySet<string>): string[] {
+  const covered = new Set(coveredBlocks(state, range, closed));
+  const insideCovered = (id: string) => {
+    for (let parent = getBlock(state, id).parentId; parent !== null; parent = getBlock(state, parent).parentId) {
+      if (covered.has(parent)) return true;
+    }
+    return false;
+  };
+  return [...covered].filter((id) => !insideCovered(id));
 }
 
 // ----- Applying operations locally, with the server's semantics -----

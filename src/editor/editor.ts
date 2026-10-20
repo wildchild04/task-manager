@@ -1,13 +1,30 @@
 import type { MarkdownBlock } from "~/domain/blocks/markdown";
 import { type CalloutTone, MENTION_TEXT, type Operation, type SimpleMark } from "~/domain/blocks/types";
 
-import type { SlashCommand } from "./block-types";
-import { pasteBlocks } from "./clipboard";
+import { behaviorOf, type SlashCommand } from "./block-types";
+import { pasteBlocks, pasteOverBlocks } from "./clipboard";
 import * as commands from "./commands";
 import type { CommandResult, DeleteUnit } from "./commands";
-import { applyOps, caret, type EditorState, getBlock, invert, isCollapsed, type Selection } from "./editor-state";
+import {
+  applyOps,
+  type BlockRange,
+  caret,
+  documentOrder,
+  type EditorState,
+  getBlock,
+  invert,
+  isCollapsed,
+  selectableOf,
+  selectableOrder,
+  selectedRoots,
+  type Selection,
+  type SelectionSnapshot,
+  type TextRange,
+} from "./editor-state";
 import { length, plain } from "./rich-text";
 import { History } from "./history";
+import * as across from "./selection";
+import type { DropTarget } from "./selection";
 import * as tables from "./tables";
 import type { TableSide } from "./tables";
 
@@ -29,7 +46,12 @@ export type EditorOptions = {
  */
 export class Editor {
   state: EditorState;
+  /** The caret or text selection in one block; while `range` or `blocks` is set, where the caret goes back to. */
   selection: Selection;
+  /** Text selected across blocks, or `null`. */
+  range: TextRange | null = null;
+  /** Whole blocks selected, or `null`. At most one of `range` and `blocks` is set. */
+  blocks: BlockRange | null = null;
   /** Increases on every change, for views subscribing to the editor. */
   revision = 0;
   /**
@@ -74,25 +96,59 @@ export class Editor {
     this.state = state;
     this.closed = new Set([...foldedToggles(state)].filter((id) => !open.has(id)));
     if (!state.blocks[this.selection.blockId]) this.selection = caret(state.rootId, 0);
+    if (this.range && !(state.blocks[this.range.anchor.blockId] && state.blocks[this.range.focus.blockId])) this.range = null;
+    if (this.blocks && !(state.blocks[this.blocks.anchor] && state.blocks[this.blocks.focus])) this.blocks = null;
     this.history = new History();
     this.notify();
   }
 
+  /** Puts the caret or a text selection in one block, leaving any range or block selection. */
   setSelection(selection: Selection): void {
+    const leaving = this.blocks !== null;
     this.selection = selection;
+    this.range = null;
+    this.blocks = null;
+    if (leaving) this.notify();
+  }
+
+  /** Selects text across blocks; the caret goes back to its focus when the range ends. */
+  setRange(range: TextRange): void {
+    const leaving = this.blocks !== null;
+    this.range = range;
+    this.blocks = null;
+    this.selection = caret(range.focus.blockId, range.focus.offset);
+    if (leaving) this.notify();
+  }
+
+  /** Selects whole blocks, or with `null` ends a block selection (the caret stays where it was). */
+  selectBlocks(blocks: BlockRange | null): void {
+    this.blocks = blocks;
+    this.range = null;
+    this.notify();
+  }
+
+  private get snapshot(): SelectionSnapshot {
+    return { selection: this.selection, range: this.range, blocks: this.blocks };
+  }
+
+  private restore(snapshot: SelectionSnapshot) {
+    this.selection = snapshot.selection;
+    this.range = snapshot.range;
+    this.blocks = snapshot.blocks;
   }
 
   /** Applies a command's result as one undo step. Returns whether anything happened. */
   private run(result: CommandResult | null, key?: string): boolean {
     if (!result) return false;
-    const before = this.selection;
+    const before = this.snapshot;
+    const after: SelectionSnapshot = { selection: result.selection, range: result.range ?? null, blocks: result.blocks ?? null };
     if (result.ops.length > 0) {
       const inverse = invert(this.state, result.ops);
       this.state = applyOps(this.state, result.ops);
-      this.history.push({ ops: result.ops, inverse, before, after: result.selection, key, at: this.now() });
+      this.history.push({ ops: result.ops, inverse, before, after, key, at: this.now() });
       this.options.onOps?.(result.ops);
     }
-    this.selection = result.selection;
+    this.restore(after);
     this.notify();
     return true;
   }
@@ -101,26 +157,54 @@ export class Editor {
 
   /** Types text at the selection. A space or `-` may complete a markdown shortcut, which is its own undo step. */
   type(inserted: string): void {
-    this.run(commands.insertText(this.state, this.selection, inserted), `type:${this.selection.blockId}`);
+    if (this.range) this.overRange((state, at) => commands.insertText(state, at, inserted));
+    else this.run(commands.insertText(this.state, this.selection, inserted), `type:${this.selection.blockId}`);
     if (inserted === " ") this.run(commands.markdownShortcut(this.state, this.selection));
     if (inserted === "-") this.run(commands.dividerShortcut(this.state, this.selection, this.context));
   }
 
   /** Pastes blocks at the selection as one undo step; `false` where only plain text can be pasted (code, cells, the title). */
   paste(blocks: readonly MarkdownBlock[]): boolean {
+    if (this.blocks) return this.run(pasteOverBlocks(this.state, this.selectedRoots(), blocks));
+    if (this.range) {
+      // Where blocks can't be pasted at the join, the caller types the plain text over the range instead.
+      const removed = across.replaceRange(this.state, this.range);
+      const pasted = removed && pasteBlocks(applyOps(this.state, removed.ops), removed.selection, blocks, this.newId);
+      return pasted ? this.run({ ...pasted, ops: [...removed.ops, ...pasted.ops] }) : false;
+    }
     return this.run(pasteBlocks(this.state, this.selection, blocks, this.newId));
   }
 
   lineBreak(): void {
-    this.run(commands.insertText(this.state, this.selection, "\n"));
+    if (this.range) this.overRange((state, at) => commands.insertText(state, at, "\n"));
+    else this.run(commands.insertText(this.state, this.selection, "\n"));
+  }
+
+  /**
+   * Removes the text selected across blocks, then runs `then` at the join, as
+   * one batch and one undo step.
+   */
+  private overRange(then?: (state: EditorState, at: Selection) => CommandResult | null): boolean {
+    const removed = this.range && across.replaceRange(this.state, this.range);
+    if (!removed) return false;
+    const next = then?.(applyOps(this.state, removed.ops), removed.selection);
+    return this.run(next ? { ...next, ops: [...removed.ops, ...next.ops] } : removed);
+  }
+
+  /** Removes the selected text across blocks, or the selected blocks (cutting, after the clipboard is written). */
+  removeSelection(): boolean {
+    if (this.blocks) return this.deleteBlocks();
+    return this.overRange();
   }
 
   deleteBackward(unit: DeleteUnit = "character"): boolean {
+    if (this.range || this.blocks) return this.removeSelection();
     const atEdge = (isCollapsed(this.selection) && this.selection.focus === 0) || this.touchesMention(-1);
     return this.run(commands.deleteBackward(this.state, this.selection, this.context, unit), this.typingKey(atEdge));
   }
 
   deleteForward(unit: DeleteUnit = "character"): boolean {
+    if (this.range || this.blocks) return this.removeSelection();
     const atEdge =
       (isCollapsed(this.selection) && this.selection.focus >= length(getBlock(this.state, this.selection.blockId).content)) ||
       this.touchesMention(1);
@@ -140,14 +224,17 @@ export class Editor {
   }
 
   enter(): void {
-    this.run(commands.splitBlock(this.state, this.selection, this.context));
+    if (this.range) this.overRange((state, at) => commands.splitBlock(state, at, this.context));
+    else this.run(commands.splitBlock(this.state, this.selection, this.context));
   }
 
   indent(): boolean {
+    if (this.blocks) return this.runOnBlocks(across.nestBlocks(this.state, this.selectedRoots()));
     return this.run(commands.indent(this.state, this.selection));
   }
 
   outdent(): boolean {
+    if (this.blocks) return this.runOnBlocks(across.unnestBlocks(this.state, this.selectedRoots()));
     return this.run(commands.outdent(this.state, this.selection));
   }
 
@@ -166,6 +253,97 @@ export class Editor {
   /** Cmd/Ctrl+Enter: leaves a code block for a new paragraph after it. Returns false outside code. */
   exitBlock(): boolean {
     return this.run(commands.exitCode(this.state, this.selection, this.context));
+  }
+
+  // ----- Whole blocks (each one undo step) -----
+
+  /** The selected blocks the block commands act on (a selected block brings its children), in order. */
+  selectedRoots(): string[] {
+    return this.blocks ? selectedRoots(this.state, this.blocks, this.closed) : [];
+  }
+
+  /** Runs operations on the selected blocks, keeping them selected. */
+  private runOnBlocks(ops: Operation[] | null, blocks = this.blocks): boolean {
+    return this.run(ops && { ops, selection: this.selection, blocks: blocks ?? undefined });
+  }
+
+  /** Selects the block holding `id` (its table, for a cell). */
+  selectBlock(id: string): void {
+    const block = selectableOf(this.state, id);
+    this.selectBlocks({ anchor: block, focus: block });
+  }
+
+  /** Selects every block of the page. */
+  selectAll(): void {
+    const order = selectableOrder(this.state, this.closed);
+    if (order.length > 0) this.selectBlocks({ anchor: order[0]!, focus: order.at(-1)! });
+  }
+
+  /** Selects the blocks the text range touches. */
+  rangeToBlocks(): void {
+    if (!this.range) return;
+    this.selectBlocks({ anchor: selectableOf(this.state, this.range.anchor.blockId), focus: selectableOf(this.state, this.range.focus.blockId) });
+  }
+
+  /** ↑/↓ in a block selection: selects the previous or next block alone, or with `extend` moves the selection's focus. */
+  stepBlocks(step: -1 | 1, extend: boolean): void {
+    if (!this.blocks) return;
+    const order = selectableOrder(this.state, this.closed);
+    const next = order[order.indexOf(this.blocks.focus) + step];
+    if (!next) return;
+    this.selectBlocks(extend ? { anchor: this.blocks.anchor, focus: next } : { anchor: next, focus: next });
+  }
+
+  /** Extends the block selection (or starts one at the caret's block) to the block holding `id`. */
+  extendBlocks(id: string): void {
+    const anchor = this.blocks?.anchor ?? selectableOf(this.state, this.selection.blockId);
+    this.selectBlocks({ anchor: anchor === this.state.rootId ? selectableOf(this.state, id) : anchor, focus: selectableOf(this.state, id) });
+  }
+
+  /** Enter in a block selection: the caret goes to the end of the last selected text block, or the start of the next one. */
+  editBlocks(): void {
+    const roots = this.selectedRoots();
+    if (roots.length === 0) return;
+    const covered = new Set<string>();
+    const add = (id: string) => {
+      covered.add(id);
+      getBlock(this.state, id).children.forEach(add);
+    };
+    roots.forEach(add);
+    const order = documentOrder(this.state, this.closed);
+    const isText = (id: string) => behaviorOf(getBlock(this.state, id).type).text;
+    const inside = order.filter((id) => covered.has(id) && isText(id)).at(-1);
+    if (inside) return this.setSelection(caret(inside, length(getBlock(this.state, inside).content)));
+    const end = Math.max(...order.map((id, i) => (covered.has(id) ? i : -1)));
+    const after = order.slice(end + 1).find(isText);
+    this.setSelection(after ? caret(after, 0) : this.selection);
+  }
+
+  deleteBlocks(): boolean {
+    return this.run(across.deleteBlocks(this.state, this.selectedRoots(), this.newId, this.closed));
+  }
+
+  duplicateBlocks(): boolean {
+    return this.run(across.duplicateBlocks(this.state, this.selectedRoots(), this.selection, this.newId));
+  }
+
+  /**
+   * Cmd/Ctrl+Shift+↑/↓: moves the selected blocks, or the caret's block (a
+   * cell's row), up or down.
+   */
+  moveBlocks(step: -1 | 1): boolean {
+    if (this.blocks) return this.runOnBlocks(across.moveBlocks(this.state, this.selectedRoots(), step));
+    const { blockId } = this.selection;
+    if (blockId === this.state.rootId) return false;
+    const cell = tables.cellPosition(this.state, blockId);
+    if (cell) return this.run(tables.moveRow(this.state, cell.rowId, step, this.selection));
+    const ops = across.moveBlocks(this.state, [blockId], step);
+    return this.run(ops && { ops, selection: this.selection });
+  }
+
+  /** Drops blocks (the selection, or one block that becomes the selection) at a target. */
+  dropBlocks(roots: readonly string[], target: DropTarget): boolean {
+    return this.runOnBlocks(across.dropBlocks(this.state, roots, target), { anchor: roots[0]!, focus: roots.at(-1)! });
   }
 
   // ----- Tables (each one undo step) -----
@@ -268,7 +446,7 @@ export class Editor {
     const entry = this.history.undo();
     if (!entry) return false;
     this.state = applyOps(this.state, entry.inverse);
-    this.selection = entry.before;
+    this.restore(entry.before);
     this.options.onOps?.(entry.inverse);
     this.notify();
     return true;
@@ -278,7 +456,7 @@ export class Editor {
     const entry = this.history.redo();
     if (!entry) return false;
     this.state = applyOps(this.state, entry.ops);
-    this.selection = entry.after;
+    this.restore(entry.after);
     this.options.onOps?.(entry.ops);
     this.notify();
     return true;
