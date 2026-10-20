@@ -43,13 +43,19 @@ function Mention({ pageId }: { pageId: string }) {
   );
 }
 
+/** Text with its line breaks (Shift+Enter, or a paragraph's several lines) shown as breaks. */
+function withBreaks(text: string): ReactNode {
+  if (!text.includes("\n")) return text;
+  return text.split("\n").flatMap((line, i) => (i === 0 ? [line] : [<br key={i} />, line]));
+}
+
 /** Renders text spans with their marks. Links wrap the outside so they stay clickable. */
 export function RichText({ value }: { value: RichTextValue }) {
   return (
     <>
       {value.map((span, index) => {
         const marks = [...(span.marks ?? [])].sort((a, b) => Number(typeof a === "object") - Number(typeof b === "object"));
-        const inner: ReactNode = span.mention ? <Mention pageId={span.mention.pageId} /> : span.text;
+        const inner: ReactNode = span.mention ? <Mention pageId={span.mention.pageId} /> : withBreaks(span.text);
         return <span key={index}>{marks.reduce<ReactNode>((node, mark, i) => applyMark(node, mark, i), inner)}</span>;
       })}
     </>

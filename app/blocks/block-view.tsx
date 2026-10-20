@@ -129,6 +129,8 @@ export type SuggestionDecide = (intent: "approve" | "reject", id: string) => voi
 
 /** What suggestion boxes need from the page around them: how to decide (with `busy` while a decision is on its way). */
 export const SuggestionsContext = createContext<{
+  /** Blocks a pending replace or delete would remove, marked in place like the box's "Removed" part. */
+  removing?: ReadonlySet<string>;
   /** The suggestions by block ID, for the editor, whose blocks don't carry their views. */
   byId?: Readonly<Record<string, SuggestionBlockView>>;
   decide?: SuggestionDecide;
@@ -139,7 +141,8 @@ const SUGGESTION_LABELS = { insert: "Suggests adding", replace: "Suggests replac
 
 /** An agent's suggestion: who and what, its note, what it would remove (struck through), what it proposes, and the decision. */
 export function SuggestionBox({ suggestion }: { suggestion: SuggestionBlockView }) {
-  const { decide, busy } = useContext(SuggestionsContext);
+  const context = useContext(SuggestionsContext);
+  const { decide, busy } = context;
   const { id, author, action, note, outdated, removed, blocks } = suggestion;
   const label = SUGGESTION_LABELS[action];
   return (
@@ -180,9 +183,12 @@ export function SuggestionBox({ suggestion }: { suggestion: SuggestionBlockView 
           <Typography variant="caption" color="text.secondary">
             Removed
           </Typography>
-          <div className="suggestion-removed-content">
-            <Blocks blocks={[removed]} />
-          </div>
+          {/* The copy is the removed part itself, so it isn't marked again. */}
+          <SuggestionsContext.Provider value={{ ...context, removing: undefined }}>
+            <div className="suggestion-removed-content">
+              <Blocks blocks={[removed]} />
+            </div>
+          </SuggestionsContext.Provider>
         </div>
       )}
       {blocks.length > 0 && (

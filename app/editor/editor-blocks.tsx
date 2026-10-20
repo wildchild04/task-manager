@@ -34,13 +34,14 @@ export const EditableText = memo(function EditableText({
 }) {
   const ref = useRef<HTMLSpanElement>(null);
   const mentions = useContext(MentionTargetsContext);
+  const removing = useContext(SuggestionsContext).removing?.has(block.id);
   useLayoutEffect(() => {
     if (ref.current) renderRichText(ref.current, block.content, mentions);
   }, [block.content, mentions]);
   return (
     <span
       ref={ref}
-      className="editable"
+      className={removing ? "editable suggestion-removing" : "editable"}
       contentEditable
       suppressContentEditableWarning
       role="textbox"
@@ -256,6 +257,7 @@ function CommandMenu({
  * a row or a column and a menu for the row and column the caret is in.
  */
 function TableBlock({ state, table, actions }: { state: EditorState; table: EditorBlock; actions: BlockActions }) {
+  const removing = useContext(SuggestionsContext).removing?.has(table.id);
   const rows = table.children.map((rowId) => ({
     id: rowId,
     cells: (state.blocks[rowId]?.children ?? []).map((cellId) => ({
@@ -275,7 +277,7 @@ function TableBlock({ state, table, actions }: { state: EditorState; table: Edit
     onClick: () => actions.run((editor) => editor.toggleTableHeader(table.id, which)),
   });
   return (
-    <div className="editor-block editor-table">
+    <div className={removing ? "editor-block editor-table suggestion-removing" : "editor-block editor-table"}>
       <TableFrame headerRow={table.props.headerRow === true} headerColumn={table.props.headerColumn === true} rows={rows} />
       <div className="editor-table-controls" contentEditable={false}>
         <Button size="small" variant="text" onClick={() => actions.run((editor) => editor.addTableRow(table.id))}>
@@ -344,10 +346,11 @@ const CODE_LANGUAGES = ["", "ts", "tsx", "js", "json", "sh", "python", "go", "ru
 
 /** A code block: its language, then its text in a monospace surface (plain text, lines kept). */
 function CodeBlockEditor({ block, actions }: { block: EditorBlock; actions: BlockActions }) {
+  const removing = useContext(SuggestionsContext).removing?.has(block.id);
   const language = String(block.props.language ?? "");
   const languages = CODE_LANGUAGES.includes(language) ? CODE_LANGUAGES : [...CODE_LANGUAGES, language];
   return (
-    <div className="editor-block editor-code">
+    <div className={removing ? "editor-block editor-code suggestion-removing" : "editor-block editor-code"}>
       <div className="editor-code-header" contentEditable={false}>
         <CommandMenu
           ariaLabel="Code language"

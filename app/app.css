@@ -369,3 +369,11 @@ body {
   min-height: 1.5em;
   white-space: pre;
 }
+
+/* A block a pending replace or delete would remove: marked in place like the box's "Removed" part. */
+.suggestion-removing {
+  background: color-mix(in srgb, var(--ds-error-container) 40%, transparent);
+  box-shadow: inset 3px 0 0 var(--ds-error);
+  padding-left: 8px;
+  border-radius: 4px;
+}

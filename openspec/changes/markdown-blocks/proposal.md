@@ -10,6 +10,7 @@ Agents and people write pages in Markdown, but the block model stops at paragrap
 - **Callouts**: a `callout` block with an `emoji` and a `tone` (default, info, success, warning, error), holding rich text and nested blocks.
 - The slash menu and Markdown shortcuts offer the new types (` ``` ` for code, `/table`, `/callout`, `#### `–`###### `).
 - Agents' Markdown reads and writes them: GFM pipe tables, ` ``` ` fences with a language, `####`–`######`, and GitHub alert syntax (`> [!TIP] 💡 text`) for callouts.
+- A pending replace or delete marks its target in the editor in the same red as the suggestion's "Removed" part, and read-only text shows its line breaks, so the original and the struck copy are easy to match.
 - Agents can ask what Markdown is supported: a new `GET markdown` function (`get_markdown_guide` tool) lists every block and mark with an example, and what isn't supported. Writes that meet recognizable but unsupported Markdown (images, raw HTML, footnotes, a table without its separator row, an unclosed fence) still succeed and return `warnings` naming the line and what was kept as text, so an agent learns at once instead of leaving literal text behind.
 - The tables already stored as literal `|` paragraphs are converted by agents through suggestions (a replace per table, approved by the human); a one-off script does the same in bulk for anyone with server access (dry run first).
 
@@ -21,7 +22,7 @@ Agents and people write pages in Markdown, but the block model stops at paragrap
 - `page-viewer`: rendering of tables, code blocks, headings 4–6 and callouts.
 - `agent-api`: Markdown conversion of the new types; the Markdown guide function; `warnings` on writes.
 - `agent-mcp`: the `get_markdown_guide` tool.
-- `agent-suggestions`: rows and cells of a table can't be suggestion targets or positions; whole tables can.
+- `agent-suggestions`: rows and cells of a table can't be suggestion targets or positions; whole tables can. A suggestion's target is marked in red in place.
 
 ## Non-goals
 

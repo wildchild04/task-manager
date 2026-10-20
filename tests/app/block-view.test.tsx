@@ -190,3 +190,10 @@ describe("tables, code, callouts and headings 4–6", () => {
     expect(html).toMatch(/<div role="heading" aria-level="7" class="block-heading-6"[^>]*><span>six<\/span><\/div>/);
   });
 });
+
+describe("line breaks", () => {
+  it("shows a paragraph's line breaks", () => {
+    const html = render([content("p", "paragraph", "| a | b |\n|---|---|\n| 1 | 2 |")]);
+    expect(html).toMatch(/\| a \| b \|<br\/>\|---\|---\|<br\/>\| 1 \| 2 \|/);
+  });
+});
