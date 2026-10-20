@@ -18,11 +18,22 @@ import { fromMarkdown, type MarkdownReader, type MarkdownWriter, toMarkdown } fr
 import type { Operation } from "~/domain/blocks/types";
 import { behaviorOf, matchSlashCommands, type SlashCommand } from "~/editor/block-types";
 import { Editor } from "~/editor/editor";
-import { caret, caretOrder, type EditorState, getBlock, isCollapsed, type Selection, stateFromTree } from "~/editor/editor-state";
+import {
+  caret,
+  caretOrder,
+  documentOrder,
+  type EditorState,
+  getBlock,
+  isCollapsed,
+  type Point,
+  type Selection,
+  stateFromTree,
+  type TextRange,
+} from "~/editor/editor-state";
 import type { CommentBlockInput } from "~/domain/comments/types";
-import { linkAt, linkRangeAt, plain, slice } from "~/editor/rich-text";
+import { linkAt, linkRangeAt, nextCharacter, plain, previousCharacter, slice } from "~/editor/rich-text";
 import { type SaveStatus, SaveQueue, type SendResult } from "~/editor/save-queue";
-import { selectedTrees } from "~/editor/clipboard";
+import { blockTrees, selectedTrees } from "~/editor/clipboard";
 import { verticalNeighbour } from "~/editor/tables";
 
 import { SuggestionsContext } from "../blocks/block-view";
@@ -36,9 +47,14 @@ import {
   offsetOf,
   editableOf,
   offsetAtX,
+  offsetOnEdgeLine,
+  pointAt,
+  readRange,
   readSelection,
+  rectAt,
   renderRichText,
   textOf,
+  writeRange,
   writeSelection,
 } from "./dom-caret";
 import { APP_FORMAT, htmlToMarkdown } from "./clipboard";
@@ -509,7 +525,12 @@ export function PageEditor({
   useLayoutEffect(() => {
     if (!restoreSelection.current || !rootRef.current) return;
     restoreSelection.current = false;
-    writeSelection(rootRef.current, editor.selection);
+    if (editor.blocks) {
+      // Selected blocks show no caret: keys go to the editor itself.
+      window.getSelection()?.removeAllRanges();
+      rootRef.current.focus({ preventScroll: true });
+    } else if (editor.range) writeRange(rootRef.current, editor.range);
+    else writeSelection(rootRef.current, editor.selection);
   });
 
   // ----- Suggestions -----
@@ -578,7 +599,13 @@ export function PageEditor({
     const root = rootRef.current;
     if (!root) return;
 
+    /** Takes the DOM selection into the editor: text across blocks, or the caret or text in one block. */
     const sync = (): Selection | null => {
+      const range = readRange(editor.state.rootId);
+      if (range && root.contains(editableOf(root, range.anchor.blockId)) && root.contains(editableOf(root, range.focus.blockId))) {
+        editor.setRange(range);
+        return editor.selection;
+      }
       const selection = readSelection();
       if (selection && root.contains(editableOf(root, selection.blockId))) editor.setSelection(selection);
       return selection;
@@ -656,17 +683,24 @@ export function PageEditor({
       if (composing.current || event.isComposing || event.inputType === "insertCompositionText") return;
       event.preventDefault();
       if (!sync()) return;
+      if (editor.range && event.inputType.startsWith("delete")) {
+        editor.removeSelection();
+        edited();
+        return;
+      }
+      // Marks apply within one block.
+      if (editor.range && event.inputType.startsWith("format")) return;
       const data = event.data ?? event.dataTransfer?.getData("text/plain") ?? "";
       switch (event.inputType) {
         case "insertText":
         case "insertReplacementText":
         case "insertFromPaste": {
           if (!data) break;
-          const before = editor.selection;
+          const before = editor.range ? null : editor.selection;
           const anchor = caretRect();
           // A pasted mention placeholder has no page to point at, so it's dropped.
           editor.type(data.replace(/\r\n?/g, "\n").replace(/\uFFFC/g, ""));
-          if (data === "/" || data === "@") openMenuAt(before.blockId, Math.min(before.anchor, before.focus), anchor);
+          if (before && (data === "/" || data === "@")) openMenuAt(before.blockId, Math.min(before.anchor, before.focus), anchor);
           break;
         }
         case "insertParagraph":
@@ -716,6 +750,11 @@ export function PageEditor({
     };
 
     const onCompositionStart = () => {
+      // Text selected across blocks goes first (its own undo step); the composition then runs at the join.
+      if (editor.range) {
+        editor.removeSelection();
+        writeSelection(root, editor.selection);
+      }
       composing.current = true;
     };
 
@@ -750,6 +789,90 @@ export function PageEditor({
     const neighbour = (id: string, step: -1 | 1) => {
       const order = caretOrder(editor.state, editor.closed).filter((blockId) => editableOf(root, blockId));
       return order[order.indexOf(id) + step];
+    };
+
+    /** Selects from `anchor` to `focus`: text within one block, or across blocks. */
+    const selectBetween = (anchor: Point, focus: Point) => {
+      if (anchor.blockId === focus.blockId) {
+        moveTo({ blockId: anchor.blockId, anchor: anchor.offset, focus: focus.offset });
+      } else {
+        editor.setRange({ anchor, focus });
+        writeRange(root, { anchor, focus });
+      }
+    };
+
+    /**
+     * Shift+Arrow: at a block's edge, moves the selection's end into the next
+     * text block; with text selected across blocks, moves it by a character or
+     * line. Returns false where the browser extends the selection itself.
+     */
+    const extendSelection = (key: string): boolean => {
+      const range = editor.range;
+      const { selection } = editor;
+      const anchor = range?.anchor ?? { blockId: selection.blockId, offset: selection.anchor };
+      const focus = range?.focus ?? { blockId: selection.blockId, offset: selection.focus };
+      const element = editableOf(root, focus.blockId);
+      if (focus.blockId === editor.state.rootId || !element) return false;
+      const value = plain(getBlock(editor.state, focus.blockId).content);
+      const back = key === "ArrowUp" || key === "ArrowLeft";
+      const vertical = key === "ArrowUp" || key === "ArrowDown";
+      if (vertical) goalX.current ??= rectAt(element, focus.offset)?.left ?? element.getBoundingClientRect().left;
+      else goalX.current = null;
+      const atEdge = vertical ? offsetOnEdgeLine(element, focus.offset, back ? "first" : "last") : focus.offset === (back ? 0 : value.length);
+      if (atEdge) {
+        const target = neighbour(focus.blockId, back ? -1 : 1);
+        // The title never takes part; at the page's edges the selection stays.
+        if (!target || target === editor.state.rootId) return range !== null;
+        const targetElement = editableOf(root, target)!;
+        const offset = vertical
+          ? offsetAtX(targetElement, goalX.current!, back ? "last" : "first")
+          : back
+            ? plain(getBlock(editor.state, target).content).length
+            : 0;
+        selectBetween(anchor, { blockId: target, offset });
+        return true;
+      }
+      if (!range) return false;
+      if (!vertical) {
+        const offset = back ? previousCharacter(value, focus.offset) : nextCharacter(value, focus.offset);
+        selectBetween(anchor, { blockId: focus.blockId, offset });
+        return true;
+      }
+      // A line up or down inside the block: the point half a line above or below.
+      const rect = rectAt(element, focus.offset);
+      const to = rect && pointAt(root, goalX.current!, back ? rect.top - rect.height / 2 : rect.bottom + rect.height / 2);
+      if (to?.blockId === focus.blockId) selectBetween(anchor, to);
+      return true;
+    };
+
+    /** The two ends of a range in reading order. */
+    const ordered = (range: TextRange): [Point, Point] => {
+      const order = documentOrder(editor.state);
+      const before = order.indexOf(range.anchor.blockId) < order.indexOf(range.focus.blockId);
+      return before ? [range.anchor, range.focus] : [range.focus, range.anchor];
+    };
+
+    /** Keys over text selected across blocks, besides typing and Enter. Returns whether the key was handled. */
+    const onRangeKey = (event: KeyboardEvent, range: TextRange): boolean => {
+      const mod = event.metaKey || event.ctrlKey;
+      if (event.key === "Escape") {
+        editor.rangeToBlocks();
+        edited();
+        return true;
+      }
+      if (event.key === "Backspace" || event.key === "Delete") {
+        editor.removeSelection();
+        edited();
+        return true;
+      }
+      if (event.key.startsWith("Arrow") && !event.shiftKey && !mod && !event.altKey) {
+        const [start, end] = ordered(range);
+        const point = event.key === "ArrowLeft" || event.key === "ArrowUp" ? start : end;
+        moveTo(caret(point.blockId, point.offset));
+        return true;
+      }
+      // Nesting and marks apply within one block.
+      return event.key === "Tab" || (mod && ["b", "i", "u", "e", "k"].includes(event.key.toLowerCase()));
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -796,6 +919,14 @@ export function PageEditor({
           return;
         }
       }
+      if (event.shiftKey && !mod && !event.altKey && event.key.startsWith("Arrow") && extendSelection(event.key)) {
+        event.preventDefault();
+        return;
+      }
+      if (editor.range && onRangeKey(event, editor.range)) {
+        event.preventDefault();
+        return;
+      }
       let handled = true;
 
       if (event.key === "Enter" && mod && draftRef.current) {
@@ -814,6 +945,11 @@ export function PageEditor({
         editor.deleteForward();
       } else if (event.key === "Tab") {
         editor.tab(event.shiftKey);
+      } else if (mod && key === "a" && selection.blockId !== editor.state.rootId) {
+        // The block's text first; once it's all selected, every block of the page.
+        const whole = Math.min(selection.anchor, selection.focus) === 0 && Math.max(selection.anchor, selection.focus) === length;
+        if (editor.range || whole) editor.selectAll();
+        else editor.setSelection({ blockId: selection.blockId, anchor: 0, focus: length });
       } else if (mod && key === "z") {
         if (event.shiftKey) editor.redo();
         else editor.undo();
@@ -960,31 +1096,95 @@ export function PageEditor({
     };
 
     /** Where a DOM position is in the editor's text, or `null` outside an editable block. */
-    const pointAt = (node: Node | null, offset: number) => {
+    const domPoint = (node: Node | null, offset: number) => {
       const element = (node instanceof Element ? node : node?.parentElement)?.closest<HTMLElement>(".editable[data-block-id]");
       if (!element || !root.contains(element) || element.dataset.blockId === editor.state.rootId) return null;
       return { blockId: element.dataset.blockId!, offset: offsetOf(element, node!, offset) };
     };
 
-    /** Copies the selected blocks as Markdown, and within one block adds the app format so marks survive a paste back. */
-    const onCopy = (event: ClipboardEvent) => {
+    /**
+     * Puts the selection on the clipboard: selected blocks, or text across
+     * blocks, as Markdown and in the app format; text within one block as the
+     * browser's text plus the app format, so marks survive a paste back.
+     * Returns whether anything was written.
+     */
+    const writeClipboard = (data: DataTransfer): boolean => {
+      let trees = editor.blocks ? blockTrees(editor.state, editor.selectedRoots()) : null;
+      if (!trees && editor.range) trees = selectedTrees(editor.state, editor.range.anchor, editor.range.focus);
+      if (trees) {
+        data.setData("text/plain", readable(toMarkdown(trees, plainReader)));
+        data.setData(APP_FORMAT, toMarkdown(trees, appReader));
+        return true;
+      }
       const selection = window.getSelection();
-      if (!event.clipboardData || !selection || selection.rangeCount === 0 || selection.isCollapsed) return;
-      const from = pointAt(selection.anchorNode, selection.anchorOffset);
-      const to = pointAt(selection.focusNode, selection.focusOffset);
-      if (!from || !to) return;
+      if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return false;
+      const from = domPoint(selection.anchorNode, selection.anchorOffset);
+      const to = domPoint(selection.focusNode, selection.focusOffset);
+      if (!from || !to) return false;
       if (from.blockId === to.blockId) {
         const content = getBlock(editor.state, from.blockId).content;
         const span = slice(content, Math.min(from.offset, to.offset), Math.max(from.offset, to.offset));
         const node = { block: { id: from.blockId, type: "paragraph", props: {}, content: span } as never, children: [] };
-        event.clipboardData.setData("text/plain", selection.toString());
-        event.clipboardData.setData(APP_FORMAT, toMarkdown([node], appReader));
+        data.setData("text/plain", selection.toString());
+        data.setData(APP_FORMAT, toMarkdown([node], appReader));
       } else {
         const trees = selectedTrees(editor.state, from, to);
-        event.clipboardData.setData("text/plain", readable(toMarkdown(trees, plainReader)));
-        event.clipboardData.setData(APP_FORMAT, toMarkdown(trees, appReader));
+        data.setData("text/plain", readable(toMarkdown(trees, plainReader)));
+        data.setData(APP_FORMAT, toMarkdown(trees, appReader));
       }
+      return true;
+    };
+
+    const onCopy = (event: ClipboardEvent) => {
+      if (event.clipboardData && writeClipboard(event.clipboardData)) event.preventDefault();
+    };
+
+    /** Cuts like copying, then removes what was selected as one undo step. */
+    const onCut = (event: ClipboardEvent) => {
+      if (composing.current || !event.clipboardData) return;
+      if (!editor.blocks) sync();
+      if (!writeClipboard(event.clipboardData)) return;
       event.preventDefault();
+      if (editor.blocks || editor.range) editor.removeSelection();
+      else editor.deleteBackward();
+      edited();
+    };
+
+    // ----- Selecting across blocks with the pointer -----
+
+    // Browsers keep a drag-selection inside the block it starts in: past it, the editor selects across blocks itself.
+    let dragFrom: Point | null = null;
+    const onPointerDown = (event: PointerEvent) => {
+      dragFrom = null;
+      if (event.button !== 0 || event.pointerType === "touch" || event.shiftKey) return;
+      if (!(event.target as HTMLElement).closest?.(".editable")) return;
+      const from = pointAt(root, event.clientX, event.clientY);
+      if (from && from.blockId !== editor.state.rootId) dragFrom = from;
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      if (!dragFrom || (event.buttons & 1) === 0) return;
+      // Near the window's top or bottom, the page scrolls on.
+      if (event.clientY < 40) window.scrollBy(0, -16);
+      else if (event.clientY > window.innerHeight - 40) window.scrollBy(0, 16);
+      const to = pointAt(root, event.clientX, event.clientY);
+      if (!to || to.blockId === editor.state.rootId) return;
+      if (to.blockId === dragFrom.blockId && !editor.range) return;
+      event.preventDefault();
+      selectBetween(dragFrom, to);
+    };
+    const onPointerUp = () => {
+      dragFrom = null;
+    };
+    /** Shift+click in another block selects from the selection's anchor to there. */
+    const onMouseDown = (event: MouseEvent) => {
+      if (!event.shiftKey || event.button !== 0 || !(event.target as HTMLElement).closest?.(".editable")) return;
+      const { selection } = editor;
+      const anchor = editor.range?.anchor ?? { blockId: selection.blockId, offset: selection.anchor };
+      const to = pointAt(root, event.clientX, event.clientY);
+      if (!to || to.blockId === editor.state.rootId || anchor.blockId === editor.state.rootId) return;
+      if (to.blockId === anchor.blockId && !editor.range) return;
+      event.preventDefault();
+      selectBetween(anchor, to);
     };
 
     document.addEventListener("selectionchange", onSelectionChange);
@@ -995,6 +1195,11 @@ export function PageEditor({
     root.addEventListener("beforeinput", onBeforeInput);
     root.addEventListener("paste", onPaste);
     root.addEventListener("copy", onCopy);
+    root.addEventListener("cut", onCut);
+    root.addEventListener("pointerdown", onPointerDown);
+    root.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("pointermove", onPointerMove);
+    document.addEventListener("pointerup", onPointerUp);
     root.addEventListener("keydown", onKeyDown);
     root.addEventListener("compositionstart", onCompositionStart);
     root.addEventListener("compositionend", onCompositionEnd);
@@ -1009,6 +1214,11 @@ export function PageEditor({
       root.removeEventListener("beforeinput", onBeforeInput);
       root.removeEventListener("paste", onPaste);
       root.removeEventListener("copy", onCopy);
+      root.removeEventListener("cut", onCut);
+      root.removeEventListener("pointerdown", onPointerDown);
+      root.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("pointermove", onPointerMove);
+      document.removeEventListener("pointerup", onPointerUp);
       root.removeEventListener("keydown", onKeyDown);
       root.removeEventListener("compositionstart", onCompositionStart);
       root.removeEventListener("compositionend", onCompositionEnd);

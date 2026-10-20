@@ -16,8 +16,8 @@
 
 ## 4. Text selection across blocks (DOM)
 
-- [ ] 4.1 `dom-caret.ts`: `readRange`, `writeRange`, `pointAt(x, y)`; `selectionchange` reading a range before an in-block selection
-- [ ] 4.2 `page-editor.tsx`: pointer-driven drag across blocks (with auto-scroll), Shift+click, Shift+Arrow at block edges; `keydown`/`beforeinput` routing a range to the range commands; arrows collapsing it; composition starting over a range; `cut` handler; Cmd/Ctrl+A twice
+- [x] 4.1 `dom-caret.ts`: `readRange`, `writeRange`, `pointAt(x, y)`; `selectionchange` reading a range before an in-block selection
+- [x] 4.2 `page-editor.tsx`: pointer-driven drag across blocks (with auto-scroll), Shift+click, Shift+Arrow at block edges; `keydown`/`beforeinput` routing a range to the range commands; arrows collapsing it; composition starting over a range; `cut` handler; Cmd/Ctrl+A twice
 
 ## 5. Block selection (DOM)
 

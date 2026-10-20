@@ -1,5 +1,5 @@
 import { type Mark, MENTION_TEXT, type RichText } from "~/domain/blocks/types";
-import type { Selection } from "~/editor/editor-state";
+import type { Point, Selection, TextRange } from "~/editor/editor-state";
 
 import type { MentionTarget, MentionTargets } from "../blocks/view-model";
 import { withBase } from "../lib/base-path";
@@ -114,6 +114,60 @@ export function readSelection(): Selection | null {
   };
 }
 
+/**
+ * The text selected across editable blocks, when the DOM selection's ends are
+ * in two different blocks. `rootId` (the title) never takes part.
+ */
+export function readRange(rootId: string): TextRange | null {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || !selection.anchorNode || !selection.focusNode) return null;
+  const anchor = blockElementOf(selection.anchorNode);
+  const focus = blockElementOf(selection.focusNode);
+  if (!anchor || !focus || anchor === focus || anchor.dataset.blockId === rootId || focus.dataset.blockId === rootId) return null;
+  if (!anchor.isContentEditable || !focus.isContentEditable) return null;
+  return {
+    anchor: { blockId: anchor.dataset.blockId!, offset: offsetOf(anchor, selection.anchorNode, selection.anchorOffset) },
+    focus: { blockId: focus.dataset.blockId!, offset: offsetOf(focus, selection.focusNode, selection.focusOffset) },
+  };
+}
+
+/**
+ * Selects text across blocks. Browsers keep a selection the user makes inside
+ * the editable element it starts in, but one set from script may cross them;
+ * focus stays in the anchor's block, so keys arrive there.
+ */
+export function writeRange(root: ParentNode, range: TextRange): void {
+  const anchor = editableOf(root, range.anchor.blockId);
+  const focus = editableOf(root, range.focus.blockId);
+  if (!anchor || !focus) return;
+  if (document.activeElement !== anchor) anchor.focus({ preventScroll: true });
+  const from = positionOf(anchor, range.anchor.offset);
+  const to = positionOf(focus, range.focus.offset);
+  window.getSelection()?.setBaseAndExtent(from.node, from.offset, to.node, to.offset);
+}
+
+type CaretDocument = Document & {
+  caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+  caretRangeFromPoint?: (x: number, y: number) => Range | null;
+};
+
+/** The DOM position under a point of the window, if the browser can tell. */
+function positionAtPoint(x: number, y: number): { node: Node; offset: number } | null {
+  const doc = document as CaretDocument;
+  const position = doc.caretPositionFromPoint?.(x, y);
+  if (position) return { node: position.offsetNode, offset: position.offset };
+  const range = doc.caretRangeFromPoint?.(x, y);
+  return range ? { node: range.startContainer, offset: range.startOffset } : null;
+}
+
+/** The text position under a point of the window, when it's in an editable block inside `root`. */
+export function pointAt(root: HTMLElement, x: number, y: number): Point | null {
+  const position = positionAtPoint(x, y);
+  const element = position && blockElementOf(position.node);
+  if (!position || !element || !root.contains(element) || !element.isContentEditable) return null;
+  return { blockId: element.dataset.blockId!, offset: offsetOf(element, position.node, position.offset) };
+}
+
 /** The DOM position of a text offset inside an editable element. */
 function positionOf(element: HTMLElement, offset: number): { node: Node; offset: number } {
   const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
@@ -166,7 +220,25 @@ function lineRects(element: HTMLElement): { first: DOMRect; last: DOMRect } | nu
 
 /** Whether the caret is on the first (or last) visual line of its block. */
 export function caretOnEdgeLine(element: HTMLElement, edge: "first" | "last"): boolean {
-  const caret = caretRect();
+  return onEdgeLine(element, caretRect(), edge);
+}
+
+/** The client rectangle of a text offset in an editable element, or `null` when the browser can't tell (empty lines). */
+export function rectAt(element: HTMLElement, offset: number): DOMRect | null {
+  const position = positionOf(element, offset);
+  const range = document.createRange();
+  range.setStart(position.node, position.offset);
+  range.collapse(true);
+  const rect = range.getClientRects()[0];
+  return rect && rect.height > 0 ? rect : null;
+}
+
+/** Whether a text offset is on the first (or last) visual line of its block. */
+export function offsetOnEdgeLine(element: HTMLElement, offset: number, edge: "first" | "last"): boolean {
+  return onEdgeLine(element, rectAt(element, offset), edge);
+}
+
+function onEdgeLine(element: HTMLElement, caret: DOMRect | null, edge: "first" | "last"): boolean {
   const lines = lineRects(element);
   if (!caret || !lines) return true;
   const line = edge === "first" ? lines.first : lines.last;
@@ -180,13 +252,7 @@ export function offsetAtX(element: HTMLElement, x: number, edge: "first" | "last
   if (!lines) return 0;
   const line = edge === "first" ? lines.first : lines.last;
   const y = line.top + line.height / 2;
-  const doc = document as Document & {
-    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
-    caretRangeFromPoint?: (x: number, y: number) => Range | null;
-  };
-  const position = doc.caretPositionFromPoint?.(x, y);
-  const node = position?.offsetNode ?? doc.caretRangeFromPoint?.(x, y)?.startContainer;
-  const offset = position?.offset ?? doc.caretRangeFromPoint?.(x, y)?.startOffset ?? 0;
-  if (!node || !element.contains(node)) return edge === "first" ? 0 : textOf(element).length;
-  return offsetOf(element, node, offset);
+  const position = positionAtPoint(x, y);
+  if (!position || !element.contains(position.node)) return edge === "first" ? 0 : textOf(element).length;
+  return offsetOf(element, position.node, position.offset);
 }
