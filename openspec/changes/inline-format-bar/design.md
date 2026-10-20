@@ -26,7 +26,7 @@ Above the selection on pointing devices (`placement="top-start"`); below on coar
 
 ### 4. Stand-in until the design system has a selection toolbar
 
-The `HoverCard` holds a row with `role="toolbar"` and `aria-label="Formatting"`, `IconButton`s with `pressed` and letter glyphs as children, and a text `Button` for Turn into. Each button's label names its shortcut ("Bold (Ctrl+B)", "⌘B" on macOS). The request `selection-toolbar.md` asks for the component and the icons.
+The `HoverCard` holds a row with `role="toolbar"` and `aria-label="Formatting"`, `IconButton`s with `pressed` and letter glyphs as children, and a text `Button` for Turn into. Link uses a small inline SVG chain (an emoji isn't drawn on systems without an emoji font). The Turn into `Menu` is rendered outside the `HoverCard`, and the card ignores dismissal while it's open: choosing an item is a press outside the card, which would otherwise unmount the menu before its click. Each button's label names its shortcut ("Bold (Ctrl+B)", "⌘B" on macOS). The request `selection-toolbar.md` asks for the component and the icons.
 
 ## Risks / Trade-offs
 

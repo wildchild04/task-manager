@@ -60,6 +60,7 @@ import {
 } from "./dom-caret";
 import { APP_FORMAT, htmlToMarkdown } from "./clipboard";
 import { dragBlocks } from "./block-drag";
+import { type BarType, FormatBar, formatBarFor } from "./format-bar";
 import { BlockSelectionContext, EditableText, EditorBlocks, type HandleActions, type HandleMenuItem } from "./editor-blocks";
 import { withBase, withoutBase } from "../lib/base-path";
 
@@ -436,6 +437,14 @@ export function PageEditor({
   const [status, setStatus] = useState<SaveStatus>("saved");
   const [error, setError] = useState<string | null>(null);
   const [linkFor, setLinkFor] = useState<{ selection: Selection; href: string } | null>(null);
+  // The formatting bar over selected text: where the selection is on screen, and which selection it's for.
+  const [formatBar, setFormatBarState] = useState<{ rect: DOMRect; selection: Selection } | null>(null);
+  const formatBarRef = useRef<typeof formatBar>(null);
+  const setFormatBar = useCallback((next: { rect: DOMRect; selection: Selection } | null) => {
+    formatBarRef.current = next;
+    setFormatBarState(next);
+  }, []);
+  const showFormatBarRef = useRef<() => void>(() => {});
   // While a suggestion decision is on its way; then what it did, with Undo until the next edit.
   const [deciding, setDeciding] = useState(false);
   const [decided, setDecided] = useState<{ message: string; undo?: string; failed?: boolean } | null>(null);
@@ -727,15 +736,57 @@ export function PageEditor({
       });
     };
 
+    // ----- The formatting bar -----
+
+    /** Shows the bar over the selection when it's one block's text that marks apply to; hides it otherwise. */
+    const showFormatBar = () => {
+      const selection = window.getSelection();
+      const ok = !editor.range && !editor.blocks && !composing.current && formatBarFor(editor.state, editor.selection);
+      const rect = ok && selection && selection.rangeCount > 0 ? selection.getRangeAt(0).getBoundingClientRect() : null;
+      setFormatBar(rect && rect.width > 0 ? { rect, selection: editor.selection } : null);
+    };
+    showFormatBarRef.current = showFormatBar;
+    let settle: ReturnType<typeof setTimeout> | undefined;
+    let pointerSelecting = false;
+    const onBarPointerDown = (event: PointerEvent) => {
+      if ((event.target as HTMLElement).closest?.(".format-bar")) return;
+      pointerSelecting = true;
+    };
+    const onBarPointerUp = () => {
+      if (!pointerSelecting) return;
+      pointerSelecting = false;
+      // The selection is final once the browser has handled the release.
+      clearTimeout(settle);
+      settle = setTimeout(showFormatBar, 0);
+    };
+    /** After a selection change: the bar stays for the same selection, hides at once otherwise, and shows once the selection settles. */
+    const updateFormatBar = () => {
+      const shown = formatBarRef.current;
+      const { selection } = editor;
+      const same =
+        shown?.selection.blockId === selection.blockId &&
+        shown.selection.anchor === selection.anchor &&
+        shown.selection.focus === selection.focus &&
+        !editor.range &&
+        !editor.blocks;
+      if (same) return;
+      if (shown) setFormatBar(null);
+      clearTimeout(settle);
+      if (!pointerSelecting && !isCollapsed(selection)) settle = setTimeout(showFormatBar, 300);
+    };
+
     const onSelectionChange = () => {
       // While a drag selects across blocks, the editor's range stands for the browser's narrower selection.
       if (composing.current || dragRange) return;
       sync();
       refreshSlash();
+      updateFormatBar();
     };
 
     const onBeforeInput = (event: InputEvent) => {
       setLinkCard(null);
+      clearTimeout(settle);
+      setFormatBar(null);
       if (composing.current || event.isComposing || event.inputType === "insertCompositionText") return;
       event.preventDefault();
       if (!sync()) return;
@@ -806,6 +857,8 @@ export function PageEditor({
     };
 
     const onCompositionStart = () => {
+      clearTimeout(settle);
+      setFormatBar(null);
       // Text selected across blocks goes first (its own undo step); the composition then runs at the join.
       if (editor.range) {
         editor.removeSelection();
@@ -1054,6 +1107,7 @@ export function PageEditor({
       } else if (event.key === "Escape" && selection.blockId !== editor.state.rootId) {
         // A link card open over the text closes first.
         if (linkCardRef.current) setLinkCard(null);
+        else if (formatBarRef.current) setFormatBar(null);
         else editor.selectBlock(selection.blockId);
       } else if (mod && key === "a" && selection.blockId !== editor.state.rootId) {
         // The block's text first; once it's all selected, every block of the page.
@@ -1170,7 +1224,11 @@ export function PageEditor({
       cardTimers.cancelOpen();
       if (linkCardRef.current) cardTimers.close(() => setLinkCard(null));
     };
-    const onScroll = () => setLinkCard(null);
+    const onScroll = () => {
+      setLinkCard(null);
+      // The bar follows the selection.
+      if (formatBarRef.current) showFormatBar();
+    };
 
     // ----- Clipboard -----
 
@@ -1344,6 +1402,8 @@ export function PageEditor({
     document.addEventListener("mousemove", onMouseMove);
     document.addEventListener("pointerdown", onDocumentPointerDown);
     document.addEventListener("mouseup", onMouseUp);
+    root.addEventListener("pointerdown", onBarPointerDown);
+    document.addEventListener("pointerup", onBarPointerUp);
     root.addEventListener("keydown", onKeyDown);
     root.addEventListener("compositionstart", onCompositionStart);
     root.addEventListener("compositionend", onCompositionEnd);
@@ -1364,11 +1424,14 @@ export function PageEditor({
       document.removeEventListener("mousemove", onMouseMove);
       document.removeEventListener("pointerdown", onDocumentPointerDown);
       document.removeEventListener("mouseup", onMouseUp);
+      root.removeEventListener("pointerdown", onBarPointerDown);
+      document.removeEventListener("pointerup", onBarPointerUp);
+      clearTimeout(settle);
       root.removeEventListener("keydown", onKeyDown);
       root.removeEventListener("compositionstart", onCompositionStart);
       root.removeEventListener("compositionend", onCompositionEnd);
     };
-  }, [editor, setSlash]);
+  }, [editor, setSlash, setFormatBar]);
 
   // Screen readers follow the highlighted command while focus stays in the block.
   useEffect(() => {
@@ -1485,6 +1548,37 @@ export function PageEditor({
       refocus: placeSelection,
     };
   }, [editor, placeSelection]);
+
+  // ----- The formatting bar's commands -----
+
+  const bar = formatBar && !editor.range && !editor.blocks ? formatBarFor(editor.state, editor.selection) : null;
+  /** The selected text's block type, as Turn into names it. */
+  const barBlock = bar ? editor.state.blocks[editor.selection.blockId] : undefined;
+  const isType = (action: TypeChange) =>
+    barBlock?.type === action.type && (action.type !== "heading" || barBlock.props.level === action.props.level);
+  const barTypeLabel = TURN_INTO.find((t) => isType(t.action))?.label ?? "Text";
+  /** Runs a bar command, then puts the selection back and the bar over it. */
+  const fromBar = (command: () => unknown) => {
+    command();
+    restoreSelection.current = true;
+    requestAnimationFrame(() => {
+      placeSelection();
+      showFormatBarRef.current();
+    });
+  };
+  const barTypes = (): BarType[] =>
+    TURN_INTO.map(({ value, label, action }) => ({
+      value,
+      label,
+      current: isType(action),
+      choose: () => fromBar(() => editor.turnInto(action)),
+    }));
+  const barLink = () => {
+    const { selection } = editor;
+    const content = getBlock(editor.state, selection.blockId).content;
+    setFormatBar(null);
+    setLinkFor({ selection, href: linkAt(content, Math.min(selection.anchor, selection.focus), Math.max(selection.anchor, selection.focus)) ?? "" });
+  };
 
   const { state, closed } = editor;
   const selectedRoots = editor.selectedRoots();
@@ -1629,6 +1723,16 @@ export function PageEditor({
             }}
             onDismiss={() => setSlash(null)}
             emptyText={slash?.kind === "page" ? (found === null ? "Searching…" : "No page matches") : "No matching blocks"}
+          />
+          <FormatBar
+            bar={bar}
+            rect={formatBar?.rect ?? null}
+            placement={typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches ? "bottom-start" : "top-start"}
+            typeLabel={barTypeLabel}
+            types={barTypes}
+            onMark={(mark) => fromBar(() => editor.toggleMark(mark))}
+            onLink={barLink}
+            onDismiss={() => setFormatBar(null)}
           />
           <HoverCard
             open={linkCard !== null}

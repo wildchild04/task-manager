@@ -172,6 +172,29 @@ body {
   pointer-events: none;
 }
 
+/* The formatting bar over selected text (a stand-in until the design system has a selection toolbar). */
+.format-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: -4px;
+}
+
+.format-bar-glyph {
+  display: inline-block;
+  min-width: 1.1em;
+  font-size: 0.95rem;
+  line-height: 1;
+  text-align: center;
+}
+
+.format-bar-divider {
+  align-self: stretch;
+  width: 1px;
+  margin: 4px 2px;
+  background: var(--ds-outline-variant);
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
