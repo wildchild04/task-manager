@@ -159,7 +159,7 @@ function slashMatches(
   if (query === null) return null;
   const all: SlashItem[] =
     menu.kind === "command"
-      ? matchSlashCommands(query).map((command) => ({
+      ? matchSlashCommands(query, { subPages: editor.subPages }).map((command) => ({
           value: command.value,
           label: command.label,
           description: command.description,
@@ -448,13 +448,21 @@ export function PageEditor({
 
   const { editor, queue } = useMemo(() => {
     let editor: Editor;
+    // Sub-pages of this page, known so that a batch creating or removing one re-reads the sidebar.
+    const subPages = new Set<string>();
     const queue = new SaveQueue({
       send: async (batch) => {
         const result = await sendBatch(page, batch);
         if (result.ok && result.version) {
           knownVersion.current = result.version;
-          // A new title shows in the navigation, lists and breadcrumbs.
-          if (batch.some((op) => op.op === "update" && op.id === editor.state.rootId)) void revalidator.revalidate();
+          // A new title shows in the navigation, lists and breadcrumbs; a new or removed sub-page in the sidebar.
+          const changesPages = batch.some(
+            (op) =>
+              (op.op === "update" && op.id === editor.state.rootId) ||
+              (op.op === "insert" && op.block.type === "page") ||
+              (op.op === "delete" && subPages.has(op.id)),
+          );
+          if (changesPages) void revalidator.revalidate();
         }
         return result;
       },
@@ -466,14 +474,18 @@ export function PageEditor({
       },
     });
     editor = new Editor(stateFromTree(page.tree), {
+      // Sub-pages are made where they can be opened as pages of their own.
+      subPages: !draftRef.current && (page.surface === "page" || page.surface === "project"),
       // A draft isn't saved: its content goes to the caller instead.
       onOps: (ops) => {
+        for (const op of ops) if (op.op === "insert" && op.block.type === "page") subPages.add(op.block.id);
         // An edit ends the chance to undo the last suggestion decision.
         setDecided(null);
         if (draftRef.current) draftRef.current.onChange(draftBlocks(editor.state));
         else queue.enqueue(ops);
       },
     });
+    for (const block of Object.values(editor.state.blocks)) if (block.type === "page") subPages.add(block.id);
     return { editor, queue };
     // One editor per page; newer content from the loader is applied below.
   }, [page.surface, page.id]);
@@ -552,6 +564,14 @@ export function PageEditor({
     } else if (editor.range) writeRange(root, editor.range);
     else writeSelection(root, editor.selection);
   }, [editor]);
+
+  // A page opened with an empty title and no blocks (such as a new sub-page) starts with the caret in its title.
+  useEffect(() => {
+    const root = editor.state.blocks[editor.state.rootId]!;
+    if (!page.title || plain(root.content) !== "" || root.children.length > 0 || !rootRef.current) return;
+    editor.setSelection(caret(root.id, 0));
+    writeSelection(rootRef.current, editor.selection);
+  }, [editor, page.title]);
 
   // After an edit, put the caret where the editor says (block content is drawn first, in child effects).
   useLayoutEffect(() => {
@@ -671,8 +691,10 @@ export function PageEditor({
         return;
       }
       setSlash(null);
-      editor.slash(menu.start, item.command);
+      const created = editor.slash(menu.start, item.command);
       edited();
+      // A new sub-page opens at once; leaving waits until the edit creating it is saved.
+      if (created) void navigateRef.current(`/pages/${created}`);
     };
 
     /**

@@ -33,13 +33,19 @@ export const editBatchSchema = z.array(
 export type PageEditOptions = {
   /** Whether the page's title (the root's content) may change. */
   title?: boolean;
+  /** Whether empty sub-pages may be created here, and deleted while they have no blocks of their own. */
+  subPages?: boolean;
+  /** Whether a sub-page has no blocks of its own (its content isn't loaded with the page's tree). */
+  isEmptyPage?: (id: string) => boolean;
 };
 
 /**
  * Checks that an edit batch stays inside one page's own content: the root and
  * the blocks under it, but not inside sub-pages. Sub-pages can be moved
  * within the page but never deleted (also not along with a block containing
- * one), retyped or retitled from here; no page, comment or suggestion blocks
+ * one), retyped or retitled from here, except that with `subPages` an empty
+ * sub-page may be created (a page block holding only its title) and deleted
+ * while it has no blocks; no other page, nor comment or suggestion blocks,
  * are created; suggestions and the blocks inside them aren't changed or
  * deleted (they change only by being approved or rejected), also not along
  * with a block containing one, though a suggestion may move as a whole; the root only changes its title, when allowed. Returns the reason a batch
@@ -70,16 +76,20 @@ export function checkPageEdit(tree: TreeNode, batch: Batch, options: PageEditOpt
   const containsSuggestion = (id: string): boolean =>
     type.get(id) === "suggestion" || [...parent].some(([child, p]) => p === id && containsSuggestion(child));
   const SUGGESTED = "Suggestions change only by being approved or rejected";
+  // Sub-pages created by this batch: empty, so they may be deleted again.
+  const created = new Set<string>();
 
   for (const op of batch) {
     switch (op.op) {
       case "insert": {
         if (!("parentId" in op) || op.parentId === null || !canHoldChildren(op.parentId)) return "Edits must stay inside the page";
-        if (op.block.type === "page" || op.block.type === "comment" || op.block.type === "suggestion") {
+        const emptySubPage = op.block.type === "page" && options.subPages && Object.keys(op.block.props ?? {}).length === 0;
+        if ((op.block.type === "page" && !emptySubPage) || op.block.type === "comment" || op.block.type === "suggestion") {
           return `A ${op.block.type} block can't be created here`;
         }
         if (isSuggested(op.parentId)) return SUGGESTED;
         if (parent.has(op.block.id)) return `Block ${op.block.id} already exists`;
+        if (emptySubPage) created.add(op.block.id);
         parent.set(op.block.id, op.parentId);
         type.set(op.block.id, op.block.type);
         break;
@@ -107,7 +117,8 @@ export function checkPageEdit(tree: TreeNode, batch: Batch, options: PageEditOpt
       }
       case "delete": {
         if (!parent.has(op.id) || op.id === rootId) return "Edits must stay inside the page";
-        if (containsSubPage(op.id)) return "Sub-pages can't be deleted by editing; delete the page itself";
+        const emptySubPage = isSubPage(op.id) && options.subPages && (created.has(op.id) || options.isEmptyPage?.(op.id) === true);
+        if (containsSubPage(op.id) && !emptySubPage) return "Sub-pages can't be deleted by editing; delete the page itself";
         if (isSuggested(op.id)) return SUGGESTED;
         if (containsSuggestion(op.id)) return "Approve or reject the suggestion inside first";
         const removed = new Set([op.id]);

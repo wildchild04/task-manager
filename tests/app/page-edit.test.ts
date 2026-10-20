@@ -42,13 +42,43 @@ describe("page edits", () => {
     ["inserting into a sub-page", [{ op: "insert", block: { id: "x", type: "paragraph" }, parentId: "sub" }], "Edits must stay inside the page"],
     ["deleting a sub-page", [{ op: "delete", id: "sub" }], "Sub-pages can't be deleted by editing; delete the page itself"],
     ["retitling a sub-page", [{ op: "update", id: "sub", content: [{ text: "x" }] }], "A sub-page is edited on its own page"],
-    ["creating a page", [{ op: "insert", block: { id: "x", type: "page" }, parentId: "doc" }], "A page block can't be created here"],
+    ["creating a page with more than a title", [{ op: "insert", block: { id: "x", type: "page", props: { icon: "x" } }, parentId: "doc" }], "A page block can't be created here"],
+    ["inserting into a new sub-page", [{ op: "insert", block: { id: "x", type: "page" }, parentId: "doc" }, { op: "insert", block: { id: "y", type: "paragraph" }, parentId: "x" }], "Edits must stay inside the page"],
     ["turning a block into a page", [{ op: "update", id: "a", type: "page" }], "A block can't be turned into a page"],
     ["deleting the page itself", [{ op: "delete", id: "doc" }], "Edits must stay inside the page"],
   ] as const)("refuses %s, changing nothing", (_, batch, message) => {
     const version = editablePage(services, "page", "doc")!.version;
     expect(edit([{ op: "update", id: "a", content: [{ text: "changed" }] }, ...(batch as unknown as Operation[])])).toEqual({ ok: false, message });
     expect(editablePage(services, "page", "doc")!.version).toBe(version);
+  });
+
+  describe("empty sub-pages", () => {
+    it("creates one and deletes it again while it has no blocks", () => {
+      expect(edit([{ op: "insert", block: { id: "new", type: "page", content: [] }, parentId: "doc", afterId: "a" }]).ok).toBe(true);
+      expect(services.blocks.getBlock("new")?.type).toBe("page");
+      expect(edit([{ op: "delete", id: "new" }]).ok).toBe(true);
+      expect(services.blocks.getBlock("new")).toBeUndefined();
+    });
+
+    it("won't delete one that has blocks, nor a block containing an empty one", () => {
+      edit([{ op: "insert", block: { id: "new", type: "page" }, parentId: "doc" }]);
+      services.blocks.apply([{ op: "insert", block: { id: "inside", type: "paragraph" }, parentId: "new" }]);
+      expect(edit([{ op: "delete", id: "new" }])).toEqual({ ok: false, message: "Sub-pages can't be deleted by editing; delete the page itself" });
+      edit([{ op: "insert", block: { id: "empty", type: "page" }, parentId: "a" }]);
+      expect(edit([{ op: "delete", id: "a" }])).toEqual({ ok: false, message: "Sub-pages can't be deleted by editing; delete the page itself" });
+    });
+
+    it("are made on project pages but not in task bodies", () => {
+      const home = services.projects.get("P")!.homePageId;
+      const page = (id: string) => [{ op: "insert", block: { id, type: "page" }, parentId: home }] as Operation[];
+      expect(edit(page("p1"), "project", "P").ok).toBe(true);
+      services.tasks.create({ id: "T", projectId: "P", kind: "work", title: "T" });
+      const body = services.tasks.get("T")!.bodyPageId;
+      expect(edit([{ op: "insert", block: { id: "p2", type: "page" }, parentId: body }], "task", "T")).toEqual({
+        ok: false,
+        message: "A page block can't be created here",
+      });
+    });
   });
 
   it("refuses deleting a block that contains a sub-page", () => {

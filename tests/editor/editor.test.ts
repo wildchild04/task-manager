@@ -617,7 +617,10 @@ describe("editor", () => {
       expect(matchSlashCommands("tab").map((c) => c.value)).toEqual(["table"]);
       expect(matchSlashCommands("check").map((c) => c.value)).toEqual(["todo"]);
       expect(matchSlashCommands("list").map((c) => c.value)).toEqual(["bulleted", "numbered"]);
-      expect(matchSlashCommands("")).toHaveLength(SLASH_COMMANDS.length);
+      expect(matchSlashCommands("")).toHaveLength(SLASH_COMMANDS.length - 1);
+      expect(matchSlashCommands("", { subPages: true })).toHaveLength(SLASH_COMMANDS.length);
+      expect(matchSlashCommands("pa").map((c) => c.value)).toEqual(["text"]);
+      expect(matchSlashCommands("pa", { subPages: true }).map((c) => c.value)).toEqual(["text", "page"]);
       expect(matchSlashCommands("zzz")).toEqual([]);
     });
 

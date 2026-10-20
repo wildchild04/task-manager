@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { type AppServices, createInMemoryServices } from "~/composition";
 import { fromMarkdown, type MarkdownReader, toMarkdown } from "~/domain/blocks/markdown";
 import type { NewBlock, Operation } from "~/domain/blocks/types";
+import { SLASH_COMMANDS } from "~/editor/block-types";
 import { blockTrees } from "~/editor/clipboard";
 import { Editor } from "~/editor/editor";
 import { caret, type EditorState, selectableOrder, selectedRoots, stateFromTree } from "~/editor/editor-state";
@@ -22,7 +23,7 @@ describe("selections beyond one block", () => {
   let editor: Editor;
   let ids: number;
 
-  const seed = (blocks: Seed[]) => {
+  const seed = (blocks: Seed[], options: { subPages?: boolean } = {}) => {
     const ops: Operation[] = [{ op: "insert", block: { id: "page", type: "page", content: [{ text: "Title" }] }, parentId: null }];
     const add = (nodes: Seed[], parentId: string) => {
       let afterId: string | null = null;
@@ -38,6 +39,7 @@ describe("selections beyond one block", () => {
       newId: () => `n${++ids}`,
       now: () => 0,
       onOps: (batch) => services.blocks.apply(batch),
+      ...options,
     });
   };
   const p = (id: string, value: string, children?: Seed[]): Seed => ({ id, type: "paragraph", content: [{ text: value }], children });
@@ -330,6 +332,35 @@ describe("selections beyond one block", () => {
       editor.selectBlocks({ anchor: "a", focus: "b" });
       editor.turnInto({ type: "code", props: { language: "" } });
       expect(outline()).toEqual(["code:one", "paragraph:child", "code:two"]);
+    });
+  });
+
+  describe("sub-pages from the slash menu", () => {
+    const page = SLASH_COMMANDS.find((c) => c.value === "page")!;
+
+    it("replaces an empty block with an empty sub-page, the caret before it, undone in one step", () => {
+      seed([p("a", "Intro"), p("b", "/page")], { subPages: true });
+      editor.setSelection(caret("b", 5));
+      const id = editor.slash(0, page);
+      expect(id).toBe("n1");
+      expect(outline()).toEqual(["paragraph:Intro", "page:"]);
+      expect(editor.selection).toEqual(caret("a", 5));
+      editor.undo();
+      expect(outline()).toEqual(["paragraph:Intro", "paragraph:/page"]);
+    });
+
+    it("follows a block with text", () => {
+      seed([p("a", "See /page")], { subPages: true });
+      editor.setSelection(caret("a", 9));
+      editor.slash(4, page);
+      expect(outline()).toEqual(["paragraph:See ", "page:"]);
+    });
+
+    it("does nothing where sub-pages can't be made", () => {
+      seed([p("a", "/page")]);
+      editor.setSelection(caret("a", 5));
+      expect(editor.slash(0, page)).toBeNull();
+      expect(outline()).toEqual(["paragraph:/page"]);
     });
   });
 

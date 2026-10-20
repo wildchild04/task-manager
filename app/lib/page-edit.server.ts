@@ -115,7 +115,13 @@ export function applyEdit(services: AppServices, body: unknown): EditResult {
   const parsed = editBatchSchema.safeParse(input.batch);
   if (!parsed.success) return { ok: false, message: "The edit couldn't be read" };
   const batch = parsed.data as Batch;
-  const refusal = checkPageEdit(tree, batch, { title: target.title });
+  // Sub-pages are made where they can be opened as pages of their own: workspace and project pages.
+  const subPages = input.surface === "page" || input.surface === "project";
+  const refusal = checkPageEdit(tree, batch, {
+    title: target.title,
+    subPages,
+    isEmptyPage: (id) => services.blocks.getChildren(id).length === 0,
+  });
   if (refusal) return { ok: false, message: refusal };
 
   try {

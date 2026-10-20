@@ -99,14 +99,14 @@ export const CODE_SHORTCUT = /^```([^\s`]{0,32})$/;
 export const NEW_TABLE = { rows: 3, columns: 3 } as const;
 export const NEW_CALLOUT = { emoji: "💡", tone: "default" } as const;
 
-/** A slash menu command: turn the block into a type, or add a divider or a table. */
+/** A slash menu command: turn the block into a type, or add a divider, a table or a sub-page. */
 export type SlashCommand = {
   value: string;
   label: string;
   description: string;
   /** Extra words the filter matches. */
   keywords: readonly string[];
-  action: TypeChange | "divider" | "table";
+  action: TypeChange | "divider" | "table" | "page";
 };
 
 export const SLASH_COMMANDS: readonly SlashCommand[] = [
@@ -126,13 +126,18 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
   { value: "code", label: "Code", description: "A block of code", keywords: ["snippet", "pre"], action: { type: "code", props: { language: "" } } },
   { value: "table", label: "Table", description: "Rows and columns", keywords: ["grid", "rows", "columns"], action: "table" },
   { value: "divider", label: "Divider", description: "Separate sections", keywords: ["line", "separator", "hr"], action: "divider" },
+  { value: "page", label: "Page", description: "A page inside this one", keywords: ["subpage", "sub-page", "document"], action: "page" },
 ];
 
-/** The slash commands matching what was typed after `/`, by label or keyword prefix. */
-export function matchSlashCommands(query: string): SlashCommand[] {
+/**
+ * The slash commands matching what was typed after `/`, by label or keyword
+ * prefix. Page only with `subPages` (where sub-pages can be opened on their own).
+ */
+export function matchSlashCommands(query: string, { subPages = false }: { subPages?: boolean } = {}): SlashCommand[] {
   const q = query.trim().toLowerCase();
-  if (!q) return [...SLASH_COMMANDS];
-  return SLASH_COMMANDS.filter(
+  const offered = subPages ? SLASH_COMMANDS : SLASH_COMMANDS.filter((command) => command.action !== "page");
+  if (!q) return [...offered];
+  return offered.filter(
     (command) =>
       command.label.toLowerCase().split(/\s+/).some((word) => word.startsWith(q)) ||
       command.label.toLowerCase().startsWith(q) ||

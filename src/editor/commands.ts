@@ -423,7 +423,8 @@ export function turnInto(state: EditorState, ids: readonly string[], change: Typ
 /**
  * Applies a slash command typed in `blockId` as `/query` from offset `start`
  * to `end`: removes that text, then turns the block into the command's type,
- * or adds a divider (replacing the block when it is left empty).
+ * or adds a divider, table or empty sub-page (replacing the block when it is
+ * left empty).
  */
 export function slashCommand(
   state: EditorState,
@@ -441,6 +442,13 @@ export function slashCommand(
     const table = newTable(block.parentId!, blockId, NEW_TABLE.rows, NEW_TABLE.columns, context.newId);
     const around: Operation[] = replaceable ? [{ op: "delete", id: blockId }] : [updateContent(blockId, content)];
     return { ops: [...table.ops, ...around], selection: caret(table.firstCell, 0) };
+  }
+  if (command.action === "page") {
+    // An empty, untitled sub-page; the caret stays before it, as the editor opens the page next.
+    const page: Operation = { op: "insert", block: { id: context.newId(), type: "page", content: [] }, parentId: block.parentId!, afterId: blockId };
+    if (!replaceable) return { ops: [updateContent(blockId, content), page], selection: caret(blockId, start) };
+    const before = previousTextBlock(state, blockId, context.closed);
+    return { ops: [page, { op: "delete", id: blockId }], selection: caret(before, text.length(getBlock(state, before).content)) };
   }
   if (command.action !== "divider") {
     const ops = changeType(state, blockId, command.action, content);

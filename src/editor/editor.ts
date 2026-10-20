@@ -38,6 +38,8 @@ export type EditorOptions = {
   now?: () => number;
   /** Called with every batch applied locally (edits, undo and redo), in order, to be saved. */
   onOps?: (ops: Operation[]) => void;
+  /** Whether sub-pages can be made here (the slash menu's Page). */
+  subPages?: boolean;
 };
 
 /**
@@ -439,10 +441,22 @@ export class Editor {
     return this.run(result && { ...result, range: this.range ?? undefined, blocks: this.blocks ?? undefined });
   }
 
-  /** Applies a slash command typed as `/query` from `start` to the caret in the current block. */
-  slash(start: number, command: SlashCommand): void {
+  /** Whether sub-pages can be made here. */
+  get subPages(): boolean {
+    return this.options.subPages === true;
+  }
+
+  /**
+   * Applies a slash command typed as `/query` from `start` to the caret in the
+   * current block. Returns the ID of the sub-page it created, if any.
+   */
+  slash(start: number, command: SlashCommand): string | null {
     const { blockId, focus } = this.selection;
-    this.run(commands.slashCommand(this.state, blockId, start, focus, command, this.context));
+    if (command.action === "page" && !this.subPages) return null;
+    const result = commands.slashCommand(this.state, blockId, start, focus, command, this.context);
+    this.run(result);
+    const page = result.ops.find((op) => op.op === "insert" && op.block.type === "page");
+    return page?.op === "insert" ? page.block.id : null;
   }
 
   /** Turns the `@query` typed from `start` to the caret into a mention of a page. */

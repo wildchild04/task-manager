@@ -6,9 +6,9 @@
 
 ## 2. Sub-pages
 
-- [ ] 2.1 `page-edit.ts`: options `subPages` and `isEmptyPage`; inserting a title-only page block and deleting an empty sub-page when allowed; `page-edit.server.ts` passes them (page and project surfaces; children from the block service); tests for the spec scenarios, including the task-body refusal and a sub-page with content
-- [ ] 2.2 The Page slash command (`page` action) where the `Editor`'s `subPages` option holds: replacing an empty block or following one with text, caret before it; `Editor.slash` returns the new sub-page's ID; tests
-- [ ] 2.3 `page-editor.tsx`: open the new sub-page after the slash command (the leave guard waits for the save); re-read route data after a batch inserting or deleting a page block; the caret in the title of a page opened with an empty title and no blocks
+- [x] 2.1 `page-edit.ts`: options `subPages` and `isEmptyPage`; inserting a title-only page block and deleting an empty sub-page when allowed; `page-edit.server.ts` passes them (page and project surfaces; children from the block service); tests for the spec scenarios, including the task-body refusal and a sub-page with content
+- [x] 2.2 The Page slash command (`page` action) where the `Editor`'s `subPages` option holds: replacing an empty block or following one with text, caret before it; `Editor.slash` returns the new sub-page's ID; tests
+- [x] 2.3 `page-editor.tsx`: open the new sub-page after the slash command (the leave guard waits for the save); re-read route data after a batch inserting or deleting a page block; the caret in the title of a page opened with an empty title and no blocks
 
 ## 3. Check
 
