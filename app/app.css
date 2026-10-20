@@ -68,6 +68,65 @@ body {
   background: color-mix(in srgb, var(--ds-secondary-container) 80%, transparent);
 }
 
+/* A block's handle sits in the margin to its left, shown while pointing at the block. */
+.editor-block {
+  position: relative;
+}
+
+.block-handle {
+  position: absolute;
+  /* The grip's centre on the centre of the block's first line. */
+  top: -3px;
+  left: -30px;
+  opacity: 0;
+  transition: opacity 120ms;
+  user-select: none;
+  color: color-mix(in srgb, currentColor 55%, transparent);
+  cursor: grab;
+}
+
+/* List items keep their bullet or number between the handle and the text. */
+.block-list > .editor-block > .block-handle {
+  left: -50px;
+}
+
+@media (hover: hover) {
+  .page-editor:not(.dragging-blocks) .editor-block:hover:not(:has(.editor-block:hover)) > .block-handle,
+  .block-handle:focus-within {
+    opacity: 1;
+  }
+}
+
+/* On touch screens: beside the block with the caret, and beside selected blocks. */
+.editor-block[data-selected="true"] > .block-handle {
+  opacity: 1;
+}
+
+@media (pointer: coarse) {
+  .editor-block:focus-within:not(:has(.editor-block:focus-within)) > .block-handle {
+    opacity: 1;
+  }
+}
+
+.dragging-blocks,
+.dragging-blocks * {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.block-dragged {
+  opacity: 0.5;
+}
+
+.block-drop-line {
+  position: absolute;
+  right: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--ds-secondary);
+  pointer-events: none;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;

@@ -58,7 +58,8 @@ import {
   writeSelection,
 } from "./dom-caret";
 import { APP_FORMAT, htmlToMarkdown } from "./clipboard";
-import { BlockSelectionContext, EditableText, EditorBlocks } from "./editor-blocks";
+import { dragBlocks } from "./block-drag";
+import { BlockSelectionContext, EditableText, EditorBlocks, type HandleActions } from "./editor-blocks";
 import { withBase, withoutBase } from "../lib/base-path";
 
 const SLASH_MENU_ID = "slash-menu";
@@ -521,16 +522,23 @@ export function PageEditor({
     () => editor.revision,
   );
 
-  // After an edit, put the caret where the editor says (block content is drawn first, in child effects).
-  useLayoutEffect(() => {
-    if (!restoreSelection.current || !rootRef.current) return;
-    restoreSelection.current = false;
+  /** Puts the DOM selection and focus where the editor's selection is. */
+  const placeSelection = useCallback(() => {
+    const root = rootRef.current;
+    if (!root) return;
     if (editor.blocks) {
       // Selected blocks show no caret: keys go to the editor itself.
       window.getSelection()?.removeAllRanges();
-      rootRef.current.focus({ preventScroll: true });
-    } else if (editor.range) writeRange(rootRef.current, editor.range);
-    else writeSelection(rootRef.current, editor.selection);
+      root.focus({ preventScroll: true });
+    } else if (editor.range) writeRange(root, editor.range);
+    else writeSelection(root, editor.selection);
+  }, [editor]);
+
+  // After an edit, put the caret where the editor says (block content is drawn first, in child effects).
+  useLayoutEffect(() => {
+    if (!restoreSelection.current) return;
+    restoreSelection.current = false;
+    placeSelection();
   });
 
   // ----- Suggestions -----
@@ -1318,14 +1326,48 @@ export function PageEditor({
     [editor],
   );
 
+  /** What blocks' handles do: select, open the menu's commands, and drag. */
+  const handleActions = useMemo((): HandleActions => {
+    const run = (command: () => unknown) => () => {
+      command();
+      restoreSelection.current = true;
+    };
+    return {
+      select: (id, extend) => {
+        if (extend) editor.extendBlocks(id);
+        else if (!editor.isSelected(id)) editor.selectBlock(id);
+        restoreSelection.current = true;
+      },
+      menu: () => [
+        { value: "delete", label: "Delete", disabled: !editor.canActOnBlocks("delete"), onClick: run(() => editor.deleteBlocks()) },
+        { value: "duplicate", label: "Duplicate", disabled: !editor.canActOnBlocks("duplicate"), onClick: run(() => editor.duplicateBlocks()) },
+        { value: "up", label: "Move up", disabled: !editor.canActOnBlocks(-1), onClick: run(() => editor.moveBlocks(-1)) },
+        { value: "down", label: "Move down", disabled: !editor.canActOnBlocks(1), onClick: run(() => editor.moveBlocks(1)) },
+        {
+          value: "copy",
+          label: "Copy",
+          // Copying from the editor writes both clipboard formats, as Cmd/Ctrl+C does.
+          onClick: () => {
+            rootRef.current?.focus({ preventScroll: true });
+            document.execCommand("copy");
+          },
+        },
+      ],
+      startDrag: (id, event, onStart) => {
+        if (!rootRef.current) return;
+        dragBlocks({ root: rootRef.current, editor, id, event, onStart, onEnd: () => (restoreSelection.current = true) });
+      },
+      refocus: placeSelection,
+    };
+  }, [editor, placeSelection]);
+
   const { state, closed } = editor;
   const selectedRoots = editor.selectedRoots();
   // A new value only when the selection changes, so blocks re-render only then.
   const selectedKey = selectedRoots.join(" ");
-  const handles = !draft && page.surface !== "comment";
   const blockSelection = useMemo(
-    () => ({ selected: new Set(selectedKey ? selectedKey.split(" ") : []), handles }),
-    [selectedKey, handles],
+    () => ({ selected: new Set(selectedKey ? selectedKey.split(" ") : []), handles: draft || page.surface === "comment" ? null : handleActions }),
+    [selectedKey, draft === undefined, page.surface, handleActions],
   );
   const statusText = (
     <span aria-live="polite">

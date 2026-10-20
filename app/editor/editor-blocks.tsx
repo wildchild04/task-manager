@@ -18,10 +18,79 @@ import type { EditorBlock, EditorState } from "~/editor/editor-state";
 import { cellPosition } from "~/editor/tables";
 import { renderRichText } from "./dom-caret";
 
-/** Which blocks are selected (the roots of a block selection), and whether blocks get handles. */
-export type BlockSelectionView = { selected: ReadonlySet<string>; handles: boolean };
+/** A command in a block's handle menu. */
+export type HandleMenuItem = { value: string; label: string; disabled?: boolean; onClick: () => void };
 
-export const BlockSelectionContext = createContext<BlockSelectionView>({ selected: new Set(), handles: false });
+/** What a block's handle does, provided by the page editor. */
+export type HandleActions = {
+  /** Selects the block, keeping a block selection it's part of; with `extend`, extends the selection to it. */
+  select: (id: string, extend: boolean) => void;
+  /** The handle menu's commands for the current selection. */
+  menu: () => HandleMenuItem[];
+  /** A pointer went down on the handle: it may become a drag, and then `onStart` is called (so the click that follows is ignored). */
+  startDrag: (id: string, event: PointerEvent, onStart: () => void) => void;
+  /** Puts focus back where the editor's selection is (after the menu closes). */
+  refocus: () => void;
+};
+
+/** Which blocks are selected (the roots of a block selection), and the blocks' handles, if they have any. */
+export type BlockSelectionView = { selected: ReadonlySet<string>; handles: HandleActions | null };
+
+export const BlockSelectionContext = createContext<BlockSelectionView>({ selected: new Set(), handles: null });
+
+/** The six-dot grip, until the design system's icon catalog has `drag_indicator`. */
+const GRIP = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    {[9, 15].flatMap((x) => [6, 12, 18].map((y) => <circle key={`${x}-${y}`} cx={x} cy={y} r="1.6" />))}
+  </svg>
+);
+
+/** The handle beside a block: drag it to move the block (or the selection); click it for the block's commands. */
+function BlockHandle({ id, actions }: { id: string; actions: HandleActions }) {
+  const [menu, setMenu] = useState<{ anchor: HTMLElement; items: HandleMenuItem[] } | null>(null);
+  const dragged = useRef(false);
+  return (
+    <span
+      className="block-handle"
+      contentEditable={false}
+      // The caret (or the editor's focus) stays where it is.
+      onMouseDown={(event) => event.preventDefault()}
+      onPointerDown={(event) => {
+        dragged.current = false;
+        actions.startDrag(id, event.nativeEvent, () => {
+          dragged.current = true;
+        });
+      }}
+    >
+      <IconButton
+        ariaLabel="Drag to move, or open block actions"
+        size="small"
+        onClick={(event) => {
+          if (dragged.current) return;
+          actions.select(id, event.shiftKey);
+          if (!event.shiftKey) setMenu({ anchor: event.currentTarget, items: actions.menu() });
+        }}
+      >
+        {GRIP}
+      </IconButton>
+      <Menu
+        dense
+        open={menu !== null}
+        anchorEl={menu?.anchor ?? null}
+        options={menu?.items ?? []}
+        onClose={() => {
+          setMenu(null);
+          // The menu hands focus back to the handle as it closes; the editor takes it back after.
+          requestAnimationFrame(actions.refocus);
+        }}
+        onSelect={() => {
+          setMenu(null);
+          requestAnimationFrame(actions.refocus);
+        }}
+      />
+    </span>
+  );
+}
 
 /**
  * The outer element of a block in the editor: it carries the block's ID for
@@ -43,7 +112,7 @@ function BlockFrame({
   readOnly?: boolean;
   children: ReactNode;
 }) {
-  const { selected } = useContext(BlockSelectionContext);
+  const { selected, handles } = useContext(BlockSelectionContext);
   return (
     <Tag
       className={className ? `editor-block ${className}` : "editor-block"}
@@ -51,6 +120,7 @@ function BlockFrame({
       data-selected={id !== undefined && selected.has(id) ? "true" : undefined}
       contentEditable={readOnly ? false : undefined}
     >
+      {handles && id !== undefined && <BlockHandle id={id} actions={handles} />}
       {children}
     </Tag>
   );

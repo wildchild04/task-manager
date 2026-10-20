@@ -9,6 +9,7 @@ import {
   applyOps,
   type BlockRange,
   caret,
+  coveredBlocks,
   documentOrder,
   type EditorState,
   getBlock,
@@ -295,6 +296,14 @@ export class Editor {
     this.selectBlocks(extend ? { anchor: this.blocks.anchor, focus: next } : { anchor: next, focus: next });
   }
 
+  /** Whether a block is part of the block selection (selected, or inside a selected block). */
+  isSelected(id: string): boolean {
+    if (!this.blocks) return false;
+    const covered = new Set(coveredBlocks(this.state, this.blocks, this.closed));
+    for (let at: string | null = id; at !== null; at = getBlock(this.state, at).parentId) if (covered.has(at)) return true;
+    return false;
+  }
+
   /** Extends the block selection (or starts one at the caret's block) to the block holding `id`. */
   extendBlocks(id: string): void {
     const anchor = this.blocks?.anchor ?? selectableOf(this.state, this.selection.blockId);
@@ -318,6 +327,13 @@ export class Editor {
     const end = Math.max(...order.map((id, i) => (covered.has(id) ? i : -1)));
     const after = order.slice(end + 1).find(isText);
     this.setSelection(after ? caret(after, 0) : this.selection);
+  }
+
+  /** Whether the selected blocks can be deleted, duplicated, or moved up (`-1`) or down (`1`): for disabling menu items. */
+  canActOnBlocks(action: "delete" | "duplicate" | -1 | 1): boolean {
+    const roots = this.selectedRoots();
+    if (action === "delete" || action === "duplicate") return roots.some((id) => !across.containsProtected(this.state, id));
+    return across.moveBlocks(this.state, roots, action) !== null;
   }
 
   deleteBlocks(): boolean {
