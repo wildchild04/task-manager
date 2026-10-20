@@ -52,6 +52,6 @@ On `copy`, read the DOM selection's anchor and focus blocks. Within one block: t
 
 ## Risks / Trade-offs
 
-- [Text that looks like Markdown becomes structure: a pasted line starting with `- ` becomes a list item] → That's usually what was meant; undo restores the plain text paste? No: undo removes the paste. Accepted; there's no reliable "paste as plain text" signal.
+- [Text that looks like Markdown becomes structure: a pasted line starting with `- ` becomes a list item] → That's usually what was meant, and undo removes the whole paste in one step. Accepted: browsers give no reliable "paste as plain text" signal.
 - [HTML from rich editors is messy] → Unknown elements contribute their text; a test covers Google Docs and GitHub-style snippets.
 - [Large pastes] → One batch; the save queue sends it at once. Fine at document sizes.

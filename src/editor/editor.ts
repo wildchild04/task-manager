@@ -1,6 +1,8 @@
+import type { MarkdownBlock } from "~/domain/blocks/markdown";
 import { type CalloutTone, MENTION_TEXT, type Operation, type SimpleMark } from "~/domain/blocks/types";
 
 import type { SlashCommand } from "./block-types";
+import { pasteBlocks } from "./clipboard";
 import * as commands from "./commands";
 import type { CommandResult, DeleteUnit } from "./commands";
 import { applyOps, caret, type EditorState, getBlock, invert, isCollapsed, type Selection } from "./editor-state";
@@ -102,6 +104,11 @@ export class Editor {
     this.run(commands.insertText(this.state, this.selection, inserted), `type:${this.selection.blockId}`);
     if (inserted === " ") this.run(commands.markdownShortcut(this.state, this.selection));
     if (inserted === "-") this.run(commands.dividerShortcut(this.state, this.selection, this.context));
+  }
+
+  /** Pastes blocks at the selection as one undo step; `false` where only plain text can be pasted (code, cells, the title). */
+  paste(blocks: readonly MarkdownBlock[]): boolean {
+    return this.run(pasteBlocks(this.state, this.selection, blocks, this.newId));
   }
 
   lineBreak(): void {

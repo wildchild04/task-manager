@@ -14,13 +14,15 @@ import { createPortal } from "react-dom";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useBlocker, useNavigate, useRevalidator } from "react-router";
 
+import { fromMarkdown, type MarkdownReader, type MarkdownWriter, toMarkdown } from "~/domain/blocks/markdown";
 import type { Operation } from "~/domain/blocks/types";
 import { behaviorOf, matchSlashCommands, type SlashCommand } from "~/editor/block-types";
 import { Editor } from "~/editor/editor";
 import { caret, caretOrder, type EditorState, getBlock, isCollapsed, type Selection, stateFromTree } from "~/editor/editor-state";
 import type { CommentBlockInput } from "~/domain/comments/types";
-import { linkAt, linkRangeAt, plain } from "~/editor/rich-text";
+import { linkAt, linkRangeAt, plain, slice } from "~/editor/rich-text";
 import { type SaveStatus, SaveQueue, type SendResult } from "~/editor/save-queue";
+import { selectedTrees } from "~/editor/clipboard";
 import { verticalNeighbour } from "~/editor/tables";
 
 import { SuggestionsContext } from "../blocks/block-view";
@@ -39,6 +41,7 @@ import {
   textOf,
   writeSelection,
 } from "./dom-caret";
+import { APP_FORMAT, htmlToMarkdown } from "./clipboard";
 import { EditableText, EditorBlocks } from "./editor-blocks";
 import { withBase, withoutBase } from "../lib/base-path";
 
@@ -381,6 +384,8 @@ export function PageEditor({
   const applySlashRef = useRef<((item: SlashItem) => void) | null>(null);
   // Titles of mentioned pages: from the server, plus pages mentioned since it loaded.
   const [mentionTargets, setMentionTargets] = useState<MentionTargets>(page.mentions);
+  const mentionTargetsRef = useRef(mentionTargets);
+  mentionTargetsRef.current = mentionTargets;
   useEffect(() => setMentionTargets((targets) => ({ ...targets, ...page.mentions })), [page.mentions]);
   // The card shown for a hovered link, and the timers that open and close it.
   const [linkCard, setLinkCardState] = useState<LinkCard | null>(null);
@@ -913,12 +918,83 @@ export function PageEditor({
     };
     const onScroll = () => setLinkCard(null);
 
+    // ----- Clipboard -----
+
+    /** Pasted Markdown's mentions and page links resolve when they name a page by its full ID (our own copies). */
+    const pasteWriter: MarkdownWriter = {
+      findTarget: (kind, id) => (kind === "page" && id.length >= 32 ? { pageId: id, href: `/pages/${id}` } : null),
+      newId: () => crypto.randomUUID(),
+    };
+    /** Copies for this app: mentions and links by full ID, so pasting back rebuilds them exactly. */
+    const appReader: MarkdownReader = {
+      mentionTarget: (pageId) => ({ kind: "page", id: pageId, title: mentionTargetsRef.current[pageId]?.title ?? "Untitled" }),
+      referenceTarget: (targetId) => {
+        const target = page.references[targetId];
+        if (target?.status === "page") return { kind: "page", id: target.pageId, title: plain(target.title) || "Untitled" };
+        return null;
+      },
+      appLink: () => undefined,
+      pageId: (id) => id,
+    };
+    /** Copies for other apps: mentions as `@Title`, app links as full URLs. */
+    const plainReader: MarkdownReader = {
+      ...appReader,
+      appLink: (href) => (href.startsWith("/") ? `${window.location.origin}${withBase(href)}` : undefined),
+    };
+    const readable = (markdown: string) => markdown.replace(/@\[([^\]]*)\]\((?:page|task):[^)\s]+\)/g, "@$1");
+
+    /** Pastes the clipboard as blocks: our own copies first, then HTML, then plain text read as Markdown. */
+    const onPaste = (event: ClipboardEvent) => {
+      const data = event.clipboardData;
+      if (!data || composing.current || !sync()) return;
+      let markdown = data.getData(APP_FORMAT);
+      const html = markdown ? "" : data.getData("text/html");
+      if (html) markdown = htmlToMarkdown(new DOMParser().parseFromString(html, "text/html").body);
+      if (!markdown.trim()) markdown = data.getData("text/plain");
+      const blocks = fromMarkdown(markdown.replace(/\r\n?/g, "\n"), pasteWriter);
+      // Code, table cells and the title take plain text, typed by `beforeinput` as before.
+      if (blocks.length > 0 && editor.paste(blocks)) {
+        event.preventDefault();
+        edited();
+      }
+    };
+
+    /** Where a DOM position is in the editor's text, or `null` outside an editable block. */
+    const pointAt = (node: Node | null, offset: number) => {
+      const element = (node instanceof Element ? node : node?.parentElement)?.closest<HTMLElement>(".editable[data-block-id]");
+      if (!element || !root.contains(element) || element.dataset.blockId === editor.state.rootId) return null;
+      return { blockId: element.dataset.blockId!, offset: offsetOf(element, node!, offset) };
+    };
+
+    /** Copies the selected blocks as Markdown, and within one block adds the app format so marks survive a paste back. */
+    const onCopy = (event: ClipboardEvent) => {
+      const selection = window.getSelection();
+      if (!event.clipboardData || !selection || selection.rangeCount === 0 || selection.isCollapsed) return;
+      const from = pointAt(selection.anchorNode, selection.anchorOffset);
+      const to = pointAt(selection.focusNode, selection.focusOffset);
+      if (!from || !to) return;
+      if (from.blockId === to.blockId) {
+        const content = getBlock(editor.state, from.blockId).content;
+        const span = slice(content, Math.min(from.offset, to.offset), Math.max(from.offset, to.offset));
+        const node = { block: { id: from.blockId, type: "paragraph", props: {}, content: span } as never, children: [] };
+        event.clipboardData.setData("text/plain", selection.toString());
+        event.clipboardData.setData(APP_FORMAT, toMarkdown([node], appReader));
+      } else {
+        const trees = selectedTrees(editor.state, from, to);
+        event.clipboardData.setData("text/plain", readable(toMarkdown(trees, plainReader)));
+        event.clipboardData.setData(APP_FORMAT, toMarkdown(trees, appReader));
+      }
+      event.preventDefault();
+    };
+
     document.addEventListener("selectionchange", onSelectionChange);
     root.addEventListener("click", onClick);
     root.addEventListener("pointerover", onPointerOver);
     root.addEventListener("pointerout", onPointerOut);
     window.addEventListener("scroll", onScroll, true);
     root.addEventListener("beforeinput", onBeforeInput);
+    root.addEventListener("paste", onPaste);
+    root.addEventListener("copy", onCopy);
     root.addEventListener("keydown", onKeyDown);
     root.addEventListener("compositionstart", onCompositionStart);
     root.addEventListener("compositionend", onCompositionEnd);
@@ -931,6 +1007,8 @@ export function PageEditor({
       cardTimers.cancelOpen();
       cardTimers.cancelClose();
       root.removeEventListener("beforeinput", onBeforeInput);
+      root.removeEventListener("paste", onPaste);
+      root.removeEventListener("copy", onCopy);
       root.removeEventListener("keydown", onKeyDown);
       root.removeEventListener("compositionstart", onCompositionStart);
       root.removeEventListener("compositionend", onCompositionEnd);
