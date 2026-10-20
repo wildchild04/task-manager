@@ -63,6 +63,7 @@ export function FormatBar({
   onMark,
   onLink,
   onDismiss,
+  onTypesClosed,
 }: {
   bar: FormatBarState | null;
   rect: DOMRect | null;
@@ -72,12 +73,20 @@ export function FormatBar({
   onMark: (mark: SimpleMark) => void;
   onLink: () => void;
   onDismiss: () => void;
+  /** The type list closed (chosen or not): focus goes back to the text. */
+  onTypesClosed: () => void;
 }) {
-  const [typeMenu, setTypeMenu] = useState<{ anchor: HTMLElement; items: BarType[] } | null>(null);
+  // While the type list is open the bar is hidden (it would cover the list), and the list hangs from where Turn into was.
+  const [typeMenu, setTypeMenu] = useState<{ at: DOMRect; items: BarType[] } | null>(null);
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const closeTypes = () => {
+    setTypeMenu(null);
+    onTypesClosed();
+  };
   return (
     <>
     <HoverCard
-      open={bar !== null && rect !== null}
+      open={bar !== null && rect !== null && typeMenu === null}
       anchorRect={rect}
       ariaLabel="Formatting"
       placement={placement}
@@ -88,7 +97,11 @@ export function FormatBar({
         <div className="format-bar" role="toolbar" aria-label="Formatting" onMouseDown={(event) => event.preventDefault()}>
           {bar.turnInto && (
             <>
-              <Button size="small" variant="text" onClick={(event) => setTypeMenu({ anchor: event.currentTarget, items: types() })}>
+              <Button
+                size="small"
+                variant="text"
+                onClick={(event) => setTypeMenu({ at: event.currentTarget.getBoundingClientRect(), items: types() })}
+              >
                 {typeLabel} ▾
               </Button>
               <span className="format-bar-divider" aria-hidden="true" />
@@ -107,18 +120,25 @@ export function FormatBar({
         </div>
       )}
     </HoverCard>
-    {/* Outside the card, so it outlives the card's dismissal. */}
+    {/* Outside the card, so it outlives the card: an invisible anchor where Turn into was. */}
+    {typeMenu && (
+      <span
+        ref={setAnchor}
+        aria-hidden="true"
+        style={{ position: "fixed", left: typeMenu.at.left, top: typeMenu.at.bottom, width: typeMenu.at.width, height: 0 }}
+      />
+    )}
     <Menu
       dense
-      open={typeMenu !== null}
-      anchorEl={typeMenu?.anchor ?? null}
+      open={typeMenu !== null && anchor !== null}
+      anchorEl={typeMenu ? anchor : null}
       options={(typeMenu?.items ?? []).map(({ value, label, current, choose }) => ({
         value,
         label: `${current ? "✓ " : ""}${label}`,
         onClick: choose,
       }))}
-      onClose={() => setTypeMenu(null)}
-      onSelect={() => setTypeMenu(null)}
+      onClose={(_, reason) => reason !== "itemClick" && closeTypes()}
+      onSelect={closeTypes}
     />
     </>
   );

@@ -740,6 +740,8 @@ export function PageEditor({
 
     /** Shows the bar over the selection when it's one block's text that marks apply to; hides it otherwise. */
     const showFormatBar = () => {
+      // The selection may have changed since the last selectionchange was handled (a double-click's word, say).
+      if (!composing.current && !dragRange && !editor.blocks) sync();
       const selection = window.getSelection();
       const ok = !editor.range && !editor.blocks && !composing.current && formatBarFor(editor.state, editor.selection);
       const rect = ok && selection && selection.rangeCount > 0 ? selection.getRangeAt(0).getBoundingClientRect() : null;
@@ -755,9 +757,9 @@ export function PageEditor({
     const onBarPointerUp = () => {
       if (!pointerSelecting) return;
       pointerSelecting = false;
-      // The selection is final once the browser has handled the release.
+      // The selection is final on release (a double-click's word included): show the bar at once.
       clearTimeout(settle);
-      settle = setTimeout(showFormatBar, 0);
+      showFormatBar();
     };
     /** After a selection change: the bar stays for the same selection, hides at once otherwise, and shows once the selection settles. */
     const updateFormatBar = () => {
@@ -1733,6 +1735,12 @@ export function PageEditor({
             onMark={(mark) => fromBar(() => editor.toggleMark(mark))}
             onLink={barLink}
             onDismiss={() => setFormatBar(null)}
+            onTypesClosed={() =>
+              requestAnimationFrame(() => {
+                placeSelection();
+                showFormatBarRef.current();
+              })
+            }
           />
           <HoverCard
             open={linkCard !== null}
