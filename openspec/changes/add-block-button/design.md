@@ -20,7 +20,7 @@ The block that "+" sits beside is the block's handle's: for a table, the table (
 
 ### 2. Where the "+" goes
 
-On desktop, `.block-add` sits left of the grip (`left: -56px`, `-76px` for list items), shown and hidden with it. On coarse pointers the right-hand handle column holds one button, so the "+" isn't shown; "Add below" in the handle menu covers touch screens and keyboard users. The button is an `IconButton` (`add`, size small, label "Add a block below (Alt+click: above)"), `contentEditable={false}` and keeping focus where it is on mousedown, like the grip.
+On desktop, `.block-add` sits left of the grip (`left: -58px`, `-78px` for list items), shown and hidden with it. The page's 28px margin only had room for the grip (the sidebar covered the "+"), so on fine pointers `.page-editor` gets a 32px left gutter, title included so it stays aligned with the blocks. On coarse pointers the right-hand handle column holds one button, so the "+" isn't shown; "Add below" in the handle menu covers touch screens and keyboard users. The button is an `IconButton` (`add`, size small, label "Add a block below (Alt+click: above)"), `contentEditable={false}` and keeping focus where it is on mousedown, like the grip.
 
 ### 3. One undo step, then the command's own
 

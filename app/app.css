@@ -90,6 +90,35 @@ body {
   left: -50px;
 }
 
+/* On pointing devices the page makes room on its left for the "+" and the handle beside each block. */
+@media (hover: hover) and (pointer: fine) {
+  .page-editor {
+    padding-inline-start: 32px;
+  }
+}
+
+/* The "+" sits left of the handle and shows with it, on pointing devices only. */
+.block-add {
+  position: absolute;
+  top: -3px;
+  left: -58px;
+  opacity: 0;
+  transition: opacity 120ms;
+  user-select: none;
+  color: color-mix(in srgb, currentColor 55%, transparent);
+}
+
+.block-list > .editor-block > .block-add {
+  left: -78px;
+}
+
+@media (hover: hover) {
+  .page-editor:not(.dragging-blocks) .editor-block:hover:not(:has(.editor-block:hover)) > .block-add,
+  .block-add:focus-within {
+    opacity: 1;
+  }
+}
+
 @media (hover: hover) {
   .page-editor:not(.dragging-blocks) .editor-block:hover:not(:has(.editor-block:hover)) > .block-handle,
   .block-handle:focus-within {
@@ -116,6 +145,11 @@ body {
   .block-list > .editor-block > .block-handle {
     left: auto;
     right: -32px;
+  }
+
+  /* One button fits the right-hand column: the handle menu's "Add below" stands in for the "+". */
+  .block-add {
+    display: none;
   }
 }
 

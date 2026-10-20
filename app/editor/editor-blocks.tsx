@@ -25,8 +25,10 @@ export type HandleMenuItem = { value: string; label: string; disabled?: boolean;
 export type HandleActions = {
   /** Selects the block, keeping a block selection it's part of; with `extend`, extends the selection to it. */
   select: (id: string, extend: boolean) => void;
-  /** The handle menu's commands for the current selection. */
-  menu: () => HandleMenuItem[];
+  /** The handle menu's commands for the current selection (`id` is the handle's block). */
+  menu: (id: string) => HandleMenuItem[];
+  /** The "+": adds a block after (or before) the block and opens the slash menu on it. */
+  add: (id: string, side: "before" | "after") => void;
   /** A pointer went down on the handle: it may become a drag, and then `onStart` is called (so the click that follows is ignored). */
   startDrag: (id: string, event: PointerEvent, onStart: () => void) => void;
   /** Puts focus back where the editor's selection is (after the menu closes). */
@@ -68,7 +70,7 @@ function BlockHandle({ id, actions }: { id: string; actions: HandleActions }) {
         onClick={(event) => {
           if (dragged.current) return;
           actions.select(id, event.shiftKey);
-          if (!event.shiftKey) setMenu({ anchor: event.currentTarget, items: actions.menu() });
+          if (!event.shiftKey) setMenu({ anchor: event.currentTarget, items: actions.menu(id) });
         }}
       >
         {GRIP}
@@ -125,6 +127,16 @@ function BlockFrame({
       data-selected={id !== undefined && selected.has(id) ? "true" : undefined}
       contentEditable={readOnly ? false : undefined}
     >
+      {handles && id !== undefined && (
+        <span className="block-add" contentEditable={false} onMouseDown={(event) => event.preventDefault()}>
+          <IconButton
+            ariaLabel="Add a block below (Alt+click: above)"
+            icon="add"
+            size="small"
+            onClick={(event) => handles.add(id, event.altKey ? "before" : "after")}
+          />
+        </span>
+      )}
       {handles && id !== undefined && <BlockHandle id={id} actions={handles} />}
       {children}
     </Tag>

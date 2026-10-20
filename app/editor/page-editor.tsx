@@ -418,6 +418,7 @@ export function PageEditor({
   const composing = useRef(false);
   const goalX = useRef<number | null>(null);
   const applySlashRef = useRef<((item: SlashItem) => void) | null>(null);
+  const openMenuRef = useRef<((blockId: string, start: number, anchor: DOMRect | null) => void) | null>(null);
   // Titles of mentioned pages: from the server, plus pages mentioned since it loaded.
   const [mentionTargets, setMentionTargets] = useState<MentionTargets>(page.mentions);
   const mentionTargetsRef = useRef(mentionTargets);
@@ -1143,6 +1144,7 @@ export function PageEditor({
     };
 
     applySlashRef.current = applySlash;
+    openMenuRef.current = openMenuAt;
 
     // Browsers don't follow links inside editable text: links to app pages open here, others in a new tab.
     const onClick = (event: MouseEvent) => {
@@ -1425,6 +1427,12 @@ export function PageEditor({
       command();
       restoreSelection.current = true;
     };
+    /** Adds a `/` block beside a block, then opens the slash menu on it once the caret is there. */
+    const add = (id: string, side: "before" | "after") => {
+      editor.addBlock(id, side);
+      restoreSelection.current = true;
+      requestAnimationFrame(() => openMenuRef.current?.(editor.selection.blockId, 0, null));
+    };
     /** "Turn into" and its list of types, the type every changeable selected block shares checked. */
     const turnIntoItem = (): HandleMenuItem => {
       const targets = editor.turnIntoTargets().filter((id) => canTurnInto(editor.state, id));
@@ -1452,8 +1460,9 @@ export function PageEditor({
         else if (!editor.isSelected(id)) editor.selectBlock(id);
         restoreSelection.current = true;
       },
-      menu: () => [
+      menu: (id) => [
         turnIntoItem(),
+        { value: "add-below", label: "Add below", onClick: () => add(id, "after") },
         { value: "delete", label: "Delete", disabled: !editor.canActOnBlocks("delete"), onClick: run(() => editor.deleteBlocks()) },
         { value: "duplicate", label: "Duplicate", disabled: !editor.canActOnBlocks("duplicate"), onClick: run(() => editor.duplicateBlocks()) },
         { value: "up", label: "Move up", disabled: !editor.canActOnBlocks(-1), onClick: run(() => editor.moveBlocks(-1)) },
@@ -1472,6 +1481,7 @@ export function PageEditor({
         if (!rootRef.current) return;
         dragBlocks({ root: rootRef.current, editor, id, event, onStart, onEnd: () => (restoreSelection.current = true) });
       },
+      add,
       refocus: placeSelection,
     };
   }, [editor, placeSelection]);
