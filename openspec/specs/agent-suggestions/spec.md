@@ -9,7 +9,7 @@ A suggestion SHALL be an agent's proposed change to the own content of one page 
 - **replace**: new blocks in place of one target block; the suggestion is placed right after the target;
 - **delete**: removing one target block and its children; the suggestion is placed right after the target and has no children.
 
-Insert and replace SHALL have at least one proposed block. Positions and targets SHALL be in the page's own content: not inside a sub-page's content, not inside a suggestion, and not a sub-page or a suggestion themselves. Proposed blocks SHALL NOT include pages, comments or suggestions. A suggestion that breaks these rules SHALL be refused and nothing SHALL be created.
+Insert and replace SHALL have at least one proposed block. Positions and targets SHALL be in the page's own content: not inside a sub-page's content, not inside a suggestion, and not a sub-page or a suggestion themselves. A whole table MAY be a position or target, but its rows and cells SHALL NOT be, and nothing SHALL be inserted inside a table. Proposed blocks SHALL NOT include pages, comments or suggestions. A suggestion that breaks these rules SHALL be refused and nothing SHALL be created.
 
 #### Scenario: Insert after a block
 - **WHEN** agent "planner" suggests inserting two bullets after the bullet "Deleting blocks with Backspace" in the exploration "Block editor v1"
@@ -18,6 +18,10 @@ Insert and replace SHALL have at least one proposed block. Positions and targets
 #### Scenario: Target inside a sub-page
 - **WHEN** an agent suggests replacing a block that belongs to a sub-page's content, through the parent page
 - **THEN** it is refused and nothing is created
+
+#### Scenario: A cell can't be targeted
+- **WHEN** an agent suggests replacing one cell of a table
+- **THEN** it is refused, and it can instead suggest replacing the whole table
 
 ### Requirement: Suggestion record and status
 Every suggestion SHALL have a record with its author (the agent's name), action, target (for replace and delete), an optional note, when it was made, and its status: `pending`, `approved`, `rejected` or `withdrawn`, with when it was resolved. The record SHALL remain after the suggestion leaves the page. A pending replace or delete SHALL additionally be reported as `outdated` when its target no longer exists, or when the target's type, props or content (for delete, its whole subtree) differ from when the suggestion was made.
@@ -78,11 +82,11 @@ A page with more than one pending suggestion SHALL offer **Approve all** and **R
 - **THEN** two are approved, the outdated one stays pending, and the page reports "2 approved, 1 outdated"
 
 ### Requirement: Reviewing suggestions on a page
-On every page and task description that shows content, a suggestion SHALL be shown in place as one enclosed, highlighted (yellow) region showing its author, its action ("Suggests adding", "Suggests replacing", "Suggests deleting"), its note, "Outdated" when it is, and **Approve** (not shown when outdated) and **Reject**. Inside the region, the proposed blocks SHALL be shown as an addition (labelled "Proposed", tinted green) and, for a replace or delete, a struck-through copy of the target's current content as a deletion (labelled "Removed", tinted red), so old and new are told apart by label as well as colour. The target itself SHALL look as it always does: the region already shows what would change. The page SHALL show how many suggestions are pending.
+On every page and task description that shows content, a suggestion SHALL be shown in place as one enclosed, highlighted (yellow) region showing its author, its action ("Suggests adding", "Suggests replacing", "Suggests deleting"), its note, "Outdated" when it is, and **Approve** (not shown when outdated) and **Reject**. Inside the region, the proposed blocks SHALL be shown as an addition (labelled "Proposed", tinted green) and, for a replace or delete, a struck-through copy of the target's current content as a deletion (labelled "Removed", tinted red), so old and new are told apart by label as well as colour. In the editor, the target itself SHALL be marked in place the same way as the region's "Removed" part (red tint and red bar), so what would go is recognisable at both places; the copy inside the region SHALL NOT be marked again. Line breaks in the target's text SHALL show in both places. The page SHALL show how many suggestions are pending.
 
 #### Scenario: A replace on the page
 - **WHEN** a page with a pending replace suggestion from "builder" is opened
-- **THEN** the target paragraph looks as usual, and a yellow region after it shows "builder", "Suggests replacing", the old text struck through under "Removed" in red, the new blocks under "Proposed" in green, and Approve and Reject
+- **THEN** the target paragraph is marked red in place, and a yellow region after it shows "builder", "Suggests replacing", the old text struck through under "Removed" in red, the new blocks under "Proposed" in green, and Approve and Reject
 
 #### Scenario: Approve from the page
 - **WHEN** Approve is chosen on an insert suggestion

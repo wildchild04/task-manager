@@ -24,17 +24,21 @@ Each block type SHALL declare, in one place, whether it holds text and what Ente
 | Type | Text | Enter | Enter when empty | Backspace at start |
 |---|---|---|---|---|
 | paragraph | yes | new paragraph | new paragraph | merge into previous |
-| heading 1–3 | yes | new paragraph | new paragraph | becomes paragraph |
+| heading 1–6 | yes | new paragraph | new paragraph | becomes paragraph |
 | bulleted / numbered list item | yes | same type | becomes paragraph | becomes paragraph |
 | todo | yes | new unchecked todo | becomes paragraph | becomes paragraph |
 | toggle | yes | first child if open, else new paragraph | becomes paragraph | becomes paragraph |
 | quote | yes | new paragraph | becomes paragraph | becomes paragraph |
+| callout | yes | new paragraph after it | becomes paragraph | becomes paragraph |
+| code | yes (plain text) | new line inside | new line inside | becomes paragraph when empty, else nothing |
+| table cell | yes | cell below (see "Editing tables") | cell below | nothing |
 | divider | no | — | — | — |
 | sub-page | no (shows its title) | — | — | — |
 | reference | no (shows its target) | — | — | — |
 | suggestion | no (shows the proposed change, see agent-suggestions) | — | — | — |
+| table, table row | no (hold rows and cells) | — | — | — |
 
-A suggestion and the blocks inside it SHALL never hold the caret; the caret moves past a suggestion as it does past a divider, Tab SHALL NOT nest a block into a suggestion, and Backspace at the start of the block after a suggestion SHALL move the caret to the end of the previous text block without removing the suggestion.
+A suggestion and the blocks inside it SHALL never hold the caret; the caret moves past a suggestion as it does past a divider, Tab SHALL NOT nest a block into a suggestion, and Backspace at the start of the block after a suggestion SHALL move the caret to the end of the previous text block without removing the suggestion. Backspace at the start of the block after a table SHALL likewise move the caret to the table's last cell without removing the table.
 
 #### Scenario: Leaving a list
 - **WHEN** Enter is pressed in an empty bulleted list item
@@ -47,6 +51,10 @@ A suggestion and the blocks inside it SHALL never hold the caret; the caret move
 #### Scenario: Backspace after a suggestion
 - **WHEN** Backspace is pressed at the start of a paragraph that follows a suggestion
 - **THEN** the suggestion is still there, and the caret is at the end of the text block before it
+
+#### Scenario: Backspace after a table
+- **WHEN** Backspace is pressed at the start of a paragraph that follows a table
+- **THEN** the table is still there, and the caret is at the end of its last cell
 
 ### Requirement: Editing text and marks
 Typing, deleting and replacing selected text SHALL change the block's rich text at the caret, keeping the marks of the text around it. Cmd/Ctrl+B, I, U, Shift+S and E SHALL toggle bold, italic, underline, strikethrough and inline code on the selected text; Cmd/Ctrl+K SHALL ask for a URL (focused, saved with Enter) and add a link to the selected text (with the caret on a link and nothing selected, it SHALL edit that whole link, prefilled with its URL), or remove it when the URL is left empty; a URL without a scheme SHALL get `https://`. Typing `@` in that field SHALL list the workspace's pages, library documents and tasks matching the text after it, with their place, and choosing one SHALL link the text to it (`/pages/:pageId` or `/tasks/:taskId`). Editing a link to a page or task SHALL show it as `@` and its title, with it highlighted, never its ID. Clicking a link in the editor SHALL open an app page in the same tab and any other URL in a new tab. Resting the pointer on a link SHALL show a card under it with where the link goes (the URL; the title and place for a page or task of the app; or that it no longer exists) and the actions Open (as clicking the link), Edit (the link dialog for the whole link) and Remove (removes the link and keeps its text, as one undo step). The card SHALL stay open while the pointer is over the link or the card, close shortly after it leaves both, and close on Escape, an outside click, or typing; it SHALL never take focus from the text. Text typed at the end of a marked span SHALL continue with the same marks, except links.
@@ -139,18 +147,26 @@ Tab SHALL nest a block as the last child of its previous sibling, keeping its ow
 - **THEN** the caret moves into the paragraph after the divider
 
 ### Requirement: Markdown shortcuts change the type
-Typing one of these at the start of a paragraph, followed by a space, SHALL remove the typed characters and change the block's type, keeping the rest of its text: `#` heading 1, `##` heading 2, `###` heading 3, `-` or `*` bulleted list item, `1.` numbered list item, `[]` unchecked todo, `>` quote. Typing `---` in an empty paragraph SHALL turn it into a divider followed by a new empty paragraph holding the caret. Undo right after a shortcut SHALL restore the typed characters and the paragraph.
+Typing one of these at the start of a paragraph, followed by a space, SHALL remove the typed characters and change the block's type, keeping the rest of its text: `#` heading 1, `##` heading 2, `###` heading 3, `####` heading 4, `#####` heading 5, `######` heading 6, `-` or `*` bulleted list item, `1.` numbered list item, `[]` unchecked todo, `>` quote. Typing `---` in an empty paragraph SHALL turn it into a divider followed by a new empty paragraph holding the caret. Typing ```` ``` ```` (optionally followed by a language) in an empty paragraph and pressing Enter SHALL turn it into an empty code block of that language holding the caret. Undo right after a shortcut SHALL restore the typed characters and the paragraph.
 
 #### Scenario: Make a heading
 - **WHEN** "# " is typed at the start of an empty paragraph
 - **THEN** it becomes an empty heading 1 holding the caret
+
+#### Scenario: Make a level 4 heading
+- **WHEN** "#### " is typed at the start of a paragraph "Glossary"
+- **THEN** it becomes a heading 4 containing "Glossary"
+
+#### Scenario: Make a code block
+- **WHEN** "```ts" is typed in an empty paragraph and Enter is pressed
+- **THEN** it becomes an empty code block with language "ts" holding the caret
 
 #### Scenario: Undo a shortcut
 - **WHEN** "- " turns a paragraph into a list item and Cmd/Ctrl+Z is pressed
 - **THEN** the paragraph is back, containing "- "
 
 ### Requirement: Slash menu
-Typing `/` in a text block other than the title, at its start or after a space, SHALL open a menu at the caret listing: Text, Heading 1, Heading 2, Heading 3, Bulleted list, Numbered list, To-do, Toggle, Quote and Divider. The menu SHALL show the matching commands five at a time, with a page row ("Page 1 of 2") above them when there are more: Tab or Page Down SHALL turn to the next page and Shift+Tab or Page Up to the previous one, wrapping around, with the page's first command highlighted; choosing the page row (by click, or ↓ and Enter) SHALL turn to the next page. Changing the filter text SHALL go back to the first page. The text typed after `/` SHALL filter the list by name; ↑ and ↓ SHALL move the highlight, Enter SHALL apply the highlighted command, and Escape SHALL close the menu leaving the text. While the menu is open, Tab SHALL not nest the block. Focus SHALL stay in the block while the menu is open, and clicking a command SHALL apply it. Applying a command SHALL remove the `/` and the filter text, then turn the block into that type, keeping its other text; Divider SHALL replace an empty block with a divider followed by an empty paragraph, or insert a divider after a non-empty one. The menu SHALL close when the caret leaves the `/` text, when the `/` is deleted, or when nothing matches and a space is typed. Applying a command SHALL be one undo step.
+Typing `/` in a text block other than the title, a table cell or a code block, at its start or after a space, SHALL open a menu at the caret listing: Text, Heading 1, Heading 2, Heading 3, Heading 4, Heading 5, Heading 6, Bulleted list, Numbered list, To-do, Toggle, Quote, Callout, Code, Table and Divider. The menu SHALL show the matching commands five at a time, with a page row ("Page 1 of 2") above them when there are more: Tab or Page Down SHALL turn to the next page and Shift+Tab or Page Up to the previous one, wrapping around, with the page's first command highlighted; choosing the page row (by click, or ↓ and Enter) SHALL turn to the next page. Changing the filter text SHALL go back to the first page. The text typed after `/` SHALL filter the list by name; ↑ and ↓ SHALL move the highlight, Enter SHALL apply the highlighted command, and Escape SHALL close the menu leaving the text. While the menu is open, Tab SHALL not nest the block. Focus SHALL stay in the block while the menu is open, and clicking a command SHALL apply it. Applying a command SHALL remove the `/` and the filter text, then turn the block into that type, keeping its other text; Divider SHALL replace an empty block with a divider followed by an empty paragraph, or insert a divider after a non-empty one; Table SHALL replace an empty block with a 3×3 table with a header row, or insert it after a non-empty one, with the caret in its first cell; Code SHALL turn the block into a code block holding its text as plain text. The menu SHALL close when the caret leaves the `/` text, when the `/` is deleted, or when nothing matches and a space is typed. Applying a command SHALL be one undo step.
 
 #### Scenario: Turn a paragraph into a heading
 - **WHEN** "/hea" is typed at the start of a paragraph "Intro" and Enter is pressed with "Heading 1" highlighted
@@ -167,6 +183,10 @@ Typing `/` in a text block other than the title, at its start or after a space, 
 #### Scenario: Divider from an empty block
 - **WHEN** "/div" is typed in an empty paragraph and Enter is pressed
 - **THEN** the block is replaced by a divider followed by an empty paragraph holding the caret
+
+#### Scenario: Table from an empty block
+- **WHEN** "/table" is typed in an empty paragraph and Enter is pressed
+- **THEN** the block is replaced by a 3×3 table whose first row is a header row, with the caret in its first cell
 
 ### Requirement: Undo and redo
 Cmd/Ctrl+Z SHALL undo the last edit and Shift+Cmd/Ctrl+Z (or Ctrl+Y) SHALL redo it, restoring the caret. Consecutive typing in one block without pausing SHALL undo as one step; every structural edit (split, merge, nesting, type change, todo check) SHALL be one step. Undo and redo SHALL be saved like any other edit. The history SHALL last while the page stays open.
@@ -234,4 +254,75 @@ A mention SHALL behave as one character: the caret moves over it with one arrow 
 #### Scenario: Open the mentioned page
 - **WHEN** a mention in the editor is clicked
 - **THEN** the browser opens the mentioned page in the app
+
+### Requirement: Editing tables
+In a table cell, Tab SHALL move the caret to the start of the next cell in reading order, and in the last cell add a row and move into it; Shift+Tab SHALL move to the previous cell. Enter SHALL move to the cell below in the same column, and in the last row add a row and move into it; Shift+Enter SHALL insert a line break in the cell. ↑ on a cell's first line and ↓ on its last line SHALL move to the cell above or below in the same column, or, from the first or last row, to the text block before or after the table. ← at a cell's start and → at its end SHALL move to the previous or next cell in reading order. Backspace at a cell's start SHALL do nothing. Tab SHALL never nest blocks in a table, and blocks SHALL NOT be moved into a table or a row. A table SHALL offer adding a row at its bottom and a column at its right; each row and column SHALL offer inserting one before or after it, moving it, and deleting it; the table SHALL offer toggling its header row and header column and deleting itself. Each of these SHALL be one batch and one undo step, and SHALL be refused when it would leave the table without rows or columns.
+
+#### Scenario: Tab through a row
+- **WHEN** the caret is in the last cell of a table's last row and Tab is pressed
+- **THEN** a new row of empty cells is added at the bottom, and the caret is in its first cell
+
+#### Scenario: Enter moves down
+- **WHEN** Enter is pressed in the second cell of the first row
+- **THEN** the caret is at the start of the second cell of the second row, and no block was split
+
+#### Scenario: Add a column
+- **WHEN** a column is added at the right of a 3×2 table
+- **THEN** every row has three cells, and one Cmd/Ctrl+Z removes the column
+
+#### Scenario: Last column can't be deleted
+- **WHEN** the only column of a table is deleted from its menu
+- **THEN** nothing changes
+
+### Requirement: Editing code blocks
+In a code block, Enter SHALL insert a new line, Tab SHALL insert two spaces, and Shift+Tab SHALL remove up to two spaces at the start of the caret's line. Cmd/Ctrl+Enter SHALL add a paragraph after the code block and move the caret there. Mark shortcuts, links, the `/` menu and the `@` menu SHALL NOT apply in code; pasted text SHALL be kept as plain text, line breaks included. A code block SHALL offer choosing its language from common languages and "Plain text", showing any other language it has as written.
+
+#### Scenario: Indent a line
+- **WHEN** the caret is in a code block and Tab is pressed
+- **THEN** two spaces are inserted at the caret and the block stays a code block
+
+#### Scenario: Leave a code block
+- **WHEN** Cmd/Ctrl+Enter is pressed in a code block
+- **THEN** an empty paragraph follows the code block and holds the caret
+
+### Requirement: Callout emoji and tone
+A callout SHALL show its emoji before its text; activating the emoji SHALL offer choosing another emoji from a set of common ones and one of the five tones, each choice saved as one undo step.
+
+#### Scenario: Change a callout's tone
+- **WHEN** the tone "warning" is chosen from a callout's emoji menu
+- **THEN** the callout is tinted as a warning, and after reloading it still is
+
+### Requirement: Pasting keeps structure
+Pasting into a text block other than a code block, a table cell or the page title SHALL turn the clipboard into blocks: content copied from this app exactly (mentions and links to pages kept), HTML by its elements (paragraphs, headings, lists and todos, quotes, dividers, code blocks with their language, tables, bold, italic, strikethrough, underline, inline code and links; other elements by their text), and plain text read as Markdown (see the agent-api capability's Markdown conversion). A paste that is a single paragraph SHALL be inserted at the caret with its marks. Otherwise, pasting into an empty paragraph SHALL replace it with the pasted blocks, and pasting elsewhere SHALL split the block at the caret: the text before stays, the first pasted paragraph's text joins it, the other pasted blocks follow with their nesting, and the text after the caret follows them as a paragraph. The caret SHALL end at the end of the last pasted text block. A paste SHALL be one undo step. Pasting into a code block, a table cell or the title SHALL insert the clipboard's plain text at the caret.
+
+#### Scenario: A list from another app
+- **WHEN** HTML for a bulleted list of three items, the second with **bold** text, is pasted into an empty paragraph
+- **THEN** the paragraph is replaced by three bulleted list items, the second with a bold span, and one Cmd/Ctrl+Z brings the empty paragraph back
+
+#### Scenario: Markdown with a table and code
+- **WHEN** the plain text "Intro\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n```ts\nlet x = 1;\n```" is pasted at the end of the paragraph "Notes: "
+- **THEN** the paragraph reads "Notes: Intro", followed by a 2-column table with a header row and a TypeScript code block, and the caret is at the end of the code block
+
+#### Scenario: Pasting into a sentence
+- **WHEN** two paragraphs "A" and "B" are pasted between "Hello " and "world"
+- **THEN** the blocks read "Hello A", "B" and "world"
+
+#### Scenario: One paragraph keeps marks
+- **WHEN** a bold word copied from another page of the app is pasted inside a paragraph
+- **THEN** the word is inserted at the caret, bold, and no block is added
+
+#### Scenario: Paste into code
+- **WHEN** "- one\n- two" is pasted into a code block
+- **THEN** the code block contains those two lines as text, and no list is created
+
+### Requirement: Copying keeps structure
+Copying a selection that spans several blocks SHALL put Markdown on the clipboard as plain text: every block from the start of the selection to its end, the first and last text blocks with only their selected text, tables and code blocks whole, and the children of each included block, with mentions written as `@Title` and links to app pages as their full URLs. It SHALL also put the same content in a format only this app reads, which keeps mentions and page links exactly, so pasting it back into the app rebuilds the same blocks. Copying within one block SHALL keep the browser's plain text and add that app-only format with the selection's marks.
+
+#### Scenario: Copy a list and a table
+- **WHEN** a heading, two bulleted items and a table are selected and copied
+- **THEN** the clipboard's text is "## Heading\n\n- one\n- two\n\n| a | b |\n|---|---|\n| 1 | 2 |"
+
+#### Scenario: Copy and paste within the app
+- **WHEN** a paragraph with a mention of "Architecture" and the list after it are copied and pasted into another page
+- **THEN** the other page gets a paragraph with a mention of "Architecture" and the same list
 
