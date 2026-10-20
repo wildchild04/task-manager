@@ -6,8 +6,8 @@ A block's type can only change through Markdown shortcuts typed at its start or 
 
 - **Turn into from the handle.** The block handle menu gains "Turn into", listing Text, Heading 1–6, Bulleted list, Numbered list, To-do, Toggle, Quote, Callout and Code, with the current type checked. It changes every selected text block at once (or the handle's block), keeping text and children as the slash menu does; other blocks (dividers, tables, sub-pages) are left as they are. One undo step.
 - **Turn into from the keyboard.** Cmd/Ctrl+Shift+0 to 8 turn the caret's block, the blocks a text selection touches, or the selected blocks into Text, Heading 1, 2, 3, To-do, Bulleted list, Numbered list, Toggle and Code.
-- **`/page`.** A "Page" command in the slash menu, on workspace pages and project pages: it creates an empty sub-page in place of an empty block, or after a block with text, and opens it with the caret in its title. Undo before leaving removes it again.
-- The server accepts an edit batch that creates an empty sub-page inside the edited page, and one that deletes a sub-page with no content (the undo of creating it). Sub-pages with content still can't be deleted through edits.
+- **`/page`.** A "Page" command in the slash menu, on workspace pages and project pages: it creates an empty sub-page in place of an empty block, or after a block with text, and opens it with the caret in its title. An unwanted one is deleted from its own page, as in Notion: undo doesn't follow you back to the parent page.
+- The server accepts an edit batch that creates an empty sub-page inside the edited page, and one that deletes a sub-page with no content (the undo of creating it, sent when the editor stays on the page because the save failed). Sub-pages with content still can't be deleted through edits.
 - A page opened with an empty title and no blocks puts the caret in its title.
 
 ## Capabilities

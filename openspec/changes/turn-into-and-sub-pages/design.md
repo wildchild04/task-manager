@@ -8,7 +8,7 @@ Sub-pages are page blocks inside a page's content. Edit batches may not insert o
 
 **Goals:**
 - Change the type of one or many blocks from the handle and the keyboard, as one undo step, with the slash menu's rules.
-- Create a sub-page from the editor and land in it, ready to type its title, with undo working before leaving.
+- Create a sub-page from the editor and land in it, ready to type its title.
 
 **Non-Goals:** see the proposal (turning a block into a page, tables and dividers, `/page` in task bodies and comments, "Move to").
 
@@ -36,7 +36,7 @@ Which blocks: the selected roots in a block selection (not their children, as No
 
 A `page` slash action: like Table, it replaces an empty block (or follows a block with text, after removing the `/query` text) with `{ type: "page", content: [] }` and a fresh ID. The caret goes to the end of the text block before it (or the block it followed); the editor then flushes the save queue, waits for it to be idle, and navigates to `/pages/:id` if nothing failed, so the page exists when it opens. (Navigating at once and leaving it to the leave guard raced with the route data re-read of decision 5 in Firefox, which dropped the navigation.)
 
-The server accepts this because `checkPageEdit` gains an option `subPages` (true for the page and project surfaces, false for tasks and comments): with it, inserting a `page` block is allowed where any block may go, holding only its title; and deleting a sub-page is allowed when `isEmptyPage(id)` says it has no blocks of its own, which `applyEdit` answers from the block service. That delete is what undoing a `/page` sends. A sub-page with content still can't be deleted through an edit, nor can a block containing one; the editor's own commands never delete sub-pages (they're kept by Backspace and block deletion), so only undo sends such a delete.
+The server accepts this because `checkPageEdit` gains an option `subPages` (true for the page and project surfaces, false for tasks and comments): with it, inserting a `page` block is allowed where any block may go, holding only its title; and deleting a sub-page is allowed when `isEmptyPage(id)` says it has no blocks of its own, which `applyEdit` answers from the block service. That delete is what undoing a `/page` sends. Since the editor opens the new page at once and each page gets a new editor, the parent's undo history is gone by the time you return; the delete is only sent when the editor stays because the save failed. An unwanted sub-page is deleted from its own page, as in Notion (decided with the user: keeping undo history across pages isn't worth it for this case). A sub-page with content still can't be deleted through an edit, nor can a block containing one; the editor's own commands never delete sub-pages (they're kept by Backspace and block deletion), so only undo sends such a delete.
 
 *Alternative:* a separate "create sub-page" endpoint called by the editor. Rejected: the creation wouldn't be in the editor's undo history, and the page's content would change behind the editor's state.
 

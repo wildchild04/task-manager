@@ -20,7 +20,7 @@
 - **THEN** both paragraphs become headings 1 and the text stays selected
 
 ### Requirement: Creating sub-pages from the editor
-On workspace pages and project pages, the slash menu's Page command SHALL create an empty, untitled sub-page: in place of the block when the block is otherwise empty, or after it, with the `/` text removed. The new sub-page SHALL open at once, after the edit is saved, with the caret in its title. Undoing the creation before the sub-page has any blocks SHALL remove it. The sidebar and the page's links SHALL show the new sub-page, and stop showing it when it is removed by undo. When any page opens with an empty title and no blocks, the caret SHALL be in its title.
+On workspace pages and project pages, the slash menu's Page command SHALL create an empty, untitled sub-page: in place of the block when the block is otherwise empty, or after it, with the `/` text removed. The new sub-page SHALL open at once, after the edit is saved, with the caret in its title. Undo does not reach across pages: once the sub-page has opened, an unwanted one is deleted from its own page. The sidebar and the page's links SHALL show the new sub-page. When any page opens with an empty title and no blocks, the caret SHALL be in its title.
 
 #### Scenario: Page from an empty block
 - **WHEN** "/page" is typed in an empty paragraph and Enter is pressed
