@@ -24,7 +24,7 @@ A stdio [MCP](https://modelcontextprotocol.io) server that lets AI agents work t
    NODE_EXTRA_CA_CERTS=/home/me/.config/homelab/caddy-root.crt
    ```
 
-   `APP_URL` is the app's address including its base path when it's served under one. `AGENT_NAME` is how the agent appears in task history and comments. Give each agent its own name; a task an agent starts is held by that agent until it's completed, paused or returned. Variables already set in the environment win over the profile.
+   `APP_URL` is the app's address including its base path when it's served under one. `AGENT_NAME` is how the agent appears in task history and comments. Give each agent its own name; a task an agent starts is held by that agent until it's completed, paused or returned. Variables already set in the environment win over the profile. Without a profile name the launcher uses `default`, so `ln -s homelab.env default.env` makes the homelab the default.
 
 4. Register it with the agent. For Claude Code, from any directory:
 
