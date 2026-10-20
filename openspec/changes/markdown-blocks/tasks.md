@@ -27,7 +27,7 @@
 ## 6. Existing content
 
 - [x] 6.1 `scripts/convert-literal-tables.ts`: dry run listing pages and table counts, `--apply` converting each literal-table paragraph in one batch per page; tests on a fixture with the audit's table shapes
-- [ ] 6.2 After deploying: as an agent, suggest replacing each literal-table paragraph on the homelab pages with the real table, for the human to approve
+- [x] 6.2 After deploying: as an agent, suggest replacing each literal-table paragraph on the homelab pages with the real table, for the human to approve
 
 ## 7. Check
 
