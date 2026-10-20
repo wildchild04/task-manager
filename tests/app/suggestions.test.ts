@@ -52,6 +52,17 @@ describe("suggestions on screens", () => {
     expect(buildPageView(services.blocks, "P", services.suggestions)!.blocks[1]).toMatchObject({ outdated: true });
   });
 
+  it("shows a replaced table with its rows in the removed copy", () => {
+    services.blocks.apply([
+      { op: "insert", block: { id: "T", type: "table" }, parentId: "P", afterId: "B" },
+      { op: "insert", block: { id: "R", type: "table_row" }, parentId: "T" },
+      { op: "insert", block: { id: "C", type: "table_cell", content: [{ text: "old" }] }, parentId: "R" },
+    ]);
+    services.suggestions.suggest({ id: "t", pageId: "P", action: "replace", targetId: "T", blocks: [para("n3", "New")], author: "claude" });
+    const view = buildPageView(services.blocks, "P", services.suggestions)!.blocks.find((b) => b.kind === "suggestion" && b.id === "t");
+    expect(view).toMatchObject({ removed: { kind: "content", type: "table", children: [{ id: "R", children: [{ id: "C" }] }] } });
+  });
+
   it("gives the editor the page's suggestions by ID", () => {
     const page = editablePage(services, "page", "P")!;
     expect(page.pageId).toBe("P");

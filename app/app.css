@@ -377,3 +377,10 @@ body {
   padding-left: 8px;
   border-radius: 4px;
 }
+
+/* A marked code block is marked once, on its box, not again on its text. */
+.editor-code .editable.suggestion-removing {
+  background: none;
+  box-shadow: none;
+  padding-left: 0;
+}

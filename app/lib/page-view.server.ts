@@ -135,7 +135,7 @@ function buildChildrenView(blocks: BlockService, rootId: string, suggestions?: S
         const record = suggestions?.get(block.id);
         const targetId = block.props.action === "insert" ? null : block.props.targetId;
         const target = targetId ? blocks.getBlock(targetId) : undefined;
-        // A replace shows the target block alone; a delete, everything it would remove.
+        // A replace shows the target block alone (a table with its rows, which are part of it); a delete, everything it would remove.
         const removed = target && viewOfBlock(target, path, depth);
         return {
           kind: "suggestion",
@@ -147,7 +147,7 @@ function buildChildrenView(blocks: BlockService, rootId: string, suggestions?: S
           targetId,
           blocks: children,
           removed:
-            removed && removed.kind === "content" && block.props.action === "replace"
+            removed && removed.kind === "content" && removed.type !== "table" && block.props.action === "replace"
               ? { ...removed, children: [] }
               : (removed ?? null),
         };
