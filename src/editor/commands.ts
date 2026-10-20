@@ -515,6 +515,25 @@ export function exitBlock(state: EditorState, selection: Selection, context: Com
   };
 }
 
+/**
+ * The "+" beside a block: an empty paragraph holding `/` after the block (or
+ * before it), at its level and after a table as a whole, with the caret after
+ * the `/` so the slash menu can open there. An empty paragraph without
+ * children takes the `/` itself.
+ */
+export function addBlock(state: EditorState, id: string, side: "before" | "after", context: CommandContext): CommandResult {
+  const block = getBlock(state, selectableOf(state, id));
+  if (block.type === "paragraph" && text.length(block.content) === 0 && block.children.length === 0) {
+    return { ops: [updateContent(block.id, [{ text: "/" }])], selection: caret(block.id, 1) };
+  }
+  const added = context.newId();
+  const afterId = side === "after" ? block.id : previousSibling(state, block.id);
+  return {
+    ops: [{ op: "insert", block: { id: added, type: "paragraph", content: [{ text: "/" }] }, parentId: block.parentId!, afterId }],
+    selection: caret(added, 1),
+  };
+}
+
 /** Clicking below the last block: the caret goes to a trailing empty paragraph, added when the page doesn't end with one. */
 export function appendParagraph(state: EditorState, context: CommandContext): CommandResult {
   const last = getBlock(state, state.rootId).children.at(-1);

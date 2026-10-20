@@ -1,6 +1,6 @@
 ## 1. Command
 
-- [ ] 1.1 `commands.ts`: `addBlock(state, id, side, newId)` (a `/` paragraph after or before the block at its level, a table as a whole; an empty childless paragraph reused); `Editor.addBlock`; tests for the spec scenarios, including undo
+- [x] 1.1 `commands.ts`: `addBlock(state, id, side, newId)` (a `/` paragraph after or before the block at its level, a table as a whole; an empty childless paragraph reused); `Editor.addBlock`; tests for the spec scenarios, including undo
 
 ## 2. UI
 

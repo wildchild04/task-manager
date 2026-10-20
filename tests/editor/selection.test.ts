@@ -386,6 +386,30 @@ describe("selections beyond one block", () => {
     });
   });
 
+  describe("adding a block beside another", () => {
+    it("adds a / paragraph after a table as a whole, in one undo step", () => {
+      seed([p("a", "A"), table("t")]);
+      editor.addBlock("t-a");
+      expect(outline()).toEqual(["paragraph:A", "table:", "paragraph:/"]);
+      expect(editor.selection).toEqual(caret("n1", 1));
+      editor.undo();
+      expect(outline()).toEqual(["paragraph:A", "table:"]);
+    });
+
+    it("adds before the block, at its level inside a toggle", () => {
+      seed([toggle("g", "G", [p("c1", "one"), p("c2", "two")])]);
+      editor.addBlock("c2", "before");
+      expect(outline()).toEqual(["toggle:G", "  paragraph:one", "  paragraph:/", "  paragraph:two"]);
+    });
+
+    it("puts the / into an empty paragraph instead of adding one", () => {
+      seed([p("a", "")]);
+      editor.addBlock("a");
+      expect(outline()).toEqual(["paragraph:/"]);
+      expect(editor.selection).toEqual(caret("a", 1));
+    });
+  });
+
   describe("clipboard", () => {
     it("copies selected blocks whole, with their children", () => {
       seed([p("a", "Intro"), li("l1", "one"), toggle("g", "Toggle", [p("c", "inside")])]);

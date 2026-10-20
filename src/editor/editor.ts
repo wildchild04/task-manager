@@ -365,6 +365,11 @@ export class Editor {
     return this.runOnBlocks(across.dropBlocks(this.state, roots, target), { anchor: roots[0]!, focus: roots.at(-1)! });
   }
 
+  /** The "+" beside a block: a paragraph holding `/` after (or before) it, or the block itself when it's an empty paragraph. */
+  addBlock(id: string, side: "before" | "after" = "after"): void {
+    this.run(commands.addBlock(this.state, id, side, this.context));
+  }
+
   /** Clicking below the last block: the caret goes to a trailing empty paragraph (added if needed). */
   appendParagraph(): void {
     this.run(commands.appendParagraph(this.state, this.context));
