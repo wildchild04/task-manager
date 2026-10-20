@@ -21,7 +21,7 @@
 
 ## 5. Block selection (DOM)
 
-- [ ] 5.1 Block mode: focus on the editor root (`tabIndex=-1`, group label), `data-selected` highlight from tokens, live region count; Escape from text, a cell or a range; keys of design decision 6; leaving block mode on click or Escape
+- [x] 5.1 Block mode: focus on the editor root (`tabIndex=-1`, group label), `data-selected` highlight from tokens, live region count; Escape from text, a cell or a range; keys of design decision 6; leaving block mode on click or Escape
 - [ ] 5.2 Handle and menu in `editor-blocks.tsx`: hover and coarse-pointer visibility, none on rows, cells, suggestion contents, the title or in comment editors; local six-dot SVG until `drag_indicator` ships; menu items with disabled states; Shift+click on a handle extends
 - [ ] 5.3 `app/editor/block-drag.ts`: pointer dragging after 4px, dimmed rows, drop line at the target's level or inside past the text start, refused targets show no line, auto-scroll, Escape and outside release cancel; drop runs `dropBlocks`
 

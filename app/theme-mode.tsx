@@ -28,6 +28,8 @@ function surfaceVariables(mode: ThemeMode): CSSProperties {
     "--ds-surface-lowest": color.surfaceContainerLowest,
     "--ds-outline-variant": color.outlineVariant,
     "--ds-primary": color.primary,
+    "--ds-secondary": color.secondary,
+    "--ds-secondary-container": color.secondaryContainer,
     "--ds-warning": color.warning,
     "--ds-warning-container": color.warningContainer,
     "--ds-success": color.success,

@@ -243,6 +243,7 @@ export class Editor {
    * in code, indents (outdents) the line; elsewhere, nests (un-nests) the block.
    */
   tab(backward = false): boolean {
+    if (this.blocks) return backward ? this.outdent() : this.indent();
     const { blockId } = this.selection;
     const { type } = getBlock(this.state, blockId);
     if (type === "table_cell") return this.run(tables.tabCell(this.state, blockId, backward, this.newId));

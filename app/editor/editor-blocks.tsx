@@ -1,5 +1,5 @@
 import { Button, Checkbox, Divider, IconButton, Menu, Typography } from "@wildchild/design-system";
-import { memo, type ReactNode, useContext, useLayoutEffect, useRef, useState } from "react";
+import { createContext, memo, type ReactNode, useContext, useLayoutEffect, useRef, useState } from "react";
 
 import {
   CalloutFrame,
@@ -17,6 +17,44 @@ import type { Editor } from "~/editor/editor";
 import type { EditorBlock, EditorState } from "~/editor/editor-state";
 import { cellPosition } from "~/editor/tables";
 import { renderRichText } from "./dom-caret";
+
+/** Which blocks are selected (the roots of a block selection), and whether blocks get handles. */
+export type BlockSelectionView = { selected: ReadonlySet<string>; handles: boolean };
+
+export const BlockSelectionContext = createContext<BlockSelectionView>({ selected: new Set(), handles: false });
+
+/**
+ * The outer element of a block in the editor: it carries the block's ID for
+ * selecting, moving and dropping, and shows when the block is selected.
+ */
+function BlockFrame({
+  block,
+  id = block?.id,
+  as: Tag = "div",
+  className,
+  readOnly,
+  children,
+}: {
+  block?: EditorBlock;
+  id?: string;
+  as?: "div" | "li";
+  className?: string;
+  /** The block has no text of its own (dividers, sub-pages, references, suggestions). */
+  readOnly?: boolean;
+  children: ReactNode;
+}) {
+  const { selected } = useContext(BlockSelectionContext);
+  return (
+    <Tag
+      className={className ? `editor-block ${className}` : "editor-block"}
+      data-block={id}
+      data-selected={id !== undefined && selected.has(id) ? "true" : undefined}
+      contentEditable={readOnly ? false : undefined}
+    >
+      {children}
+    </Tag>
+  );
+}
 
 /**
  * One block's editable text. React renders only the element; its content is
@@ -89,7 +127,7 @@ const EditorBlock = memo(function EditorBlock(props: BlockProps) {
     case "paragraph": {
       const inToggle = block.parentId !== null && state.blocks[block.parentId]?.type === "toggle";
       return (
-        <div className="editor-block">
+        <BlockFrame block={block}>
           <Typography>
             <EditableText
               block={block}
@@ -97,29 +135,29 @@ const EditorBlock = memo(function EditorBlock(props: BlockProps) {
             />
           </Typography>
           {children}
-        </div>
+        </BlockFrame>
       );
     }
     case "heading":
       return (
-        <div className="editor-block">
+        <BlockFrame block={block}>
           <HeadingText level={Number(block.props.level ?? 1)}>
             <EditableText block={block} placeholder={`Heading ${String(block.props.level ?? 1)}`} />
           </HeadingText>
           {children}
-        </div>
+        </BlockFrame>
       );
     case "bulleted_list_item":
     case "numbered_list_item":
       return (
-        <li className="editor-block">
+        <BlockFrame block={block} as="li">
           <Typography>{text}</Typography>
           {children}
-        </li>
+        </BlockFrame>
       );
     case "todo":
       return (
-        <div className="editor-block">
+        <BlockFrame block={block}>
           <div className={block.props.checked ? "editor-row editor-done" : "editor-row"}>
             <span contentEditable={false} className="editor-gutter editor-gutter-todo">
               <Checkbox
@@ -133,12 +171,12 @@ const EditorBlock = memo(function EditorBlock(props: BlockProps) {
             </Typography>
           </div>
           {children}
-        </div>
+        </BlockFrame>
       );
     case "toggle": {
       const open = !closed.has(block.id);
       return (
-        <div className="editor-block editor-toggle">
+        <BlockFrame block={block} className="editor-toggle">
           <div className="editor-row">
             <span contentEditable={false} className="editor-gutter editor-gutter-toggle">
               <IconButton
@@ -153,35 +191,35 @@ const EditorBlock = memo(function EditorBlock(props: BlockProps) {
             </Typography>
           </div>
           {open && children}
-        </div>
+        </BlockFrame>
       );
     }
     case "quote":
       return (
-        <div className="editor-block">
+        <BlockFrame block={block}>
           <Typography variant="blockquote">
             <EditableText block={block} placeholder="Quote" />
           </Typography>
           {children}
-        </div>
+        </BlockFrame>
       );
     case "divider":
       return (
-        <div className="editor-block" contentEditable={false}>
+        <BlockFrame block={block} readOnly>
           <Divider />
-        </div>
+        </BlockFrame>
       );
     case "page":
       return (
-        <div className="editor-block" contentEditable={false}>
+        <BlockFrame block={block} readOnly>
           <PageLink id={block.id} title={block.content} />
-        </div>
+        </BlockFrame>
       );
     case "reference":
       return (
-        <div className="editor-block" contentEditable={false}>
+        <BlockFrame block={block} readOnly>
           <ReferenceBlockView target={references[block.id] ?? { status: "missing" }} />
-        </div>
+        </BlockFrame>
       );
     case "suggestion":
       return <SuggestionBlock id={block.id} />;
@@ -191,7 +229,7 @@ const EditorBlock = memo(function EditorBlock(props: BlockProps) {
       return <CodeBlockEditor block={block} actions={actions} />;
     case "callout":
       return (
-        <div className="editor-block">
+        <BlockFrame block={block}>
           <CalloutFrame
             tone={(block.props.tone as CalloutTone) ?? "default"}
             emoji={<CalloutStyleButton id={block.id} emoji={String(block.props.emoji ?? "💡")} actions={actions} />}
@@ -201,7 +239,7 @@ const EditorBlock = memo(function EditorBlock(props: BlockProps) {
             </Typography>
             {children}
           </CalloutFrame>
-        </div>
+        </BlockFrame>
       );
     default:
       return null;
@@ -212,9 +250,9 @@ const EditorBlock = memo(function EditorBlock(props: BlockProps) {
 function SuggestionBlock({ id }: { id: string }) {
   const suggestion = useContext(SuggestionsContext).byId?.[id];
   return (
-    <div className="editor-block" contentEditable={false}>
+    <BlockFrame id={id} readOnly>
       {suggestion && <SuggestionBox suggestion={suggestion} />}
-    </div>
+    </BlockFrame>
   );
 }
 
@@ -277,7 +315,7 @@ function TableBlock({ state, table, actions }: { state: EditorState; table: Edit
     onClick: () => actions.run((editor) => editor.toggleTableHeader(table.id, which)),
   });
   return (
-    <div className={removing ? "editor-block editor-table suggestion-removing" : "editor-block editor-table"}>
+    <BlockFrame block={table} className={removing ? "editor-table suggestion-removing" : "editor-table"}>
       <TableFrame headerRow={table.props.headerRow === true} headerColumn={table.props.headerColumn === true} rows={rows} />
       <div className="editor-table-controls" contentEditable={false}>
         <Button size="small" variant="text" onClick={() => actions.run((editor) => editor.addTableRow(table.id))}>
@@ -338,7 +376,7 @@ function TableBlock({ state, table, actions }: { state: EditorState; table: Edit
           ]}
         />
       </div>
-    </div>
+    </BlockFrame>
   );
 }
 
@@ -350,7 +388,7 @@ function CodeBlockEditor({ block, actions }: { block: EditorBlock; actions: Bloc
   const language = String(block.props.language ?? "");
   const languages = CODE_LANGUAGES.includes(language) ? CODE_LANGUAGES : [...CODE_LANGUAGES, language];
   return (
-    <div className={removing ? "editor-block editor-code suggestion-removing" : "editor-block editor-code"}>
+    <BlockFrame block={block} className={removing ? "editor-code suggestion-removing" : "editor-code"}>
       <div className="editor-code-header" contentEditable={false}>
         <CommandMenu
           ariaLabel="Code language"
@@ -365,7 +403,7 @@ function CodeBlockEditor({ block, actions }: { block: EditorBlock; actions: Bloc
       <pre className="editor-code-body">
         <EditableText block={block} placeholder="Code" ariaLabel={language ? `Code, ${language}` : "Code"} />
       </pre>
-    </div>
+    </BlockFrame>
   );
 }
 

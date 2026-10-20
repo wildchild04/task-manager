@@ -58,7 +58,7 @@ import {
   writeSelection,
 } from "./dom-caret";
 import { APP_FORMAT, htmlToMarkdown } from "./clipboard";
-import { EditableText, EditorBlocks } from "./editor-blocks";
+import { BlockSelectionContext, EditableText, EditorBlocks } from "./editor-blocks";
 import { withBase, withoutBase } from "../lib/base-path";
 
 const SLASH_MENU_ID = "slash-menu";
@@ -875,8 +875,36 @@ export function PageEditor({
       return event.key === "Tab" || (mod && ["b", "i", "u", "e", "k"].includes(event.key.toLowerCase()));
     };
 
+    /** Keys while whole blocks are selected (focus is on the editor itself). */
+    const onBlocksKey = (event: KeyboardEvent) => {
+      const mod = event.metaKey || event.ctrlKey;
+      const key = event.key.toLowerCase();
+      const vertical = event.key === "ArrowUp" || event.key === "ArrowDown";
+      const step = event.key === "ArrowUp" ? -1 : 1;
+      if (event.key === "Escape") editor.selectBlocks(null);
+      else if (vertical && mod && event.shiftKey) editor.moveBlocks(step);
+      else if (vertical && !mod && !event.altKey) editor.stepBlocks(step, event.shiftKey);
+      else if (event.key === "Backspace" || event.key === "Delete") editor.deleteBlocks();
+      else if (event.key === "Tab") editor.tab(event.shiftKey);
+      else if (event.key === "Enter" && !mod) editor.editBlocks();
+      else if (mod && key === "d") editor.duplicateBlocks();
+      else if (mod && key === "a") editor.selectAll();
+      else if (mod && key === "z") void (event.shiftKey ? editor.redo() : editor.undo());
+      else if (mod && key === "y") editor.redo();
+      // Copy, cut and paste arrive as clipboard events; other keys with modifiers belong to the browser.
+      else if (mod || event.altKey) return;
+      // Typing does nothing while blocks are selected.
+      else if (event.key.length !== 1) return;
+      event.preventDefault();
+      edited();
+    };
+
     const onKeyDown = (event: KeyboardEvent) => {
       if (composing.current || event.isComposing) return;
+      if (editor.blocks && event.target === root) {
+        onBlocksKey(event);
+        return;
+      }
       // Only keys typed into the text: buttons placed inside the editor (a task's actions) keep their own keys.
       if (!(event.target instanceof HTMLElement) || !event.target.closest(".editable")) return;
       const selection = sync();
@@ -945,6 +973,10 @@ export function PageEditor({
         editor.deleteForward();
       } else if (event.key === "Tab") {
         editor.tab(event.shiftKey);
+      } else if (event.key === "Escape" && selection.blockId !== editor.state.rootId) {
+        // A link card open over the text closes first.
+        if (linkCardRef.current) setLinkCard(null);
+        else editor.selectBlock(selection.blockId);
       } else if (mod && key === "a" && selection.blockId !== editor.state.rootId) {
         // The block's text first; once it's all selected, every block of the page.
         const whole = Math.min(selection.anchor, selection.focus) === 0 && Math.max(selection.anchor, selection.focus) === length;
@@ -1082,7 +1114,7 @@ export function PageEditor({
     /** Pastes the clipboard as blocks: our own copies first, then HTML, then plain text read as Markdown. */
     const onPaste = (event: ClipboardEvent) => {
       const data = event.clipboardData;
-      if (!data || composing.current || !sync()) return;
+      if (!data || composing.current || (!editor.blocks && !sync())) return;
       let markdown = data.getData(APP_FORMAT);
       const html = markdown ? "" : data.getData("text/html");
       if (html) markdown = htmlToMarkdown(new DOMParser().parseFromString(html, "text/html").body);
@@ -1175,6 +1207,14 @@ export function PageEditor({
     const onPointerUp = () => {
       dragFrom = null;
     };
+    /** A click outside the editor ends a block selection; menus opened from the editor keep it. */
+    const onDocumentPointerDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement;
+      if (editor.blocks && !root.contains(target) && !target.closest?.('[role="menu"], [role="presentation"]')) {
+        editor.selectBlocks(null);
+      }
+    };
+
     /** Shift+click in another block selects from the selection's anchor to there. */
     const onMouseDown = (event: MouseEvent) => {
       if (!event.shiftKey || event.button !== 0 || !(event.target as HTMLElement).closest?.(".editable")) return;
@@ -1199,6 +1239,7 @@ export function PageEditor({
     root.addEventListener("pointerdown", onPointerDown);
     root.addEventListener("mousedown", onMouseDown);
     document.addEventListener("pointermove", onPointerMove);
+    document.addEventListener("pointerdown", onDocumentPointerDown);
     document.addEventListener("pointerup", onPointerUp);
     root.addEventListener("keydown", onKeyDown);
     root.addEventListener("compositionstart", onCompositionStart);
@@ -1218,6 +1259,7 @@ export function PageEditor({
       root.removeEventListener("pointerdown", onPointerDown);
       root.removeEventListener("mousedown", onMouseDown);
       document.removeEventListener("pointermove", onPointerMove);
+      document.removeEventListener("pointerdown", onDocumentPointerDown);
       document.removeEventListener("pointerup", onPointerUp);
       root.removeEventListener("keydown", onKeyDown);
       root.removeEventListener("compositionstart", onCompositionStart);
@@ -1277,6 +1319,14 @@ export function PageEditor({
   );
 
   const { state, closed } = editor;
+  const selectedRoots = editor.selectedRoots();
+  // A new value only when the selection changes, so blocks re-render only then.
+  const selectedKey = selectedRoots.join(" ");
+  const handles = !draft && page.surface !== "comment";
+  const blockSelection = useMemo(
+    () => ({ selected: new Set(selectedKey ? selectedKey.split(" ") : []), handles }),
+    [selectedKey, handles],
+  );
   const statusText = (
     <span aria-live="polite">
       <Typography variant="caption" color={status === "failed" || status === "retrying" ? "error" : "text.secondary"}>
@@ -1289,7 +1339,18 @@ export function PageEditor({
   return (
     <MentionTargetsContext.Provider value={mentionTargets}>
       <SuggestionsContext.Provider value={{ ...suggestions, busy: deciding }}>
-        <div className="page-editor" ref={rootRef} style={{ "--editor-link": linkColor } as CSSProperties}>
+        <BlockSelectionContext.Provider value={blockSelection}>
+        <div
+          className="page-editor"
+          ref={rootRef}
+          tabIndex={-1}
+          role="group"
+          aria-label="Page content"
+          style={{ "--editor-link": linkColor } as CSSProperties}
+        >
+          <span className="visually-hidden" aria-live="polite">
+            {selectedRoots.length === 0 ? "" : selectedRoots.length === 1 ? "1 block selected" : `${selectedRoots.length} blocks selected`}
+          </span>
           {/* A draft has nothing to save, so no saving indicator. */}
           {!draft && (statusSlot ? createPortal(statusText, statusSlot) : <div className="editor-status">{statusText}</div>)}
           {error && (
@@ -1444,6 +1505,7 @@ export function PageEditor({
             </Dialog>
           )}
         </div>
+        </BlockSelectionContext.Provider>
       </SuggestionsContext.Provider>
     </MentionTargetsContext.Provider>
   );
