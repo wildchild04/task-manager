@@ -12,19 +12,30 @@ A stdio [MCP](https://modelcontextprotocol.io) server that lets AI agents work t
 
    Generate one with `node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"`, then restart the app. The agent API is off while `AGENT_TOKEN` is unset.
 
-2. Register the server with the agent. For Claude Code, from any directory:
+2. Install the server: from the repo, `just install-mcp`. It bundles the server into one file, `~/.local/share/notion-tasks-mcp/server.mjs` (no `node_modules` needed), and installs the launcher `~/.local/bin/notion-tasks-mcp`. Run it again after changing `mcp/`.
+
+3. Make a profile per app you talk to, `~/.config/notion-tasks-mcp/<profile>.env` (keep it private: `chmod 600`):
 
    ```sh
-   claude mcp add notion-tasks \
-     -e APP_URL=http://localhost:5173 \
-     -e AGENT_TOKEN=<the same secret> \
-     -e AGENT_NAME=claude \
-     -- npx tsx /absolute/path/to/notion-task-manager/mcp/server.ts
+   APP_URL=https://home.example/task-manager
+   AGENT_TOKEN=<the same secret>
+   AGENT_NAME=claude
+   # Only for a self-signed certificate:
+   NODE_EXTRA_CA_CERTS=/home/me/.config/homelab/caddy-root.crt
    ```
 
-   `APP_URL` is the app's address including its base path when it's served under one (e.g. `https://home.example/task-manager`). `AGENT_NAME` is how the agent appears in task history and comments. Give each agent its own name; a task an agent starts is held by that agent until it's completed, paused or returned.
+   `APP_URL` is the app's address including its base path when it's served under one. `AGENT_NAME` is how the agent appears in task history and comments. Give each agent its own name; a task an agent starts is held by that agent until it's completed, paused or returned. Variables already set in the environment win over the profile.
 
-Run it by hand with `npm run mcp` (the three variables must be set).
+4. Register it with the agent. For Claude Code, from any directory:
+
+   ```sh
+   claude mcp add notion-tasks -s user -- ~/.local/bin/notion-tasks-mcp homelab
+   claude mcp add notion-tasks-dev -s user -- ~/.local/bin/notion-tasks-mcp dev
+   ```
+
+   No secrets end up in the agent's configuration. Reconnect the server (`/mcp`) after reinstalling.
+
+To run from the source instead (while working on `mcp/`): `npm run mcp`, with the three variables set.
 
 ## Tools
 

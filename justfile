@@ -43,6 +43,20 @@ docker-down:
 docker-logs:
   {{docker_compose}} logs -f app
 
+# Bundle the agent MCP server into one file and install the `notion-tasks-mcp` launcher (see mcp/README.md).
+install-mcp:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  data="${XDG_DATA_HOME:-$HOME/.local/share}/notion-tasks-mcp"
+  bin="$HOME/.local/bin"
+  mkdir -p "$data" "$bin"
+  npx esbuild mcp/server.ts --bundle --platform=node --format=esm --target=node20 \
+    --outfile="$data/server.mjs" --log-level=warning
+  git rev-parse --short HEAD > "$data/VERSION"
+  install -m 755 mcp/notion-tasks-mcp.sh "$bin/notion-tasks-mcp"
+  echo "Installed $bin/notion-tasks-mcp, server $(cat "$data/VERSION") in $data"
+  echo "Profiles: ${XDG_CONFIG_HOME:-$HOME/.config}/notion-tasks-mcp/<name>.env (APP_URL, AGENT_TOKEN, AGENT_NAME)"
+
 # Ensure an AGENT_TOKEN exists in .env (generates one on first run; never overwrites).
 # Run it where `just docker-redeploy` runs: compose reads .env for interpolation.
 agent-token:
