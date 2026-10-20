@@ -1,8 +1,8 @@
 ## 1. Turn into
 
-- [ ] 1.1 `commands.ts`: `changeType` taken out of `slashCommand` (Code without marks, children moved out); `turnInto(state, ids, change)` over several blocks on a working state, skipping non-text blocks, cells and the title; `Editor.turnInto(change)` for the caret's block, a text range's text blocks, or the selected roots, keeping the selection; tests for the spec scenarios
-- [ ] 1.2 Handle menu: `HandleMenuItem.items` reopening the menu with the types, the shared type checked; "Turn into" first, disabled when no selected block has text; focus back to the editor after
-- [ ] 1.3 `page-editor.tsx`: Cmd/Ctrl+Shift+0–8 by `event.code`, with the caret, over a range and in block mode
+- [x] 1.1 `commands.ts`: `changeType` taken out of `slashCommand` (Code without marks, children moved out); `turnInto(state, ids, change)` over several blocks on a working state, skipping non-text blocks, cells and the title; `Editor.turnInto(change)` for the caret's block, a text range's text blocks, or the selected roots, keeping the selection; tests for the spec scenarios
+- [x] 1.2 Handle menu: `HandleMenuItem.items` reopening the menu with the types, the shared type checked; "Turn into" first, disabled when no selected block has text; focus back to the editor after
+- [x] 1.3 `page-editor.tsx`: Cmd/Ctrl+Shift+0–8 by `event.code`, with the caret, over a range and in block mode
 
 ## 2. Sub-pages
 

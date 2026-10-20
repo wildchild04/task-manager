@@ -16,7 +16,8 @@ import { useBlocker, useNavigate, useRevalidator } from "react-router";
 
 import { fromMarkdown, type MarkdownReader, type MarkdownWriter, toMarkdown } from "~/domain/blocks/markdown";
 import type { Operation } from "~/domain/blocks/types";
-import { behaviorOf, matchSlashCommands, type SlashCommand } from "~/editor/block-types";
+import { behaviorOf, matchSlashCommands, SLASH_COMMANDS, type SlashCommand, type TypeChange } from "~/editor/block-types";
+import { canTurnInto } from "~/editor/commands";
 import { Editor } from "~/editor/editor";
 import {
   caret,
@@ -59,10 +60,28 @@ import {
 } from "./dom-caret";
 import { APP_FORMAT, htmlToMarkdown } from "./clipboard";
 import { dragBlocks } from "./block-drag";
-import { BlockSelectionContext, EditableText, EditorBlocks, type HandleActions } from "./editor-blocks";
+import { BlockSelectionContext, EditableText, EditorBlocks, type HandleActions, type HandleMenuItem } from "./editor-blocks";
 import { withBase, withoutBase } from "../lib/base-path";
 
 const SLASH_MENU_ID = "slash-menu";
+
+/** Cmd/Ctrl+Shift+0–8 turn blocks into these, by the digit's key code (Shift turns the digit into a symbol that differs by layout). */
+const TURN_INTO_KEYS: Readonly<Record<string, string>> = {
+  Digit0: "text",
+  Digit1: "heading-1",
+  Digit2: "heading-2",
+  Digit3: "heading-3",
+  Digit4: "todo",
+  Digit5: "bulleted",
+  Digit6: "numbered",
+  Digit7: "toggle",
+  Digit8: "code",
+};
+
+/** The types "Turn into" offers: the slash menu's type changes, in its order. */
+const TURN_INTO = SLASH_COMMANDS.flatMap((command) =>
+  typeof command.action === "object" ? [{ value: command.value, label: command.label, action: command.action }] : [],
+);
 
 const STATUS_TEXT: Record<SaveStatus, string> = {
   saved: "Saved",
@@ -883,8 +902,20 @@ export function PageEditor({
       return event.key === "Tab" || (mod && ["b", "i", "u", "e", "k"].includes(event.key.toLowerCase()));
     };
 
+    /** Cmd/Ctrl+Shift+0–8: turns the caret's block, the blocks a range touches, or the selected blocks into a type. */
+    const turnIntoKey = (event: KeyboardEvent): boolean => {
+      const value = TURN_INTO_KEYS[event.code];
+      const type = value && TURN_INTO.find((t) => t.value === value);
+      if (!type || !(event.metaKey || event.ctrlKey) || !event.shiftKey || event.altKey) return false;
+      event.preventDefault();
+      editor.turnInto(type.action);
+      edited();
+      return true;
+    };
+
     /** Keys while whole blocks are selected (focus is on the editor itself). */
     const onBlocksKey = (event: KeyboardEvent) => {
+      if (turnIntoKey(event)) return;
       const mod = event.metaKey || event.ctrlKey;
       const key = event.key.toLowerCase();
       const vertical = event.key === "ArrowUp" || event.key === "ArrowDown";
@@ -957,6 +988,10 @@ export function PageEditor({
       }
       if (event.shiftKey && !mod && !event.altKey && event.key.startsWith("Arrow") && extendSelection(event.key)) {
         event.preventDefault();
+        return;
+      }
+      if (turnIntoKey(event)) {
+        refreshSlash();
         return;
       }
       if (editor.range && onRangeKey(event, editor.range)) {
@@ -1332,6 +1367,27 @@ export function PageEditor({
       command();
       restoreSelection.current = true;
     };
+    /** "Turn into" and its list of types, the type every changeable selected block shares checked. */
+    const turnIntoItem = (): HandleMenuItem => {
+      const targets = editor.turnIntoTargets().filter((id) => canTurnInto(editor.state, id));
+      const shared = (change: TypeChange) =>
+        targets.length > 0 &&
+        targets.every((id) => {
+          const block = getBlock(editor.state, id);
+          return block.type === change.type && (change.type !== "heading" || block.props.level === change.props.level);
+        });
+      return {
+        value: "turn-into",
+        label: "Turn into",
+        disabled: targets.length === 0,
+        onClick: () => {},
+        items: TURN_INTO.map(({ value, label, action }) => ({
+          value,
+          label: `${shared(action) ? "✓ " : ""}${label}`,
+          onClick: run(() => editor.turnInto(action)),
+        })),
+      };
+    };
     return {
       select: (id, extend) => {
         if (extend) editor.extendBlocks(id);
@@ -1339,6 +1395,7 @@ export function PageEditor({
         restoreSelection.current = true;
       },
       menu: () => [
+        turnIntoItem(),
         { value: "delete", label: "Delete", disabled: !editor.canActOnBlocks("delete"), onClick: run(() => editor.deleteBlocks()) },
         { value: "duplicate", label: "Duplicate", disabled: !editor.canActOnBlocks("duplicate"), onClick: run(() => editor.duplicateBlocks()) },
         { value: "up", label: "Move up", disabled: !editor.canActOnBlocks(-1), onClick: run(() => editor.moveBlocks(-1)) },

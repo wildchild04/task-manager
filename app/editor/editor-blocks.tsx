@@ -18,8 +18,8 @@ import type { EditorBlock, EditorState } from "~/editor/editor-state";
 import { cellPosition } from "~/editor/tables";
 import { renderRichText } from "./dom-caret";
 
-/** A command in a block's handle menu. */
-export type HandleMenuItem = { value: string; label: string; disabled?: boolean; onClick: () => void };
+/** A command in a block's handle menu; with `items`, choosing it opens those instead (a submenu). */
+export type HandleMenuItem = { value: string; label: string; disabled?: boolean; onClick: () => void; items?: HandleMenuItem[] };
 
 /** What a block's handle does, provided by the page editor. */
 export type HandleActions = {
@@ -83,7 +83,10 @@ function BlockHandle({ id, actions }: { id: string; actions: HandleActions }) {
           // The menu hands focus back to the handle as it closes; the editor takes it back after.
           requestAnimationFrame(actions.refocus);
         }}
-        onSelect={() => {
+        onSelect={(value) => {
+          const chosen = menu?.items.find((item) => item.value === value);
+          // A submenu opens in the menu's place, at the same handle.
+          if (chosen?.items && menu) return setMenu({ anchor: menu.anchor, items: chosen.items });
           setMenu(null);
           requestAnimationFrame(actions.refocus);
         }}

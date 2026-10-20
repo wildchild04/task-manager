@@ -383,6 +383,44 @@ export function toggleTodo(state: EditorState, id: string, selection: Selection)
 // ----- Slash commands -----
 
 /**
+ * Turns a block into another type, with `content` as its text. Code keeps the
+ * text as plain text and can't hold children: they move out to follow it.
+ */
+function changeType(state: EditorState, id: string, change: TypeChange, content: RichText): Operation[] {
+  const { type, props } = change;
+  if (type !== "code") return [{ op: "update", id, type, props, content }];
+  const block = getBlock(state, id);
+  const ops: Operation[] = [{ op: "update", id, type, props, content: text.withoutFormatting(content) }];
+  let afterId = id;
+  for (const child of block.children) {
+    ops.push({ op: "move", id: child, parentId: block.parentId!, afterId });
+    afterId = child;
+  }
+  return ops;
+}
+
+/** Whether "Turn into" can change a block: text blocks other than table cells and the title. */
+export const canTurnInto = (state: EditorState, id: string): boolean =>
+  id !== state.rootId && isText(state, id) && getBlock(state, id).type !== "table_cell";
+
+/**
+ * Turns blocks into a type, in order, as one batch: each block's change
+ * applies to the state the earlier ones left. Blocks "Turn into" can't change
+ * are skipped; `null` when none changes.
+ */
+export function turnInto(state: EditorState, ids: readonly string[], change: TypeChange, selection: Selection): CommandResult | null {
+  const ops: Operation[] = [];
+  let working = state;
+  for (const id of ids) {
+    if (!canTurnInto(working, id)) continue;
+    const changed = changeType(working, id, change, getBlock(working, id).content);
+    ops.push(...changed);
+    working = applyOps(working, changed);
+  }
+  return ops.length > 0 ? { ops, selection } : null;
+}
+
+/**
  * Applies a slash command typed in `blockId` as `/query` from offset `start`
  * to `end`: removes that text, then turns the block into the command's type,
  * or adds a divider (replacing the block when it is left empty).
@@ -405,16 +443,9 @@ export function slashCommand(
     return { ops: [...table.ops, ...around], selection: caret(table.firstCell, 0) };
   }
   if (command.action !== "divider") {
-    const { type, props } = command.action;
-    if (type !== "code") return { ops: [{ op: "update", id: blockId, type, props, content }], selection: caret(blockId, start) };
-    // Code keeps the text as plain text, and can't hold children: they move out to follow it.
-    const ops: Operation[] = [{ op: "update", id: blockId, type, props, content: text.withoutFormatting(content) }];
-    let afterId = blockId;
-    for (const child of block.children) {
-      ops.push({ op: "move", id: child, parentId: block.parentId!, afterId });
-      afterId = child;
-    }
-    return { ops, selection: caret(blockId, Math.min(start, text.length(text.withoutFormatting(content)))) };
+    const ops = changeType(state, blockId, command.action, content);
+    const kept = command.action.type === "code" ? text.withoutFormatting(content) : content;
+    return { ops, selection: caret(blockId, Math.min(start, text.length(kept))) };
   }
   const divider = context.newId();
   if (replaceable) {

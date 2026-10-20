@@ -288,6 +288,51 @@ describe("selections beyond one block", () => {
     });
   });
 
+  describe("turning blocks into another type", () => {
+    const bulleted = { type: "bulleted_list_item", props: {} } as const;
+
+    it("turns selected blocks into a list in one step, keeping the selection", () => {
+      seed([p("a", "one"), p("b", "two"), p("c", "three")]);
+      editor.selectBlocks({ anchor: "a", focus: "c" });
+      editor.turnInto(bulleted);
+      expect(outline()).toEqual(["bulleted_list_item:one", "bulleted_list_item:two", "bulleted_list_item:three"]);
+      expect(editor.blocks).toEqual({ anchor: "a", focus: "c" });
+      editor.undo();
+      expect(outline()).toEqual(["paragraph:one", "paragraph:two", "paragraph:three"]);
+    });
+
+    it("turns the caret's block, keeping the caret", () => {
+      seed([p("a", "Intro")]);
+      editor.setSelection(caret("a", 2));
+      editor.turnInto({ type: "heading", props: { level: 2 } });
+      expect(outline()).toEqual(["heading:Intro"]);
+      expect(editor.state.blocks.a!.props).toEqual({ level: 2 });
+      expect(editor.selection).toEqual(caret("a", 2));
+    });
+
+    it("skips blocks without text, and changes only the selected blocks, not their children", () => {
+      seed([p("a", "one", [p("c", "child")]), { id: "d", type: "divider" }, p("b", "two")]);
+      editor.selectBlocks({ anchor: "a", focus: "b" });
+      editor.turnInto({ type: "todo", props: { checked: false } });
+      expect(outline()).toEqual(["todo:one", "  paragraph:child", "divider:", "todo:two"]);
+    });
+
+    it("turns the text blocks a range touches, keeping the range", () => {
+      seed([p("a", "Hello"), p("b", "world")]);
+      range("a", 2, "b", 3);
+      editor.turnInto({ type: "heading", props: { level: 1 } });
+      expect(outline()).toEqual(["heading:Hello", "heading:world"]);
+      expect(editor.range).toEqual({ anchor: { blockId: "a", offset: 2 }, focus: { blockId: "b", offset: 3 } });
+    });
+
+    it("moves children out of blocks turned into code", () => {
+      seed([p("a", "one", [p("c", "child")]), p("b", "two")]);
+      editor.selectBlocks({ anchor: "a", focus: "b" });
+      editor.turnInto({ type: "code", props: { language: "" } });
+      expect(outline()).toEqual(["code:one", "paragraph:child", "code:two"]);
+    });
+  });
+
   describe("clipboard", () => {
     it("copies selected blocks whole, with their children", () => {
       seed([p("a", "Intro"), li("l1", "one"), toggle("g", "Toggle", [p("c", "inside")])]);

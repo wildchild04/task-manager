@@ -1,7 +1,7 @@
 import type { MarkdownBlock } from "~/domain/blocks/markdown";
 import { type CalloutTone, MENTION_TEXT, type Operation, type SimpleMark } from "~/domain/blocks/types";
 
-import { behaviorOf, type SlashCommand } from "./block-types";
+import { behaviorOf, type SlashCommand, type TypeChange } from "./block-types";
 import { pasteBlocks, pasteOverBlocks } from "./clipboard";
 import * as commands from "./commands";
 import type { CommandResult, DeleteUnit } from "./commands";
@@ -422,6 +422,21 @@ export class Editor {
 
   setLink(href: string | null): boolean {
     return this.run(commands.setLink(this.state, this.selection, href));
+  }
+
+  /** The blocks "Turn into" acts on: the selected blocks, the text blocks a text range touches, or the caret's block. */
+  turnIntoTargets(): string[] {
+    if (this.blocks) return this.selectedRoots();
+    if (!this.range) return [this.selection.blockId];
+    const order = documentOrder(this.state);
+    const ends = [this.range.anchor.blockId, this.range.focus.blockId].map((id) => order.indexOf(id)).sort((a, b) => a - b);
+    return order.slice(ends[0], ends[1]! + 1).filter((id) => behaviorOf(getBlock(this.state, id).type).text);
+  }
+
+  /** Turns blocks into a type (see `turnIntoTargets`), keeping what's selected. */
+  turnInto(change: TypeChange): boolean {
+    const result = commands.turnInto(this.state, this.turnIntoTargets(), change, this.selection);
+    return this.run(result && { ...result, range: this.range ?? undefined, blocks: this.blocks ?? undefined });
   }
 
   /** Applies a slash command typed as `/query` from `start` to the caret in the current block. */
