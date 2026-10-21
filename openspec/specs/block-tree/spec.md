@@ -15,7 +15,7 @@ Every block SHALL have a string ID that is unique across the workspace and never
 - **THEN** the operation is rejected with a duplicate-ID error
 
 ### Requirement: Block types
-A block's type SHALL be one of: `page`, `paragraph`, `heading`, `todo`, `bulleted_list_item`, `numbered_list_item`, `toggle`, `quote`, `divider`, `reference`, `comment`, `suggestion`, `table`, `table_row`, `table_cell`, `code`, `callout`. Each type SHALL define a schema for its props, and props that do not match the schema SHALL be rejected. Type-specific props are:
+A block's type SHALL be one of: `page`, `paragraph`, `heading`, `todo`, `bulleted_list_item`, `numbered_list_item`, `toggle`, `quote`, `divider`, `reference`, `comment`, `suggestion`, `table`, `table_row`, `table_cell`, `code`, `callout`, `image`. Each type SHALL define a schema for its props, and props that do not match the schema SHALL be rejected. Type-specific props are:
 - `heading`: `level` of 1 to 6
 - `todo`: `checked` boolean
 - `reference`: `targetId` (see the block-references capability)
@@ -23,9 +23,10 @@ A block's type SHALL be one of: `page`, `paragraph`, `heading`, `todo`, `bullete
 - `table`: `headerRow` boolean (default true) and `headerColumn` boolean (default false)
 - `code`: `language`, a string of at most 32 characters (default empty, meaning plain text)
 - `callout`: `emoji`, a single grapheme (default "💡"), and `tone` of `default`, `info`, `success`, `warning` or `error` (default `default`)
+- `image`: exactly one source, either `contentId` (a stored item's ID, see the content-storage capability) or `url` (an `http:` or `https:` URL of at most 2,048 characters), and `alt`, a string of at most 1,000 characters (default empty)
 - all other types, including `comment`, `table_row` and `table_cell`: no props
 
-A `suggestion` SHALL have no content, and SHALL NOT have `page`, `comment` or `suggestion` blocks among its descendants. A block SHALL NOT be turned into or out of `table`, `table_row` or `table_cell`.
+A `suggestion` SHALL have no content, and SHALL NOT have `page`, `comment` or `suggestion` blocks among its descendants. An `image` SHALL have no content and no children. A block SHALL NOT be turned into or out of `table`, `table_row` or `table_cell`.
 
 #### Scenario: Valid props are accepted
 - **WHEN** a `heading` block is inserted with `{ level: 5 }`
@@ -46,6 +47,10 @@ A `suggestion` SHALL have no content, and SHALL NOT have `page`, `comment` or `s
 #### Scenario: Callout defaults
 - **WHEN** a `callout` is inserted without props
 - **THEN** it is stored with `{ emoji: "💡", tone: "default" }`
+
+#### Scenario: An image needs one source
+- **WHEN** an `image` block is inserted with both `contentId` and `url`, or with neither, or with a `url` of `javascript:alert(1)`
+- **THEN** the operation is rejected with a validation error
 
 ### Requirement: Rich-text content
 Text-bearing types (`page`, `paragraph`, `heading`, `todo`, `bulleted_list_item`, `numbered_list_item`, `toggle`, `quote`, `table_cell`, `code`, `callout`) SHALL store content as an ordered list of spans. A text span has a `text` string and an optional set of marks (`bold`, `italic`, `underline`, `strikethrough`, `code`, `link` with an `href`). A mention span points at a page by its ID (`mention: { pageId }`), holds exactly one placeholder character (U+FFFC) as its text, and may carry marks other than `link`. A mention's page SHALL exist when the span is written; it MAY be deleted later, after which the mention is missing. Page titles (the content of a `page`) SHALL NOT contain mentions. The content of a `code` block SHALL be plain text: spans without marks or mentions. For a `page`, the content is its title. `divider`, `reference`, `comment`, `table` and `table_row` blocks SHALL have no content.
