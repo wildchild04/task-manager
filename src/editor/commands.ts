@@ -1,6 +1,8 @@
 import {
   type BlockType,
   type CalloutTone,
+  type ImageProps,
+  MAX_IMAGE_ALT,
   type NewBlock,
   type Operation,
   type RichText,
@@ -282,6 +284,7 @@ function backspaceAtStart(state: EditorState, id: string, context: CommandContex
   const stepOver =
     before.type === "page" ||
     before.type === "suggestion" ||
+    before.type === "image" ||
     isTablePart(before.type) ||
     (before.type === "code" && block.children.length > 0);
   if (stepOver) {
@@ -301,7 +304,7 @@ function deleteAtEnd(state: EditorState, id: string, context: CommandContext): C
   const after = getBlock(state, next);
   const length = text.length(current.content);
   if (after.type === "reference" || after.type === "divider") return { ops: [{ op: "delete", id: next }], selection: caret(id, length) };
-  if (after.type === "page" || after.type === "suggestion" || isTablePart(after.type)) return null;
+  if (after.type === "page" || after.type === "suggestion" || after.type === "image" || isTablePart(after.type)) return null;
   if (current.type === "code" && after.children.length > 0) return null;
   return merge(state, id, next);
 }
@@ -549,6 +552,51 @@ export function appendParagraph(state: EditorState, context: CommandContext): Co
 export function setCodeLanguage(state: EditorState, id: string, language: string, selection: Selection): CommandResult | null {
   if (getBlock(state, id).type !== "code") return null;
   return { ops: [{ op: "update", id, props: { language: language.trim().slice(0, 32) } }], selection };
+}
+
+// ----- Images -----
+
+/**
+ * Inserts uploaded or external images after the block `at` (a table as a
+ * whole; first on the page for the title), in place of it when it's an empty
+ * paragraph. The caret goes to the text block that follows them, an empty
+ * paragraph added when there's none.
+ */
+export function insertImages(
+  state: EditorState,
+  at: string,
+  images: readonly ImageProps[],
+  context: CommandContext,
+): CommandResult | null {
+  if (images.length === 0) return null;
+  const onTitle = at === state.rootId;
+  const block = getBlock(state, onTitle ? at : selectableOf(state, at));
+  const parentId = onTitle ? state.rootId : block.parentId!;
+  const siblings = getBlock(state, parentId).children;
+  const replaced =
+    !onTitle && block.type === "paragraph" && text.length(block.content) === 0 && block.children.length === 0;
+  const ops: Operation[] = [];
+  let afterId: string | null = onTitle ? null : block.id;
+  for (const props of images) {
+    const id = context.newId();
+    ops.push({ op: "insert", block: { id, type: "image", props }, parentId, afterId });
+    afterId = id;
+  }
+  if (replaced) ops.push({ op: "delete", id: block.id });
+  const next = onTitle ? siblings[0] : siblings[siblings.indexOf(block.id) + 1];
+  if (next !== undefined && isText(state, next)) return { ops, selection: caret(next, 0) };
+  const paragraph = context.newId();
+  ops.push({ op: "insert", block: { id: paragraph, type: "paragraph" }, parentId, afterId });
+  return { ops, selection: caret(paragraph, 0) };
+}
+
+/** Sets an image's alt text. */
+export function setImageAlt(state: EditorState, id: string, alt: string, selection: Selection): CommandResult | null {
+  const block = getBlock(state, id);
+  if (block.type !== "image") return null;
+  const value = alt.trim().slice(0, MAX_IMAGE_ALT);
+  if (value === ((block.props as { alt?: string }).alt ?? "")) return null;
+  return { ops: [{ op: "update", id, props: { ...block.props, alt: value } }], selection };
 }
 
 /** Changes a callout's emoji, tone, or both. */

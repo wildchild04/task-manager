@@ -324,6 +324,67 @@ describe("editor", () => {
     });
   });
 
+  describe("images", () => {
+    const SHOT = { contentId: `${"ab".repeat(32)}.png`, alt: "" };
+    const CHART = { url: "https://x.dev/chart.png", alt: "Chart" };
+    const image = (id: string, props: Record<string, unknown> = SHOT): Seed => ({ id, type: "image", props });
+
+    it("replaces an empty paragraph, with an empty paragraph after holding the caret", () => {
+      seed([p("a", "")]);
+      at("a", 0);
+      expect(editor.insertImages("a", [SHOT])).toBe(true);
+      expect(outline()).toEqual(["image:", "paragraph:"]);
+      expect(editor.selection).toEqual(caret("n2", 0));
+      expectInSync();
+    });
+
+    it("follows a paragraph with text, in order, the caret going to the text block after; one undo removes them", () => {
+      seed([p("a", "See below"), p("b", "After")]);
+      at("a", 3);
+      editor.insertImages("a", [SHOT, CHART]);
+      expect(outline()).toEqual(["paragraph:See below", "image:", "image:", "paragraph:After"]);
+      expect(services.blocks.getChildren("page")[2]).toMatchObject({ props: CHART });
+      expect(editor.selection).toEqual(caret("b", 0));
+      editor.undo();
+      expect(outline()).toEqual(["paragraph:See below", "paragraph:After"]);
+      expectInSync();
+    });
+
+    it("goes first on the page from the title", () => {
+      seed([p("a", "x")]);
+      editor.insertImages("page", [CHART]);
+      expect(outline()).toEqual(["image:", "paragraph:x"]);
+      expect(editor.selection).toEqual(caret("a", 0));
+    });
+
+    it("steps over an image with Backspace and Delete, keeping it", () => {
+      seed([p("a", "Before"), image("i"), p("b", "After")]);
+      at("b", 0);
+      editor.deleteBackward();
+      expect(editor.selection).toEqual(caret("a", 6));
+      editor.deleteForward();
+      expect(outline()).toEqual(["paragraph:Before", "image:", "paragraph:After"]);
+      expect(documentOrder(editor.state)).toEqual(["a", "i", "b"]);
+    });
+
+    it("doesn't nest under an image", () => {
+      seed([image("i"), p("a", "x")]);
+      at("a", 0);
+      expect(editor.indent()).toBe(false);
+    });
+
+    it("sets alt text as one undo step", () => {
+      seed([image("i", CHART), p("a", "")]);
+      at("a", 0);
+      expect(editor.setImageAlt("i", "  Server rack, front view ")).toBe(true);
+      expect(services.blocks.getBlock("i")!.props).toEqual({ url: CHART.url, alt: "Server rack, front view" });
+      expect(editor.setImageAlt("i", "Server rack, front view")).toBe(false);
+      editor.undo();
+      expect(services.blocks.getBlock("i")!.props).toEqual(CHART);
+      expectInSync();
+    });
+  });
+
   describe("tables", () => {
     const cell = (id: string, value = ""): Seed => ({ id, type: "table_cell", content: value ? [{ text: value }] : [] });
     /** T: a 2×2 table, rows r1 [a, b] and r2 [c, d], between paragraphs "Before" and "After". */

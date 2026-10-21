@@ -26,6 +26,14 @@ function render(blocks: ViewBlock[]) {
 }
 
 describe("block renderers", () => {
+  it("renders an image with its source and alt text, lazily", () => {
+    const html = render([{ ...content("i", "image", "", { contentId: "x.png", alt: "Error dialog" }), src: "/content/x.png" } as ViewBlock]);
+    expect(html).toContain('src="/content/x.png"');
+    expect(html).toContain('alt="Error dialog"');
+    expect(html).toContain('loading="lazy"');
+    expect(html).toContain("block-image");
+  });
+
   it("renders every block type", () => {
     const html = render([
       content("p", "paragraph", "para-text"),

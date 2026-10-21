@@ -1,5 +1,5 @@
 import type { MarkdownBlock } from "~/domain/blocks/markdown";
-import { type CalloutTone, MENTION_TEXT, type Operation, type SimpleMark } from "~/domain/blocks/types";
+import { type CalloutTone, type ImageProps, MENTION_TEXT, type Operation, type SimpleMark } from "~/domain/blocks/types";
 
 import { behaviorOf, type SlashCommand, type TypeChange } from "./block-types";
 import { pasteBlocks, pasteOverBlocks } from "./clipboard";
@@ -414,6 +414,18 @@ export class Editor {
 
   deleteTable(tableId: string): boolean {
     return this.run(tables.deleteTable(this.state, tableId, this.selection, this.closed));
+  }
+
+  // ----- Images -----
+
+  /** Inserts images after the block `at` (in place of an empty paragraph), as one step. */
+  insertImages(at: string, images: readonly ImageProps[]): boolean {
+    if (!(at in this.state.blocks)) at = this.selection.blockId;
+    return this.run(commands.insertImages(this.state, at, images, this.context));
+  }
+
+  setImageAlt(id: string, alt: string): boolean {
+    return this.run(commands.setImageAlt(this.state, id, alt, this.selection));
   }
 
   // ----- Code and callouts -----

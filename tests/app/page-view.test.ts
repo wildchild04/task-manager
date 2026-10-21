@@ -130,3 +130,19 @@ describe("buildPageView: tables", () => {
     expect(view.mentions).toEqual({ Q: { title: "Linked", href: "/pages/Q" } });
   });
 });
+
+describe("buildPageView: images", () => {
+  it("resolves an uploaded image's source through the content repository, and keeps an external URL", async () => {
+    const services = createInMemoryServices({ basePath: "/task-manager" });
+    const { id } = await services.content.put(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), "image/png");
+    services.blocks.apply([
+      { op: "insert", block: { id: "P", type: "page", content: text("Page") }, parentId: null },
+      { op: "insert", block: { id: "I1", type: "image", props: { contentId: id, alt: "Shot" } }, parentId: "P" },
+      { op: "insert", block: { id: "I2", type: "image", props: { url: "https://x.dev/a.png" } }, parentId: "P", afterId: "I1" },
+    ]);
+    expect(buildPageView(services.blocks, "P", undefined, services.content)!.blocks).toEqual([
+      { kind: "content", id: "I1", type: "image", props: { contentId: id, alt: "Shot" }, content: [], children: [], src: `/task-manager/content/${id}` },
+      { kind: "content", id: "I2", type: "image", props: { url: "https://x.dev/a.png", alt: "" }, content: [], children: [], src: "https://x.dev/a.png" },
+    ]);
+  });
+});

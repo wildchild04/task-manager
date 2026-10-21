@@ -203,6 +203,16 @@ describe("selections beyond one block", () => {
       expect(outline()).toEqual(["paragraph:"]);
     });
 
+    it("duplicates an image, the copy showing the same stored item", () => {
+      const props = { contentId: `${"cd".repeat(32)}.jpg`, alt: "Shot" };
+      seed([{ id: "i", type: "image", props }, p("b", "B")]);
+      editor.selectBlock("i");
+      editor.duplicateBlocks();
+      const copy = editor.state.blocks.page!.children[1]!;
+      expect(copy).not.toBe("i");
+      expect(services.blocks.getBlock(copy)).toMatchObject({ type: "image", props });
+    });
+
     it("duplicates a toggle with its children, selecting the copy", () => {
       seed([toggle("g", "G", [p("c1", "one"), subPage("s", "Sub"), p("c2", "two")]), p("b", "B")]);
       editor.selectBlock("g");

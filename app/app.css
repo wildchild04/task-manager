@@ -23,6 +23,27 @@ body {
   background: rgba(127, 127, 127, 0.12);
 }
 
+/* An image: centred, as wide as it is up to the page's width; a placeholder's height while it loads or fails. */
+.block-image {
+  display: flex;
+  justify-content: center;
+  margin: 4px 0;
+}
+
+.block-image figure {
+  max-width: 100%;
+  min-width: min(100%, 240px);
+}
+
+.block-image figure > div {
+  min-height: 2.5rem;
+}
+
+.block-image img {
+  max-width: 100%;
+  height: auto !important;
+}
+
 /* ----- Block editor ----- */
 
 .page-editor {

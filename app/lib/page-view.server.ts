@@ -1,12 +1,21 @@
 import type { BlockService } from "~/domain/blocks/block.service";
 import { plainText } from "~/domain/blocks/text";
-import type { Block, RichText, TreeNode } from "~/domain/blocks/types";
+import type { Block, ImageProps, RichText, TreeNode } from "~/domain/blocks/types";
+import type { ContentRepository } from "~/domain/content/content.repository";
 import type { ProjectService } from "~/domain/projects/project.service";
 import type { SuggestionService } from "~/domain/suggestions/suggestion.service";
 import { PROJECT_OWNER_KIND } from "~/domain/projects/types";
 import { TASK_OWNER_KIND } from "~/domain/tasks/types";
 
 import type { ContentBlockType, MentionTargets, PageView, ReferenceView, ViewBlock } from "../blocks/view-model";
+
+/** Where uploaded images are loaded from (the content repository). */
+export type ContentUrls = Pick<ContentRepository, "url">;
+
+/** The URL an image block's source loads from. */
+export function imageSrc(props: ImageProps, content: ContentUrls): string {
+  return "contentId" in props ? content.url(props.contentId) : props.url;
+}
 
 /** How deep references to blocks are expanded inside other references. */
 const MAX_REFERENCE_DEPTH = 5;
@@ -27,23 +36,33 @@ export function browsableScope(blocks: BlockService, block: Block): { projectId?
  * Returns `undefined` for unknown IDs, non-page blocks, and pages owned by
  * anything but a project (task bodies, comments).
  */
-export function buildPageView(blocks: BlockService, pageId: string, suggestions?: SuggestionService): PageView | undefined {
+export function buildPageView(
+  blocks: BlockService,
+  pageId: string,
+  suggestions?: SuggestionService,
+  content?: ContentUrls,
+): PageView | undefined {
   const page = blocks.getBlock(pageId);
   if (!page || page.type !== "page") return undefined;
   const scope = browsableScope(blocks, page);
   if (!scope) return undefined;
-  const view = buildTreeView(blocks, page, suggestions);
+  const view = buildTreeView(blocks, page, suggestions, content);
   return view && { ...view, ...scope };
 }
 
 /** Builds the view of any page, without checking who owns it (for a task's body on its overview). */
-export function buildBodyView(blocks: BlockService, pageId: string, suggestions?: SuggestionService): PageView | undefined {
+export function buildBodyView(
+  blocks: BlockService,
+  pageId: string,
+  suggestions?: SuggestionService,
+  content?: ContentUrls,
+): PageView | undefined {
   const page = blocks.getBlock(pageId);
-  return page?.type === "page" ? buildTreeView(blocks, page, suggestions) : undefined;
+  return page?.type === "page" ? buildTreeView(blocks, page, suggestions, content) : undefined;
 }
 
-function buildTreeView(blocks: BlockService, page: Block, suggestions?: SuggestionService): PageView | undefined {
-  const children = buildChildrenView(blocks, page.id, suggestions);
+function buildTreeView(blocks: BlockService, page: Block, suggestions?: SuggestionService, content?: ContentUrls): PageView | undefined {
+  const children = buildChildrenView(blocks, page.id, suggestions, content);
   return children && { id: page.id, title: page.content, blocks: children, mentions: mentionTargets(blocks, children) };
 }
 
@@ -82,15 +101,21 @@ export function mentionTargets(blocks: BlockService, views: readonly ViewBlock[]
 }
 
 /** A comment's content, rendered like page content. */
-export function buildCommentView(blocks: BlockService, bodyBlockId: string): ViewBlock[] {
-  return buildChildrenView(blocks, bodyBlockId) ?? [];
+export function buildCommentView(blocks: BlockService, bodyBlockId: string, content?: ContentUrls): ViewBlock[] {
+  return buildChildrenView(blocks, bodyBlockId, undefined, content) ?? [];
 }
 
 /**
  * The views of a root's children, with every reference resolved. Suggestions
- * come with their record (author, note, whether outdated) when `suggestions` is given.
+ * come with their record (author, note, whether outdated) when `suggestions` is given;
+ * uploaded images get their URL when `content` is.
  */
-function buildChildrenView(blocks: BlockService, rootId: string, suggestions?: SuggestionService): ViewBlock[] | undefined {
+function buildChildrenView(
+  blocks: BlockService,
+  rootId: string,
+  suggestions?: SuggestionService,
+  content?: ContentUrls,
+): ViewBlock[] | undefined {
   const tree = blocks.loadTree(rootId);
   if (!tree) return undefined;
 
@@ -152,6 +177,16 @@ function buildChildrenView(blocks: BlockService, rootId: string, suggestions?: S
               : (removed ?? null),
         };
       }
+      case "image":
+        return {
+          kind: "content",
+          id: block.id,
+          type: "image",
+          props: block.props,
+          content: [],
+          children: [],
+          ...("url" in block.props ? { src: block.props.url } : content ? { src: imageSrc(block.props, content) } : {}),
+        };
       default:
         return {
           kind: "content",

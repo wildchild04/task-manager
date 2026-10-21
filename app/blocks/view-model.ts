@@ -20,6 +20,8 @@ export type ViewBlock =
       props: Record<string, unknown>;
       content: RichText;
       children: ViewBlock[];
+      /** An image's source, resolved to the URL the browser loads it from. */
+      src?: string;
     }
   | { kind: "subpage"; id: string; title: RichText }
   | { kind: "reference"; id: string; target: ReferenceView }

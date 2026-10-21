@@ -9,11 +9,11 @@
 
 - [x] 2.1 `image` in the block types and props schema (one source, `http(s)` URL, alt length), a leaf without content; validation tests
 - [x] 2.2 Markdown: whole-line `![alt](src)` to image blocks (content URL to `contentId`, `http(s)` to `url`, else text with a warning; inline images warned), export with absolute content URLs through the reader; `htmlToMarkdown` for `<img>`; the Markdown guide; tests
-- [ ] 2.3 Read-only rendering: the view model's `src` from the content repository or URL; `Image` from the design system in `block-view.tsx`; tests
+- [x] 2.3 Read-only rendering: the view model's `src` from the content repository or URL; `Image` from the design system in `block-view.tsx`; tests
 
 ## 3. Editor
 
-- [ ] 3.1 Block behaviour: image as a non-text leaf the caret steps over (Backspace keeps it); `insertImages(at, images)` command (replacing an empty paragraph, caret after, one step) and `setImageAlt`; editor tests
+- [x] 3.1 Block behaviour: image as a non-text leaf the caret steps over (Backspace keeps it); `insertImages(at, images)` command (replacing an empty paragraph, caret after, one step) and `setImageAlt`; editor tests
 - [ ] 3.2 `app/editor/`: the image block (design-system `Image` in a `BlockFrame`), upload helper with progress count and per-file errors, slash command "Image" with a hidden file input, paste of image files, drop on the page, "Alt text…" in the handle menu with a dialog
 
 ## 4. Check

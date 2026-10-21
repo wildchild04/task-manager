@@ -8,6 +8,7 @@ import {
   Divider,
   DocumentTable,
   IconButton,
+  Image,
   Link,
   ReviewContainer,
   Stack,
@@ -30,6 +31,28 @@ export function PageLink({ id, title }: { id: string; title: RichTextValue }) {
       <Link component={RouterLink} to={`/pages/${id}`}>
         {plainText(title) || "Untitled"}
       </Link>
+    </div>
+  );
+}
+
+/**
+ * An image block's picture: as wide as it is, at most the page's width, never
+ * distorted. One that can't load shows the error state with its alt text.
+ */
+export function ImageFrame({ src, alt }: { src: string | undefined; alt: string }) {
+  return (
+    <div className="block-image">
+      {/* Keyed by its source, so a new image starts without the last one's error. */}
+      <Image
+        key={src}
+        src={src ?? ""}
+        alt={alt}
+        width="fit-content"
+        aspectRatio="auto"
+        fit="contain"
+        loading="lazy"
+        fallbackText={alt ? `Image unavailable: ${alt}` : "Image unavailable"}
+      />
     </div>
   );
 }
@@ -240,6 +263,12 @@ function ContentBlockView({ block }: { block: ContentBlock }) {
       return (
         <div className="editor-block">
           <Divider />
+        </div>
+      );
+    case "image":
+      return (
+        <div className="editor-block">
+          <ImageFrame src={block.src} alt={String(block.props.alt ?? "")} />
         </div>
       );
     case "bulleted_list_item":

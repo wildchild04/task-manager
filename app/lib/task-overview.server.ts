@@ -72,7 +72,7 @@ const COMMENTABLE = ["work", "chore"];
 
 /** A comment's content as views, with what its mentions show. */
 function commentContent(services: AppServices, bodyBlockId: string) {
-  const blocks = buildCommentView(services.blocks, bodyBlockId);
+  const blocks = buildCommentView(services.blocks, bodyBlockId, services.content);
   return { blocks, mentions: mentionTargets(services.blocks, blocks) };
 }
 
@@ -183,7 +183,7 @@ export function taskOverviewView(services: AppServices, taskId: string): TaskOve
       stateColor: stateColor(task.state),
     },
     project: { id: project.id, title: project.title || "Untitled", listSlug: slug, listTitle: TASK_LISTS[slug].title },
-    body: buildBodyView(services.blocks, task.bodyPageId, services.suggestions),
+    body: buildBodyView(services.blocks, task.bodyPageId, services.suggestions, services.content),
     ...(task.kind === "chore" ? { chore: choreView(services, task) } : {}),
     transitions,
     canStartUpdate: task.kind === "work" && task.state === "done",

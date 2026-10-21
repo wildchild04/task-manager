@@ -79,8 +79,8 @@ export function editablePage(services: AppServices, surface: EditSurface, id: st
   // A comment's root isn't a page, so its content is built as a comment body.
   const blocks =
     surface === "comment"
-      ? buildCommentView(services.blocks, target.rootId)
-      : buildBodyView(services.blocks, target.rootId, services.suggestions)?.blocks;
+      ? buildCommentView(services.blocks, target.rootId, services.content)
+      : buildBodyView(services.blocks, target.rootId, services.suggestions, services.content)?.blocks;
   const view = blocks && { blocks, mentions: mentionTargets(services.blocks, blocks) };
   return {
     surface,
