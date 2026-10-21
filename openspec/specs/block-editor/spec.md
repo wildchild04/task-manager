@@ -272,7 +272,7 @@ A mention SHALL behave as one character: the caret moves over it with one arrow 
 - **THEN** the browser opens the mentioned page in the app
 
 ### Requirement: Editing tables
-In a table cell, Tab SHALL move the caret to the start of the next cell in reading order, and in the last cell add a row and move into it; Shift+Tab SHALL move to the previous cell. Enter SHALL move to the cell below in the same column, and in the last row add a row and move into it; Shift+Enter SHALL insert a line break in the cell. ↑ on a cell's first line and ↓ on its last line SHALL move to the cell above or below in the same column, or, from the first or last row, to the text block before or after the table. ← at a cell's start and → at its end SHALL move to the previous or next cell in reading order. Backspace at a cell's start SHALL do nothing. Tab SHALL never nest blocks in a table, and blocks SHALL NOT be moved into a table or a row. A table SHALL offer adding a row at its bottom and a column at its right; each row and column SHALL offer inserting one before or after it, moving it, and deleting it; the table SHALL offer toggling its header row and header column and deleting itself. Each of these SHALL be one batch and one undo step, and SHALL be refused when it would leave the table without rows or columns.
+In a table cell, Tab SHALL move the caret to the start of the next cell in reading order, and in the last cell add a row and move into it; Shift+Tab SHALL move to the previous cell. Enter SHALL move to the cell below in the same column, and in the last row add a row and move into it; Shift+Enter SHALL insert a line break in the cell. ↑ on a cell's first line and ↓ on its last line SHALL move to the cell above or below in the same column, or, from the first or last row, to the text block before or after the table. ← at a cell's start and → at its end SHALL move to the previous or next cell in reading order. Backspace at a cell's start SHALL do nothing. Tab SHALL never nest blocks in a table, and blocks SHALL NOT be moved into a table or a row. A table SHALL offer adding a row at its bottom and a column at its right, with buttons labelled "+ Row" and "+ Column" under it, and a menu with inserting a row or column before or after, moving and deleting them, toggling its header row and header column, and deleting itself. The menu's row and column commands SHALL act on the row and column of the cell holding the caret, and that cell SHALL be marked while the menu is open; with the caret outside that table they SHALL be disabled, under a note to click a cell first. Using a table's buttons or menu while the caret is in another block SHALL neither move the caret there nor scroll the page to it. Each of these SHALL be one batch and one undo step, and SHALL be refused when it would leave the table without rows or columns.
 
 #### Scenario: Tab through a row
 - **WHEN** the caret is in the last cell of a table's last row and Tab is pressed
@@ -289,6 +289,14 @@ In a table cell, Tab SHALL move the caret to the start of the next cell in readi
 #### Scenario: Last column can't be deleted
 - **WHEN** the only column of a table is deleted from its menu
 - **THEN** nothing changes
+
+#### Scenario: The menu marks the caret's cell
+- **WHEN** the caret is in the second cell of a table's first row and the table's menu is opened
+- **THEN** that cell is marked until the menu closes, and Insert row below adds a row after the first row
+
+#### Scenario: The menu of another table
+- **WHEN** the caret is in a cell of one table and the menu of a table further down the page is opened
+- **THEN** its row and column commands are disabled, and toggling its header row changes that table without the page scrolling back to the caret
 
 ### Requirement: Editing code blocks
 In a code block, Enter SHALL insert a new line, Tab SHALL insert two spaces, and Shift+Tab SHALL remove up to two spaces at the start of the caret's line. Cmd/Ctrl+Enter SHALL add a paragraph after the code block and move the caret there; in a table cell it SHALL do the same after the table. Mark shortcuts, links, the `/` menu and the `@` menu SHALL NOT apply in code; pasted text SHALL be kept as plain text, line breaks included. A code block SHALL offer choosing its language from common languages and "Plain text", showing any other language it has as written.
