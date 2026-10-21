@@ -4,4 +4,7 @@ data/
 *.sqlite-*
 .react-router/
 build/
+playwright-report/
+test-results/
+tests/.tmp/
 .env
