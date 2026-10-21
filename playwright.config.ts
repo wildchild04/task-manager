@@ -22,7 +22,9 @@ export default defineConfig({
     // database here, before the application opens its SQLite connection.
     command: "rm -rf tests/.tmp && mkdir -p tests/.tmp && npm run dev -- --port 57321",
     url: "http://127.0.0.1:57321",
-    reuseExistingServer: !process.env.CI,
+    // Each invocation must run against a fresh SQLite database. Reusing a
+    // developer's server would retain prior fixtures and hide retry failures.
+    reuseExistingServer: false,
     env: { ...process.env, DATABASE_PATH: databasePath, TIME_ZONE: "UTC" },
   },
 });

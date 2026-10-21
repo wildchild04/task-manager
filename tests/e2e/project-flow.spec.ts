@@ -62,9 +62,10 @@ async function writeParagraphs(page: import("@playwright/test").Page, values: st
 
 const paragraphs = (page: import("@playwright/test").Page) => page.locator('.editor-body .editable[data-type="paragraph"]');
 
-// The web server is shared by Playwright projects, so fixtures must not reuse
-// titles when the Chromium and Firefox passes run against the same SQLite DB.
-const resourceName = (testInfo: TestInfo, title: string) => `${title} (${testInfo.project.name})`;
+// The web server is shared by Playwright projects, repeats and retries, so
+// fixtures must identify each of those passes within the SQLite database.
+const resourceName = (testInfo: TestInfo, title: string) =>
+  `${title} (${testInfo.project.name} repeat ${testInfo.repeatEachIndex} retry ${testInfo.retry})`;
 
 /**
  * Spec coverage:
@@ -85,8 +86,9 @@ test("a user creates a project and quick-adds work from its navigation", async (
   await dialog.getByRole("button", { name: "Create", exact: true }).click();
 
   await expect(page).toHaveURL(/\/projects\/[^/]+$/);
+  const projectPath = new URL(page.url()).pathname;
   await expect(page.getByRole("heading", { name: projectName })).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Projects" }).getByRole("link", { name: projectName })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Projects" }).locator(`a[href="${projectPath}"]`)).toBeVisible();
 
   await page.getByRole("navigation", { name: `${projectName} sections` }).getByRole("link", { name: "Work" }).click();
   await expect(page).toHaveURL(/\/projects\/[^/]+\/work$/);
