@@ -494,7 +494,7 @@ On workspace pages and project pages, the slash menu's Page command SHALL create
 - **THEN** the slash menu offers no Page command
 
 ### Requirement: Adding a block from beside another
-A "+" button SHALL show beside each block's handle wherever the handle shows, except on phone-sized touch screens, where the handle menu's "Add below" stands in for it. Clicking it SHALL add an empty paragraph holding `/` after the block, at the block's level (after a table as a whole), with the caret after the `/`, and open the slash menu there as if `/` had been typed; Alt/Option+click SHALL add it before the block instead. When the block is an empty paragraph without children, the `/` SHALL go into it instead of a new block. The handle menu's "Add below" SHALL do the same as clicking "+". Adding the block SHALL be one undo step, and the command then chosen from the menu SHALL be another.
+A "+" button SHALL show beside each block's handle wherever the handle shows, on touch screens too (beside the block holding the caret and beside selected blocks). Clicking it SHALL add an empty paragraph holding `/` after the block, at the block's level (after a table as a whole), with the caret after the `/`, and open the slash menu there as if `/` had been typed; Alt/Option+click SHALL add it before the block instead. When the block is an empty paragraph without children, the `/` SHALL go into it instead of a new block. The handle menu's "Add below" SHALL do the same as clicking "+". Adding the block SHALL be one undo step, and the command then chosen from the menu SHALL be another.
 
 #### Scenario: Add after a table
 - **WHEN** the "+" beside a table is clicked and "Heading 2" is chosen from the menu
@@ -512,8 +512,8 @@ A "+" button SHALL show beside each block's handle wherever the handle shows, ex
 - **WHEN** on a touch screen the handle beside a to-do is tapped and Add below is chosen
 - **THEN** a paragraph holding "/" follows the to-do with the slash menu open
 
-#### Scenario: The + on a tablet
-- **WHEN** on a tablet the caret is put in a paragraph and the "+" beside it is tapped
+#### Scenario: The + on a touch screen
+- **WHEN** on a phone or tablet the caret is put in a paragraph and the "+" beside it is tapped
 - **THEN** a paragraph holding "/" follows it with the slash menu open
 
 ### Requirement: Inline formatting bar

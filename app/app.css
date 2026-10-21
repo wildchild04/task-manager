@@ -132,43 +132,31 @@ body {
 }
 
 @media (pointer: coarse) {
-  .editor-block:focus-within:not(:has(.editor-block:focus-within)) > .block-handle {
-    opacity: 1;
-  }
-
-  /* Phones have no left margin to spare: handles get a column on the right. */
-  .page-editor .editor-body {
-    padding-inline-end: 32px;
-  }
-
-  /* Touch targets are taller: pulled up to centre on the first line. */
-  .block-handle,
-  .block-list > .editor-block > .block-handle {
-    top: -9px;
-    left: auto;
-    right: -32px;
-  }
-
-  /* On phones one button fits the right-hand column: the handle menu's "Add below" stands in for the "+". */
-  .block-add {
-    display: none;
-  }
-}
-
-/* Touch screens with room (tablets): the column holds the "+" too, beside the handle, shown with it. */
-@media (pointer: coarse) and (min-width: 600px) {
+  /* Touch screens have no left margin to spare: the handle and the "+" get a column on the right. */
   .page-editor .editor-body {
     padding-inline-end: 64px;
   }
 
+  /* Touch targets are taller: pulled up to centre on the first line. */
+  .block-handle,
+  .block-list > .editor-block > .block-handle,
   .block-add,
   .block-list > .editor-block > .block-add {
-    display: block;
     top: -9px;
     left: auto;
+  }
+
+  .block-handle,
+  .block-list > .editor-block > .block-handle {
+    right: -32px;
+  }
+
+  .block-add,
+  .block-list > .editor-block > .block-add {
     right: -64px;
   }
 
+  .editor-block:focus-within:not(:has(.editor-block:focus-within)) > .block-handle,
   .editor-block:focus-within:not(:has(.editor-block:focus-within)) > .block-add,
   .editor-block[data-selected="true"] > .block-add {
     opacity: 1;
