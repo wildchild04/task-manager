@@ -5,8 +5,8 @@ test.describe.configure({ mode: "serial" });
 async function openHomeDialog(page: import("@playwright/test").Page, name: "New page" | "New project") {
   const button = page.getByRole("heading", { name: "Home" }).locator("xpath=..").getByRole("button", { name, exact: true });
   const dialog = page.getByRole("dialog", { name });
-  // Server HTML appears before React binds its click handler. Retrying on the
-  // observable dialog state makes this robust without guessing a delay.
+  // Retry only when the dialog has not opened; this avoids assuming a fixed
+  // client-startup delay while testing the observable UI state.
   for (let attempt = 0; attempt < 2; attempt += 1) {
     await button.click();
     try {
@@ -74,8 +74,12 @@ test("a page can create a sub-page through the slash menu", async ({ page }) => 
 
   await expect(page).not.toHaveURL(parentUrl);
   await expect(page.getByRole("textbox", { name: "Title" })).toBeFocused();
+  const saved = page.waitForResponse((response) => response.url().endsWith("/api/edits") && response.ok(), { timeout: 15_000 });
   await page.keyboard.type("Child page");
-  await expect(page.getByRole("link", { name: "Child page" })).toBeVisible();
+  await saved;
+  await expect(page.getByRole("complementary", { name: "Workspace navigation" }).getByText("Child page", { exact: true })).toBeVisible({
+    timeout: 15_000,
+  });
 });
 
 test("selected blocks can be turned into a list from the block-action menu", async ({ page }) => {
@@ -124,4 +128,24 @@ test("ArrowDown from the final table cell creates a paragraph after the table", 
 
   await expect(page.locator('.editor-body > [data-block] .editable[data-type="paragraph"]')).toHaveCount(1);
   await expect(page.locator('.editor-body > [data-block] .editable[data-type="paragraph"]')).toBeFocused();
+});
+
+test("the add button and formatting bar edit a block through visible controls", async ({ page }) => {
+  await createWorkspacePage(page, "Editor controls");
+
+  await page.locator(".editor-empty").click();
+  const paragraph = page.locator('.editor-body .editable[data-type="paragraph"]');
+  await paragraph.click();
+  await page.keyboard.type("Format me");
+  await paragraph.press("Control+a");
+
+  const formatting = page.getByRole("toolbar", { name: "Formatting" });
+  await expect(formatting).toBeVisible();
+  await formatting.getByRole("button", { name: /Bold/ }).click();
+  await expect(paragraph.locator("strong")).toHaveText("Format me");
+
+  const block = page.locator(".editor-body > [data-block]").first();
+  await block.hover();
+  await block.getByRole("button", { name: "Add a block below (Alt+click: above)" }).click();
+  await expect(page.locator('.editor-body .editable[data-type="paragraph"]')).toHaveCount(2);
 });
