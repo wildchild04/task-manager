@@ -25,6 +25,6 @@ export default defineConfig({
     // Each invocation must run against a fresh SQLite database. Reusing a
     // developer's server would retain prior fixtures and hide retry failures.
     reuseExistingServer: false,
-    env: { ...process.env, DATABASE_PATH: databasePath, TIME_ZONE: "UTC" },
+    env: { ...process.env, DATABASE_PATH: databasePath, TIME_ZONE: "UTC", AGENT_TOKEN: "playwright-agent-token" },
   },
 });

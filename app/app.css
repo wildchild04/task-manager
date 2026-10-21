@@ -23,7 +23,7 @@ body {
   background: rgba(127, 127, 127, 0.12);
 }
 
-/* An image: centred, as wide as it is up to the page's width; a placeholder's height while it loads or fails. */
+/* An image: centred, as wide as it is up to the page's width, never stretched; one that can't load, a placeholder. */
 .block-image {
   display: flex;
   justify-content: center;
@@ -32,16 +32,17 @@ body {
 
 .block-image figure {
   max-width: 100%;
-  min-width: min(100%, 240px);
-}
-
-.block-image figure > div {
-  min-height: 2.5rem;
 }
 
 .block-image img {
   max-width: 100%;
   height: auto !important;
+  -webkit-user-drag: none;
+}
+
+.block-image [role="img"] {
+  min-width: 240px;
+  min-height: 2.5rem;
 }
 
 /* ----- Block editor ----- */

@@ -14,9 +14,9 @@
 ## 3. Editor
 
 - [x] 3.1 Block behaviour: image as a non-text leaf the caret steps over (Backspace keeps it); `insertImages(at, images)` command (replacing an empty paragraph, caret after, one step) and `setImageAlt`; editor tests
-- [ ] 3.2 `app/editor/`: the image block (design-system `Image` in a `BlockFrame`), upload helper with progress count and per-file errors, slash command "Image" with a hidden file input, paste of image files, drop on the page, "Alt text…" in the handle menu with a dialog
+- [x] 3.2 `app/editor/`: the image block (design-system `Image` in a `BlockFrame`), upload helper with progress count and per-file errors, slash command "Image" with a hidden file input, paste of image files, drop on the page, "Alt text…" in the handle menu with a dialog
 
 ## 4. Check
 
-- [ ] 4.1 Headless check in Chromium and Firefox: slash command with a PNG, paste a PNG, drop two files, a too-big file, undo, Backspace after an image, alt text, an external image from pasted Markdown and its broken state, reading the page back as an agent; files on disk under the content folder; typecheck, unit tests and the Playwright suite
-- [ ] 4.2 Note for the homelab backup: copy `data/content/` with the database (update the "Back up the homelab database" chore's description)
+- [x] 4.1 Headless check in Chromium and Firefox: slash command with a PNG, paste a PNG, drop two files, a too-big file, undo, Backspace after an image, alt text, an external image from pasted Markdown and its broken state, reading the page back as an agent; files on disk under the content folder; typecheck, unit tests and the Playwright suite
+- [x] 4.2 Note for the homelab backup: copy `data/content/` with the database (update the "Back up the homelab database" chore's description)

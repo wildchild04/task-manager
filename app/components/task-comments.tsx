@@ -35,6 +35,7 @@ function draftPage(): EditablePage {
     references: {},
     mentions: {},
     suggestions: {},
+    contentUrls: {},
   };
 }
 

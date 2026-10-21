@@ -15,7 +15,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use
 import { useBlocker, useNavigate, useRevalidator } from "react-router";
 
 import { fromMarkdown, type MarkdownReader, type MarkdownWriter, toMarkdown } from "~/domain/blocks/markdown";
-import type { Operation } from "~/domain/blocks/types";
+import type { ImageProps, Operation } from "~/domain/blocks/types";
 import { behaviorOf, matchSlashCommands, SLASH_COMMANDS, type SlashCommand, type TypeChange } from "~/editor/block-types";
 import { canTurnInto } from "~/editor/commands";
 import { Editor } from "~/editor/editor";
@@ -61,7 +61,15 @@ import {
 import { APP_FORMAT, htmlToMarkdown } from "./clipboard";
 import { dragBlocks } from "./block-drag";
 import { type BarType, FormatBar, formatBarFor } from "./format-bar";
-import { BlockSelectionContext, EditableText, EditorBlocks, type HandleActions, type HandleMenuItem } from "./editor-blocks";
+import {
+  BlockSelectionContext,
+  EditableText,
+  EditorBlocks,
+  type HandleActions,
+  type HandleMenuItem,
+  ImageSourceContext,
+} from "./editor-blocks";
+import { IMAGE_ACCEPT, imageFiles, uploadImages } from "./upload";
 import { withBase, withoutBase } from "../lib/base-path";
 
 const SLASH_MENU_ID = "slash-menu";
@@ -377,6 +385,43 @@ function LinkDialog({ initial, onDone }: { initial: string; onDone: (href: strin
   );
 }
 
+/** Edits an image's alt text. `onDone` gets the text, or `undefined` when cancelled. */
+function AltTextDialog({ initial, onDone }: { initial: string; onDone: (alt: string | undefined) => void }) {
+  const [alt, setAlt] = useState(initial);
+  const field = useRef<HTMLDivElement>(null);
+  // The dialog moves focus into itself when it opens; focus the field just after.
+  useEffect(() => {
+    const timer = setTimeout(() => field.current?.querySelector("input")?.focus(), 0);
+    return () => clearTimeout(timer);
+  }, []);
+  return (
+    <Dialog
+      open
+      title="Alt text"
+      onClose={() => onDone(undefined)}
+      maxWidth="sm"
+      fullWidth
+      cancelAction={{ label: "Cancel", onClick: () => onDone(undefined) }}
+      confirmAction={{ label: "Save", onClick: () => onDone(alt) }}
+    >
+      <TextField
+        ref={field}
+        label="Describe the image"
+        fullWidth
+        value={alt}
+        onChange={(event) => setAlt(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            onDone(alt);
+          }
+        }}
+        helperText="Read out by screen readers, and shown when the image can't load."
+      />
+    </Dialog>
+  );
+}
+
 /**
  * Edits one page's title and blocks. Every edit is applied at once and saved
  * in the background; the page's server data is only re-read when it changed
@@ -448,6 +493,21 @@ export function PageEditor({
   // While a suggestion decision is on its way; then what it did, with Undo until the next edit.
   const [deciding, setDeciding] = useState(false);
   const [decided, setDecided] = useState<{ message: string; undo?: string; failed?: boolean } | null>(null);
+  // Images: where uploaded ones load from (the server's list plus this session's uploads), how many are uploading,
+  // the files refused, the image whose alt text is being edited, and the block picked images go after.
+  const [contentUrls, setContentUrls] = useState<Record<string, string>>(page.contentUrls);
+  const contentUrlsRef = useRef(contentUrls);
+  contentUrlsRef.current = contentUrls;
+  useEffect(() => setContentUrls((urls) => ({ ...urls, ...page.contentUrls })), [page.contentUrls]);
+  const imageSource = useCallback(
+    (image: ImageProps) => ("url" in image ? image.url : (contentUrls[image.contentId] ?? withBase(`/content/${image.contentId}`))),
+    [contentUrls],
+  );
+  const [uploading, setUploading] = useState(0);
+  const [uploadErrors, setUploadErrors] = useState<string[]>([]);
+  const [altFor, setAltFor] = useState<{ id: string; alt: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const pickedFor = useRef<string | null>(null);
   // The open slash menu: where its `/` is, where to show it, and the highlighted command.
   const [slash, setSlashState] = useState<SlashMenu | null>(null);
   const slashRef = useRef<SlashMenu | null>(null);
@@ -564,6 +624,28 @@ export function PageEditor({
   );
 
   /** Puts the DOM selection and focus where the editor's selection is. */
+  /** Uploads image files, then adds those that went up after the block `at`, as one step; refused files are named. */
+  const addImages = useCallback(
+    async (files: readonly File[], at: string) => {
+      if (files.length === 0) return;
+      setUploadErrors([]);
+      setUploading((count) => count + files.length);
+      const { uploaded, errors } = await uploadImages(files);
+      setUploading((count) => count - files.length);
+      setUploadErrors(errors);
+      if (uploaded.length === 0) return;
+      setContentUrls((urls) => ({ ...urls, ...Object.fromEntries(uploaded.map(({ id, url }) => [id, url])) }));
+      restoreSelection.current = true;
+      editor.insertImages(
+        at,
+        uploaded.map(({ id }) => ({ contentId: id, alt: "" })),
+      );
+    },
+    [editor],
+  );
+  const addImagesRef = useRef(addImages);
+  addImagesRef.current = addImages;
+
   const placeSelection = useCallback(() => {
     const root = rootRef.current;
     if (!root) return;
@@ -701,6 +783,14 @@ export function PageEditor({
         return;
       }
       setSlash(null);
+      if (item.command.action === "image") {
+        // The `/image` text goes now; the picked images go after this block once uploaded. Cancelling leaves it as is.
+        editor.slash(menu.start, item.command);
+        edited();
+        pickedFor.current = editor.selection.blockId;
+        fileInputRef.current?.click();
+        return;
+      }
       const created = editor.slash(menu.start, item.command);
       if (!created) {
         edited();
@@ -1254,7 +1344,7 @@ export function PageEditor({
       },
       appLink: () => undefined,
       pageId: (id) => id,
-      contentUrl: (id) => withBase(`/content/${id}`),
+      contentUrl: (id) => contentUrlsRef.current[id] ?? withBase(`/content/${id}`),
     };
     /** Copies for other apps: mentions as `@Title`, app links as full URLs. */
     const plainReader: MarkdownReader = {
@@ -1268,6 +1358,13 @@ export function PageEditor({
     const onPaste = (event: ClipboardEvent) => {
       const data = event.clipboardData;
       if (!data || composing.current || (!editor.blocks && !sync())) return;
+      // Pasted images (a screenshot, a copied image) are uploaded; the text and HTML beside them only name them.
+      const images = imageFiles(data.files);
+      if (images.length > 0) {
+        event.preventDefault();
+        void addImagesRef.current(images, editor.blocks ? editor.selectedRoots().at(-1)! : editor.selection.blockId);
+        return;
+      }
       let markdown = data.getData(APP_FORMAT);
       const html = markdown ? "" : data.getData("text/html");
       if (html) markdown = htmlToMarkdown(new DOMParser().parseFromString(html, "text/html").body);
@@ -1278,6 +1375,36 @@ export function PageEditor({
         event.preventDefault();
         edited();
       }
+    };
+
+    // ----- Dropping images -----
+
+    /** Images in the page are moved by their handle, not dragged into the text. */
+    const onDragStart = (event: DragEvent) => {
+      if ((event.target as Element | null)?.closest?.(".block-image")) event.preventDefault();
+    };
+    const carriesFiles = (event: DragEvent) => event.dataTransfer?.types.includes("Files") ?? false;
+    /** Files are never dropped into the text; image files are taken. */
+    const onDragOver = (event: DragEvent) => {
+      if (!carriesFiles(event)) return;
+      event.preventDefault();
+      const images = Array.from(event.dataTransfer!.items).some((item) => item.kind === "file" && item.type.startsWith("image/"));
+      event.dataTransfer!.dropEffect = images ? "copy" : "none";
+    };
+    /** The block a drop at height `y` goes after: the last one starting above it, or the title (first on the page). */
+    const dropTarget = (y: number) => {
+      let at = editor.state.rootId;
+      for (const element of root.querySelectorAll<HTMLElement>(".editor-body [data-block]")) {
+        if (element.getBoundingClientRect().top > y) break;
+        if (editor.state.blocks[element.dataset.block!]) at = element.dataset.block!;
+      }
+      return at;
+    };
+    const onDrop = (event: DragEvent) => {
+      if (!carriesFiles(event)) return;
+      event.preventDefault();
+      const images = imageFiles(event.dataTransfer!.files);
+      if (images.length > 0) void addImagesRef.current(images, dropTarget(event.clientY));
     };
 
     /** Where a DOM position is in the editor's text, or `null` outside an editable block. */
@@ -1398,6 +1525,9 @@ export function PageEditor({
     };
 
     document.addEventListener("selectionchange", onSelectionChange);
+    root.addEventListener("dragstart", onDragStart);
+    root.addEventListener("dragover", onDragOver);
+    root.addEventListener("drop", onDrop);
     root.addEventListener("click", onClick);
     root.addEventListener("pointerover", onPointerOver);
     root.addEventListener("pointerout", onPointerOut);
@@ -1418,6 +1548,9 @@ export function PageEditor({
     root.addEventListener("compositionend", onCompositionEnd);
     return () => {
       document.removeEventListener("selectionchange", onSelectionChange);
+      root.removeEventListener("dragstart", onDragStart);
+      root.removeEventListener("dragover", onDragOver);
+      root.removeEventListener("drop", onDrop);
       root.removeEventListener("click", onClick);
       root.removeEventListener("pointerover", onPointerOver);
       root.removeEventListener("pointerout", onPointerOut);
@@ -1536,6 +1669,15 @@ export function PageEditor({
         restoreSelection.current = true;
       },
       menu: (id) => [
+        ...(editor.state.blocks[id]?.type === "image" && editor.selectedRoots().length <= 1
+          ? [
+              {
+                value: "alt",
+                label: "Alt text…",
+                onClick: () => setAltFor({ id, alt: String(getBlock(editor.state, id).props.alt ?? "") }),
+              },
+            ]
+          : []),
         turnIntoItem(),
         { value: "add-below", label: "Add below", onClick: () => add(id, "after") },
         { value: "delete", label: "Delete", disabled: !editor.canActOnBlocks("delete"), onClick: run(() => editor.deleteBlocks()) },
@@ -1603,7 +1745,7 @@ export function PageEditor({
   const statusText = (
     <span aria-live="polite">
       <Typography variant="caption" color={status === "failed" || status === "retrying" ? "error" : "text.secondary"}>
-        {STATUS_TEXT[status]}
+        {uploading > 0 ? (uploading === 1 ? "Uploading image…" : `Uploading ${uploading} images…`) : STATUS_TEXT[status]}
       </Typography>
     </span>
   );
@@ -1613,6 +1755,7 @@ export function PageEditor({
     <MentionTargetsContext.Provider value={mentionTargets}>
       <SuggestionsContext.Provider value={{ ...suggestions, busy: deciding }}>
         <BlockSelectionContext.Provider value={blockSelection}>
+        <ImageSourceContext.Provider value={imageSource}>
         <div
           className="page-editor"
           ref={rootRef}
@@ -1626,6 +1769,12 @@ export function PageEditor({
           </span>
           {/* A draft has nothing to save, so no saving indicator. */}
           {!draft && (statusSlot ? createPortal(statusText, statusSlot) : <div className="editor-status">{statusText}</div>)}
+          {draft && uploading > 0 && <div className="editor-status">{statusText}</div>}
+          {uploadErrors.length > 0 && (
+            <Alert severity="error" role="alert" onClose={() => setUploadErrors([])}>
+              {uploadErrors.join(". ")}.
+            </Alert>
+          )}
           {error && (
             <Alert severity="error" role="alert">
               {error}
@@ -1782,6 +1931,34 @@ export function PageEditor({
               </div>
             )}
           </HoverCard>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={IMAGE_ACCEPT}
+            multiple
+            hidden
+            aria-hidden="true"
+            tabIndex={-1}
+            data-testid="image-picker"
+            onChange={(event) => {
+              const files = Array.from(event.target.files ?? []);
+              event.target.value = "";
+              const at = pickedFor.current;
+              pickedFor.current = null;
+              if (at) void addImages(files, at);
+            }}
+          />
+          {altFor && (
+            <AltTextDialog
+              initial={altFor.alt}
+              onDone={(alt) => {
+                setAltFor(null);
+                if (alt !== undefined) editor.setImageAlt(altFor.id, alt);
+                // The dialog hands focus back as it closes; the editor takes it back after, for its keys (undo).
+                requestAnimationFrame(placeSelection);
+              }}
+            />
+          )}
           {linkFor && (
             <LinkDialog
               initial={linkFor.href}
@@ -1808,6 +1985,7 @@ export function PageEditor({
             </Dialog>
           )}
         </div>
+        </ImageSourceContext.Provider>
         </BlockSelectionContext.Provider>
       </SuggestionsContext.Provider>
     </MentionTargetsContext.Provider>

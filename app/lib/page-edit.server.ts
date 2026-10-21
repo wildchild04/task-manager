@@ -36,6 +36,8 @@ export type EditablePage = {
   mentions: MentionTargets;
   /** The page's pending suggestions, by block ID, in document order. */
   suggestions: Record<string, SuggestionBlockView>;
+  /** Where each uploaded image in the page loads from, by its content ID. */
+  contentUrls: Record<string, string>;
 };
 
 type EditTarget = { rootId: string; title: boolean };
@@ -71,6 +73,14 @@ function referencesOf(blocks: readonly ViewBlock[], into: Record<string, Referen
   return into;
 }
 
+/** The URL of every uploaded image in a tree, by content ID. */
+function contentUrlsOf(services: AppServices, node: TreeNode, into: Record<string, string> = {}) {
+  const { block } = node;
+  if (block.type === "image" && "contentId" in block.props) into[block.props.contentId] = services.content.url(block.props.contentId);
+  for (const child of node.children ?? []) contentUrlsOf(services, child, into);
+  return into;
+}
+
 /** The editor's starting point for a surface, or `undefined` if it can't be edited. */
 export function editablePage(services: AppServices, surface: EditSurface, id: string): EditablePage | undefined {
   const target = editTarget(services, surface, id);
@@ -92,6 +102,7 @@ export function editablePage(services: AppServices, surface: EditSurface, id: st
     references: referencesOf(view?.blocks ?? []),
     mentions: view?.mentions ?? {},
     suggestions: Object.fromEntries(suggestionsIn(view?.blocks ?? []).map((s) => [s.id, s])),
+    contentUrls: contentUrlsOf(services, tree),
   };
 }
 

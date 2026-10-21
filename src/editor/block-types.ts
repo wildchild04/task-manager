@@ -100,14 +100,14 @@ export const CODE_SHORTCUT = /^```([^\s`]{0,32})$/;
 export const NEW_TABLE = { rows: 3, columns: 3 } as const;
 export const NEW_CALLOUT = { emoji: "💡", tone: "default" } as const;
 
-/** A slash menu command: turn the block into a type, or add a divider, a table or a sub-page. */
+/** A slash menu command: turn the block into a type, add a divider, a table or a sub-page, or pick images to add. */
 export type SlashCommand = {
   value: string;
   label: string;
   description: string;
   /** Extra words the filter matches. */
   keywords: readonly string[];
-  action: TypeChange | "divider" | "table" | "page";
+  action: TypeChange | "divider" | "table" | "page" | "image";
 };
 
 export const SLASH_COMMANDS: readonly SlashCommand[] = [
@@ -126,6 +126,7 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
   { value: "callout", label: "Callout", description: "Make a note stand out", keywords: ["note", "tip", "warning", "info"], action: { type: "callout", props: { ...NEW_CALLOUT } } },
   { value: "code", label: "Code", description: "A block of code", keywords: ["snippet", "pre"], action: { type: "code", props: { language: "" } } },
   { value: "table", label: "Table", description: "Rows and columns", keywords: ["grid", "rows", "columns"], action: "table" },
+  { value: "image", label: "Image", description: "Upload or take a photo", keywords: ["picture", "photo", "screenshot", "img"], action: "image" },
   { value: "divider", label: "Divider", description: "Separate sections", keywords: ["line", "separator", "hr"], action: "divider" },
   { value: "page", label: "Page", description: "A page inside this one", keywords: ["subpage", "sub-page", "document"], action: "page" },
 ];

@@ -447,6 +447,10 @@ export function slashCommand(
     const around: Operation[] = replaceable ? [{ op: "delete", id: blockId }] : [updateContent(blockId, content)];
     return { ops: [...table.ops, ...around], selection: caret(table.firstCell, 0) };
   }
+  if (command.action === "image") {
+    // Only the `/image` text goes; the images come once they're picked and uploaded.
+    return { ops: [updateContent(blockId, content)], selection: caret(blockId, start) };
+  }
   if (command.action === "page") {
     // An empty, untitled sub-page; the caret stays before it, as the editor opens the page next.
     const page: Operation = { op: "insert", block: { id: context.newId(), type: "page", content: [] }, parentId: block.parentId!, afterId: blockId };

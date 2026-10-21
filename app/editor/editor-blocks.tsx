@@ -4,6 +4,7 @@ import { createContext, memo, type ReactNode, useContext, useLayoutEffect, useRe
 import {
   CalloutFrame,
   HeadingText,
+  ImageFrame,
   PageLink,
   ReferenceBlockView,
   SuggestionBox,
@@ -12,7 +13,7 @@ import {
 } from "../blocks/block-view";
 import { MentionTargetsContext } from "../blocks/rich-text";
 import type { ReferenceView } from "../blocks/view-model";
-import { CALLOUT_TONES, type CalloutTone } from "~/domain/blocks/types";
+import { CALLOUT_TONES, type CalloutTone, type ImageProps } from "~/domain/blocks/types";
 import type { Editor } from "~/editor/editor";
 import type { EditorBlock, EditorState } from "~/editor/editor-state";
 import { plain } from "~/editor/rich-text";
@@ -40,6 +41,22 @@ export type HandleActions = {
 export type BlockSelectionView = { selected: ReadonlySet<string>; handles: HandleActions | null };
 
 export const BlockSelectionContext = createContext<BlockSelectionView>({ selected: new Set(), handles: null });
+
+/** Where an image block's picture loads from: its uploaded item's URL, or its external URL. */
+export const ImageSourceContext = createContext<(image: ImageProps) => string | undefined>((image) =>
+  "url" in image ? image.url : undefined,
+);
+
+/** An image: not text, so the caret never stops in it; selected, moved and deleted as a block. */
+function ImageBlock({ block }: { block: EditorBlock }) {
+  const image = block.props as ImageProps;
+  const src = useContext(ImageSourceContext)(image);
+  return (
+    <BlockFrame block={block} readOnly>
+      <ImageFrame src={src} alt={image.alt ?? ""} />
+    </BlockFrame>
+  );
+}
 
 /** The handle beside a block: drag it to move the block (or the selection); click it for the block's commands. */
 function BlockHandle({ id, actions }: { id: string; actions: HandleActions }) {
@@ -294,6 +311,8 @@ const EditorBlock = memo(function EditorBlock(props: BlockProps) {
           <Divider />
         </BlockFrame>
       );
+    case "image":
+      return <ImageBlock block={block} />;
     case "page":
       return (
         <BlockFrame block={block} readOnly>
