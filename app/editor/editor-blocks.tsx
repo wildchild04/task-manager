@@ -176,8 +176,11 @@ export const EditableText = memo(function EditableText({
 export type BlockActions = {
   toggleTodo: (id: string) => void;
   toggleOpen: (id: string) => void;
-  /** Runs an editor command from a block's own controls (table, code and callout menus), then puts the caret back. */
-  run: (command: (editor: Editor) => unknown) => void;
+  /**
+   * Runs an editor command from a block's own controls (table, code and callout menus), then puts the caret back
+   * where the command left it; with `restore` false the caret stays put (it's elsewhere on the page).
+   */
+  run: (command: (editor: Editor) => unknown, restore?: boolean) => void;
   /** Reads from the editor without changing anything (where the caret is, for a menu about to open). */
   peek: <T>(read: (editor: Editor) => T) => T;
 };
@@ -347,8 +350,11 @@ function CommandMenu({
   button,
   options,
   className,
+  onOpenChange,
 }: {
   className?: string;
+  /** Told when the menu opens and closes (a table marks the cell its commands act on meanwhile). */
+  onOpenChange?: (open: boolean) => void;
   label?: ReactNode;
   ariaLabel: string;
   button?: "text" | "icon";
@@ -356,7 +362,18 @@ function CommandMenu({
   options: MenuItem[] | (() => MenuItem[]);
 }) {
   const [menu, setMenu] = useState<{ anchor: HTMLElement; items: MenuItem[] } | null>(null);
-  const open = (anchor: HTMLElement) => setMenu({ anchor, items: typeof options === "function" ? options() : options });
+  const open = (anchor: HTMLElement) => {
+    // The menu gives focus back to what had it when it opened. With the caret in another block, that would scroll the
+    // page to it on close: the menu's own button takes focus instead. In this block, the caret keeps it.
+    const block = anchor.closest("[data-block]");
+    if (!block?.contains(document.activeElement)) anchor.focus({ preventScroll: true });
+    setMenu({ anchor, items: typeof options === "function" ? options() : options });
+    onOpenChange?.(true);
+  };
+  const close = () => {
+    setMenu(null);
+    onOpenChange?.(false);
+  };
   return (
     <span className={className} contentEditable={false} onMouseDown={(event) => event.preventDefault()}>
       {button === "icon" ? (
@@ -371,8 +388,8 @@ function CommandMenu({
         open={menu !== null}
         anchorEl={menu?.anchor ?? null}
         options={menu?.items ?? []}
-        onClose={() => setMenu(null)}
-        onSelect={() => setMenu(null)}
+        onClose={close}
+        onSelect={close}
       />
     </span>
   );
@@ -404,16 +421,33 @@ function TableBlock({ state, table, actions }: { state: EditorState; table: Edit
   const tableMenu = (items: MenuItem[]): MenuItem[] => {
     const inTable = actions.peek((editor) => cellPosition(editor.state, editor.selection.blockId)?.tableId === table.id);
     if (inTable) return items;
-    const atCaret = new Set(["row-above", "row-below", "col-left", "col-right", "row-up", "row-down", "col-left-move", "col-right-move", "row-delete", "col-delete"]);
+    const caretItems = new Set(["row-above", "row-below", "col-left", "col-right", "row-up", "row-down", "col-left-move", "col-right-move", "row-delete", "col-delete"]);
     return [
       { value: "hint", label: "Click a cell first", disabled: true, onClick: () => {} },
-      ...items.map((item) => (atCaret.has(item.value) ? { ...item, disabled: true } : item)),
+      ...items.map((item) => (caretItems.has(item.value) ? { ...item, disabled: true } : item)),
     ];
   };
+  /**
+   * While the table menu is open, the cell its row and column commands act on (the caret's) is marked, so it's clear
+   * which row and column they'll change. The cell's frame belongs to the design system's table: it's marked in the DOM.
+   */
+  const markTarget = (open: boolean) => {
+    const marked = document.querySelectorAll(`[data-block="${CSS.escape(table.id)}"] [data-menu-target]`);
+    for (const element of marked) element.removeAttribute("data-menu-target");
+    if (!open) return;
+    const cellId = actions.peek((editor) =>
+      cellPosition(editor.state, editor.selection.blockId)?.tableId === table.id ? editor.selection.blockId : null,
+    );
+    if (!cellId) return;
+    document.querySelector(`[data-block-id="${CSS.escape(cellId)}"]`)?.closest("td, th")?.setAttribute("data-menu-target", "true");
+  };
+  /** Runs a command on the whole table; with the caret in another block, the caret stays there and the page doesn't scroll to it. */
+  const onTable = (command: (editor: Editor) => unknown) =>
+    actions.run(command, actions.peek((editor) => cellPosition(editor.state, editor.selection.blockId)?.tableId === table.id));
   const toggle = (which: "headerRow" | "headerColumn", label: string) => ({
     value: which,
     label: `${table.props[which] ? "✓ " : ""}${label}`,
-    onClick: () => actions.run((editor) => editor.toggleTableHeader(table.id, which)),
+    onClick: () => onTable((editor) => editor.toggleTableHeader(table.id, which)),
   });
   return (
     <BlockFrame block={table} className={removing ? "editor-table suggestion-removing" : "editor-table"}>
@@ -433,6 +467,7 @@ function TableBlock({ state, table, actions }: { state: EditorState; table: Edit
             <CommandMenu
               ariaLabel="Table actions"
               button="icon"
+              onOpenChange={markTarget}
               options={() => tableMenu([
                 {
                   value: "row-above",
@@ -477,7 +512,7 @@ function TableBlock({ state, table, actions }: { state: EditorState; table: Edit
                 {
                   value: "table-delete",
                   label: "Delete table",
-                  onClick: () => actions.run((editor) => editor.deleteTable(table.id)),
+                  onClick: () => onTable((editor) => editor.deleteTable(table.id)),
                 },
               ])}
             />

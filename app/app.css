@@ -361,6 +361,13 @@ body {
   margin: -5px 0 -5px -6px;
 }
 
+/* While the table menu is open: the cell whose row and column its commands change. */
+[data-menu-target] {
+  outline: 2px solid var(--ds-secondary);
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--ds-secondary-container) 60%, transparent);
+}
+
 /* A table's own controls under it: adding a row or a column, and its menu. */
 .editor-table-actions {
   display: inline-flex;
