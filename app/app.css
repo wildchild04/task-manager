@@ -172,27 +172,14 @@ body {
   pointer-events: none;
 }
 
-/* The formatting bar over selected text (a stand-in until the design system has a selection toolbar). */
-.format-bar {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  margin: -4px;
-}
-
+/* The formatting bar's code button, which the icon catalog has no glyph for. */
 .format-bar-glyph {
   display: inline-block;
   min-width: 1.1em;
-  font-size: 0.95rem;
+  font-family: monospace;
+  font-size: 0.8rem;
   line-height: 1;
   text-align: center;
-}
-
-.format-bar-divider {
-  align-self: stretch;
-  width: 1px;
-  margin: 4px 2px;
-  background: var(--ds-outline-variant);
 }
 
 .visually-hidden {
@@ -350,50 +337,6 @@ body {
   margin-left: auto;
 }
 
-/* Agent suggestions: a tinted region in the page, until the design system's review container ships. */
-.suggestion-box {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 4px 0;
-  padding: 8px 12px;
-  border: 1px solid var(--ds-warning);
-  border-left-width: 4px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--ds-warning-container) 45%, transparent);
-}
-
-.suggestion-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 4px 8px;
-}
-
-/* Inside the box, what goes and what comes read like a diff: removed in red, proposed in green. */
-.suggestion-removed,
-.suggestion-proposed {
-  padding: 4px 8px;
-  border-left: 3px solid;
-  border-radius: 4px;
-}
-
-.suggestion-removed {
-  border-left-color: var(--ds-error);
-  background: color-mix(in srgb, var(--ds-error-container) 40%, transparent);
-}
-
-.suggestion-removed-content {
-  opacity: 0.75;
-  text-decoration: line-through;
-}
-
-.suggestion-proposed {
-  border-left-color: var(--ds-success);
-  background: color-mix(in srgb, var(--ds-success-container) 40%, transparent);
-}
-
 .suggestions-bar {
   display: flex;
   flex-wrap: wrap;
@@ -412,111 +355,8 @@ body {
 
 /* ----- Tables, callouts and headings 4–6 (markdown-blocks) ----- */
 
-/* Wide tables scroll inside the page; the page itself never scrolls sideways. */
-.block-table-scroll {
-  max-width: 100%;
-  overflow-x: auto;
-  margin: 4px 0;
-}
-
-.block-table {
-  border-collapse: collapse;
-  min-width: 100%;
-}
-
-.block-table th,
-.block-table td {
-  border: 1px solid var(--ds-outline-variant);
-  padding: 6px 10px;
-  text-align: left;
-  vertical-align: top;
-  min-width: 4em;
-}
-
-.block-table th {
-  background: var(--ds-surface-container);
-  font-weight: 600;
-}
-
-/* A callout: a tinted box of its tone, its emoji beside its content. */
-.block-callout {
-  display: flex;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--ds-outline-variant);
-  background: var(--ds-surface-container);
-}
-
-.block-callout-emoji {
-  flex: none;
-  line-height: 1.5;
-}
-
-.block-callout-body {
-  flex: 1;
-  min-width: 0;
-}
-
-.block-callout-info {
-  border-color: var(--ds-info);
-  background: color-mix(in srgb, var(--ds-info-container) 50%, transparent);
-}
-
-.block-callout-success {
-  border-color: var(--ds-success);
-  background: color-mix(in srgb, var(--ds-success-container) 50%, transparent);
-}
-
-.block-callout-warning {
-  border-color: var(--ds-warning);
-  background: color-mix(in srgb, var(--ds-warning-container) 50%, transparent);
-}
-
-.block-callout-error {
-  border-color: var(--ds-error);
-  background: color-mix(in srgb, var(--ds-error-container) 50%, transparent);
-}
-
-/* Editor controls for tables and code blocks. */
-.editor-table-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-  opacity: 0.6;
-}
-
-.editor-table:focus-within .editor-table-controls,
-.editor-table:hover .editor-table-controls {
-  opacity: 1;
-}
-
-.editor-code {
-  margin: 4px 0;
-  border: 1px solid var(--ds-outline-variant);
-  border-radius: 8px;
-  background: var(--ds-surface-lowest);
-  overflow: hidden;
-}
-
-.editor-code-header {
-  display: flex;
-  justify-content: flex-start;
-  padding: 0 4px;
-  border-bottom: 1px solid var(--ds-outline-variant);
-}
-
-.editor-code-body {
-  margin: 0;
-  padding: 8px 12px;
-  overflow-x: auto;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.875rem;
-  white-space: pre;
-}
-
-.editor-code-body .editable {
+/* Code text in the design system's editor surface: one line per line, as typed. */
+.editor-code .editable {
   display: block;
   min-height: 1.5em;
   white-space: pre;

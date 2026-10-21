@@ -1,4 +1,4 @@
-import { Container, IconButton, Link, PageNavigation, PageShell, Stack, ThemeToggle, Typography } from "@wildchild/design-system";
+import { Container, Icon, IconButton, Link, PageNavigation, PageShell, Stack, ThemeToggle, Typography } from "@wildchild/design-system";
 import { type MouseEvent, useEffect, useState } from "react";
 import { Link as RouterLink, Outlet, type ShouldRevalidateFunctionArgs, useLocation, useNavigate } from "react-router";
 
@@ -86,8 +86,7 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
 
   const navigation = (
     <Stack spacing={2}>
-      {/* No home icon in the design system yet (requested); a plain item until it ships. */}
-      <PageNavigation ariaLabel="Home" items={[item("Home", "/", pathname === "/")]} />
+      <PageNavigation ariaLabel="Home" items={[{ ...item("Home", "/", pathname === "/"), icon: <Icon name="home" /> }]} />
       <Group
         label="Projects"
         href="/"

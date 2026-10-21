@@ -1,4 +1,4 @@
-import { Button, Checkbox, Divider, IconButton, Menu, Typography } from "@wildchild/design-system";
+import { Button, Checkbox, CodeEditorSurface, Divider, IconButton, Menu, Typography } from "@wildchild/design-system";
 import { createContext, memo, type ReactNode, useContext, useLayoutEffect, useRef, useState } from "react";
 
 import {
@@ -15,6 +15,7 @@ import type { ReferenceView } from "../blocks/view-model";
 import { CALLOUT_TONES, type CalloutTone } from "~/domain/blocks/types";
 import type { Editor } from "~/editor/editor";
 import type { EditorBlock, EditorState } from "~/editor/editor-state";
+import { plain } from "~/editor/rich-text";
 import { cellPosition } from "~/editor/tables";
 import { renderRichText } from "./dom-caret";
 
@@ -40,13 +41,6 @@ export type BlockSelectionView = { selected: ReadonlySet<string>; handles: Handl
 
 export const BlockSelectionContext = createContext<BlockSelectionView>({ selected: new Set(), handles: null });
 
-/** The six-dot grip, until the design system's icon catalog has `drag_indicator`. */
-const GRIP = (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-    {[9, 15].flatMap((x) => [6, 12, 18].map((y) => <circle key={`${x}-${y}`} cx={x} cy={y} r="1.6" />))}
-  </svg>
-);
-
 /** The handle beside a block: drag it to move the block (or the selection); click it for the block's commands. */
 function BlockHandle({ id, actions }: { id: string; actions: HandleActions }) {
   const [menu, setMenu] = useState<{ anchor: HTMLElement; items: HandleMenuItem[] } | null>(null);
@@ -66,15 +60,14 @@ function BlockHandle({ id, actions }: { id: string; actions: HandleActions }) {
     >
       <IconButton
         ariaLabel="Drag to move, or open block actions"
+        icon="drag_indicator"
         size="small"
         onClick={(event) => {
           if (dragged.current) return;
           actions.select(id, event.shiftKey);
           if (!event.shiftKey) setMenu({ anchor: event.currentTarget, items: actions.menu(id) });
         }}
-      >
-        {GRIP}
-      </IconButton>
+      />
       <Menu
         dense
         open={menu !== null}
@@ -403,66 +396,68 @@ function TableBlock({ state, table, actions }: { state: EditorState; table: Edit
   });
   return (
     <BlockFrame block={table} className={removing ? "editor-table suggestion-removing" : "editor-table"}>
-      <TableFrame headerRow={table.props.headerRow === true} headerColumn={table.props.headerColumn === true} rows={rows} />
-      <div className="editor-table-controls" contentEditable={false}>
-        <Button size="small" variant="text" onClick={() => actions.run((editor) => editor.addTableRow(table.id))}>
-          + Row
-        </Button>
-        <Button size="small" variant="text" onClick={() => actions.run((editor) => editor.addTableColumn(table.id))}>
-          + Column
-        </Button>
-        <CommandMenu
-          ariaLabel="Table actions"
-          button="icon"
-          options={[
-            {
-              value: "row-above",
-              label: "Insert row above",
-              onClick: () => atCaret((e, at) => e.addTableRow(table.id, { rowId: at.rowId, side: "before" })),
-            },
-            {
-              value: "row-below",
-              label: "Insert row below",
-              onClick: () => atCaret((e, at) => e.addTableRow(table.id, { rowId: at.rowId, side: "after" })),
-            },
-            {
-              value: "col-left",
-              label: "Insert column left",
-              onClick: () => atCaret((e, at) => e.addTableColumn(table.id, { column: at.column, side: "before" })),
-            },
-            {
-              value: "col-right",
-              label: "Insert column right",
-              onClick: () => atCaret((e, at) => e.addTableColumn(table.id, { column: at.column, side: "after" })),
-            },
-            { value: "row-up", label: "Move row up", onClick: () => atCaret((e, at) => e.moveTableRow(at.rowId, -1)) },
-            { value: "row-down", label: "Move row down", onClick: () => atCaret((e, at) => e.moveTableRow(at.rowId, 1)) },
-            {
-              value: "col-left-move",
-              label: "Move column left",
-              onClick: () => atCaret((e, at) => e.moveTableColumn(table.id, at.column, -1)),
-            },
-            {
-              value: "col-right-move",
-              label: "Move column right",
-              onClick: () => atCaret((e, at) => e.moveTableColumn(table.id, at.column, 1)),
-            },
-            { value: "row-delete", label: "Delete row", onClick: () => atCaret((e, at) => e.deleteTableRow(at.rowId)) },
-            {
-              value: "col-delete",
-              label: "Delete column",
-              onClick: () => atCaret((e, at) => e.deleteTableColumn(table.id, at.column)),
-            },
-            toggle("headerRow", "Header row"),
-            toggle("headerColumn", "Header column"),
-            {
-              value: "table-delete",
-              label: "Delete table",
-              onClick: () => actions.run((editor) => editor.deleteTable(table.id)),
-            },
-          ]}
-        />
-      </div>
+      <TableFrame
+        headerRow={table.props.headerRow === true}
+        headerColumn={table.props.headerColumn === true}
+        rows={rows}
+        onAddRow={() => actions.run((editor) => editor.addTableRow(table.id))}
+        onAddColumn={() => actions.run((editor) => editor.addTableColumn(table.id))}
+        tableActions={
+          <span contentEditable={false}>
+            <CommandMenu
+              ariaLabel="Table actions"
+              button="icon"
+              options={[
+                {
+                  value: "row-above",
+                  label: "Insert row above",
+                  onClick: () => atCaret((e, at) => e.addTableRow(table.id, { rowId: at.rowId, side: "before" })),
+                },
+                {
+                  value: "row-below",
+                  label: "Insert row below",
+                  onClick: () => atCaret((e, at) => e.addTableRow(table.id, { rowId: at.rowId, side: "after" })),
+                },
+                {
+                  value: "col-left",
+                  label: "Insert column left",
+                  onClick: () => atCaret((e, at) => e.addTableColumn(table.id, { column: at.column, side: "before" })),
+                },
+                {
+                  value: "col-right",
+                  label: "Insert column right",
+                  onClick: () => atCaret((e, at) => e.addTableColumn(table.id, { column: at.column, side: "after" })),
+                },
+                { value: "row-up", label: "Move row up", onClick: () => atCaret((e, at) => e.moveTableRow(at.rowId, -1)) },
+                { value: "row-down", label: "Move row down", onClick: () => atCaret((e, at) => e.moveTableRow(at.rowId, 1)) },
+                {
+                  value: "col-left-move",
+                  label: "Move column left",
+                  onClick: () => atCaret((e, at) => e.moveTableColumn(table.id, at.column, -1)),
+                },
+                {
+                  value: "col-right-move",
+                  label: "Move column right",
+                  onClick: () => atCaret((e, at) => e.moveTableColumn(table.id, at.column, 1)),
+                },
+                { value: "row-delete", label: "Delete row", onClick: () => atCaret((e, at) => e.deleteTableRow(at.rowId)) },
+                {
+                  value: "col-delete",
+                  label: "Delete column",
+                  onClick: () => atCaret((e, at) => e.deleteTableColumn(table.id, at.column)),
+                },
+                toggle("headerRow", "Header row"),
+                toggle("headerColumn", "Header column"),
+                {
+                  value: "table-delete",
+                  label: "Delete table",
+                  onClick: () => actions.run((editor) => editor.deleteTable(table.id)),
+                },
+              ]}
+            />
+          </span>
+        }
+      />
     </BlockFrame>
   );
 }
@@ -476,20 +471,25 @@ function CodeBlockEditor({ block, actions }: { block: EditorBlock; actions: Bloc
   const languages = CODE_LANGUAGES.includes(language) ? CODE_LANGUAGES : [...CODE_LANGUAGES, language];
   return (
     <BlockFrame block={block} className={removing ? "editor-code suggestion-removing" : "editor-code"}>
-      <div className="editor-code-header" contentEditable={false}>
-        <CommandMenu
-          ariaLabel="Code language"
-          label={language || "Plain text"}
-          options={languages.map((value) => ({
-            value: value || "plain",
-            label: value || "Plain text",
-            onClick: () => actions.run((editor) => editor.setCodeLanguage(block.id, value)),
-          }))}
-        />
-      </div>
-      <pre className="editor-code-body">
+      <CodeEditorSurface
+        ariaLabel={language ? `Code block, ${language}` : "Code block"}
+        copyText={plain(block.content)}
+        language={
+          <span contentEditable={false}>
+            <CommandMenu
+              ariaLabel="Code language"
+              label={language || "Plain text"}
+              options={languages.map((value) => ({
+                value: value || "plain",
+                label: value || "Plain text",
+                onClick: () => actions.run((editor) => editor.setCodeLanguage(block.id, value)),
+              }))}
+            />
+          </span>
+        }
+      >
         <EditableText block={block} placeholder="Code" ariaLabel={language ? `Code, ${language}` : "Code"} />
-      </pre>
+      </CodeEditorSurface>
     </BlockFrame>
   );
 }

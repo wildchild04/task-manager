@@ -1,13 +1,15 @@
 import {
   Alert,
   Button,
+  Callout,
   Checkbox,
-  Chip,
   CodeBlock,
   createAppTheme,
   Divider,
+  DocumentTable,
   IconButton,
   Link,
+  ReviewContainer,
   Stack,
   Typography,
 } from "@wildchild/design-system";
@@ -63,57 +65,30 @@ export function HeadingText({ level, children }: { level: number; children: Reac
   return <Typography variant={headingVariants[level as 1 | 2 | 3 | 4 | 5] ?? "h2"}>{children}</Typography>;
 }
 
-/** A table's frame: header row and column as `th`, wide tables scrolling inside the page. Cells are any content. */
+/** A table's frame: the design system's `DocumentTable`, header row and column as `th`, wide tables scrolling inside the page. */
 export function TableFrame({
   headerRow,
   headerColumn,
   rows,
+  ...editing
 }: {
   headerRow: boolean;
   headerColumn: boolean;
   rows: { id: string; cells: { id: string; content: ReactNode }[] }[];
+  /** In the editor: adding rows and columns at the edges, and the table's menu. */
+  onAddRow?: () => void;
+  onAddColumn?: () => void;
+  tableActions?: ReactNode;
 }) {
-  const cell = (row: number, column: number, id: string, content: ReactNode) => {
-    if (headerRow && row === 0)
-      return (
-        <th key={id} scope="col">
-          {content}
-        </th>
-      );
-    if (headerColumn && column === 0)
-      return (
-        <th key={id} scope="row">
-          {content}
-        </th>
-      );
-    return <td key={id}>{content}</td>;
-  };
-  const offset = headerRow ? 1 : 0;
-  return (
-    <div className="block-table-scroll">
-      <table className="block-table">
-        {headerRow && rows[0] && (
-          <thead>
-            <tr>{rows[0].cells.map((c, column) => cell(0, column, c.id, c.content))}</tr>
-          </thead>
-        )}
-        <tbody>
-          {rows.slice(offset).map((row, index) => (
-            <tr key={row.id}>{row.cells.map((c, column) => cell(index + offset, column, c.id, c.content))}</tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+  return <DocumentTable headerRow={headerRow} headerColumn={headerColumn} rows={rows} ariaLabel="Table" {...editing} />;
 }
 
-/** A callout's frame: a tinted box of its tone with its emoji, holding its text and nested blocks. Content, not an announcement. */
+/** A callout's frame: the design system's `Callout` (content, not an announcement) of its tone, its emoji as the icon. */
 export function CalloutFrame({ emoji, tone, children }: { emoji: ReactNode; tone: CalloutTone; children: ReactNode }) {
   return (
-    <div className={`block-callout block-callout-${tone}`}>
-      <span className="block-callout-emoji">{emoji}</span>
-      <div className="block-callout-body">{children}</div>
-    </div>
+    <Callout icon={emoji} tone={tone}>
+      {children}
+    </Callout>
   );
 }
 
@@ -145,18 +120,24 @@ export function SuggestionBox({ suggestion }: { suggestion: SuggestionBlockView 
   const { decide, busy } = context;
   const { id, author, action, note, outdated, removed, blocks } = suggestion;
   const label = SUGGESTION_LABELS[action];
+  const explanation = outdated ? "The block changed since this was suggested, so it can only be rejected." : undefined;
   return (
-    <section className="suggestion-box" role="group" aria-label={`${author}: ${label}`} contentEditable={false}>
-      <div className="suggestion-header">
-        <Stack direction="row" spacing={1} alignItems="center" wrap="wrap">
-          <Typography variant="body2">
-            <strong>{author}</strong>
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {label}
-          </Typography>
-          {outdated && <Chip size="small" variant="outlined" color="error" label="Outdated" />}
-        </Stack>
+    <ReviewContainer
+      aria-label={`${author}: ${label}`}
+      author={author}
+      label={label}
+      tone="warning"
+      status={outdated ? { label: "Outdated", tone: "error" } : undefined}
+      note={note && explanation ? `${note} ${explanation}` : (note ?? explanation)}
+      removed={
+        removed && (
+          // The copy is the removed part itself, so it isn't marked again.
+          <SuggestionsContext.Provider value={{ ...context, removing: undefined }}>
+            <Blocks blocks={[removed]} />
+          </SuggestionsContext.Provider>
+        )
+      }
+      actions={
         <Stack direction="row" spacing={1} alignItems="center">
           <Button size="small" variant="text" disabled={!decide || busy} onClick={() => decide?.("reject", id)}>
             Reject
@@ -167,39 +148,10 @@ export function SuggestionBox({ suggestion }: { suggestion: SuggestionBlockView 
             </Button>
           )}
         </Stack>
-      </div>
-      {note && (
-        <Typography variant="body2" color="text.secondary">
-          {note}
-        </Typography>
-      )}
-      {outdated && (
-        <Typography variant="body2" color="text.secondary">
-          The block changed since this was suggested, so it can only be rejected.
-        </Typography>
-      )}
-      {removed && (
-        <div className="suggestion-removed" role="group" aria-label="Removed">
-          <Typography variant="caption" color="text.secondary">
-            Removed
-          </Typography>
-          {/* The copy is the removed part itself, so it isn't marked again. */}
-          <SuggestionsContext.Provider value={{ ...context, removing: undefined }}>
-            <div className="suggestion-removed-content">
-              <Blocks blocks={[removed]} />
-            </div>
-          </SuggestionsContext.Provider>
-        </div>
-      )}
-      {blocks.length > 0 && (
-        <div className="suggestion-proposed" role="group" aria-label="Proposed">
-          <Typography variant="caption" color="text.secondary">
-            Proposed
-          </Typography>
-          <Blocks blocks={blocks} />
-        </div>
-      )}
-    </section>
+      }
+    >
+      {blocks.length > 0 ? <Blocks blocks={blocks} /> : undefined}
+    </ReviewContainer>
   );
 }
 

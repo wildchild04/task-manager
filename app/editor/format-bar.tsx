@@ -1,18 +1,18 @@
-import { Button, HoverCard, IconButton, Menu } from "@wildchild/design-system";
-import { type CSSProperties, useState } from "react";
+import { Button, type IconName, IconButton, Menu, SelectionToolbar } from "@wildchild/design-system";
+import { useState } from "react";
 
 import type { SimpleMark } from "~/domain/blocks/types";
 import { canTurnInto } from "~/editor/commands";
 import { type EditorState, getBlock, isCollapsed, type Selection, selectionEnd, selectionStart } from "~/editor/editor-state";
 import { hasMark, linkAt } from "~/editor/rich-text";
 
-/** The marks the bar toggles, in its order, with the glyph standing in for an icon until the design system has them. */
-export const BAR_MARKS: readonly { mark: SimpleMark; label: string; key: string; glyph: string; style?: CSSProperties }[] = [
-  { mark: "bold", label: "Bold", key: "B", glyph: "B", style: { fontWeight: 700 } },
-  { mark: "italic", label: "Italic", key: "I", glyph: "I", style: { fontStyle: "italic", fontFamily: "serif" } },
-  { mark: "underline", label: "Underline", key: "U", glyph: "U", style: { textDecoration: "underline" } },
-  { mark: "strikethrough", label: "Strikethrough", key: "Shift+S", glyph: "S", style: { textDecoration: "line-through" } },
-  { mark: "code", label: "Code", key: "E", glyph: "<>", style: { fontFamily: "monospace", fontSize: "0.8em" } },
+/** The marks the bar toggles, in its order. The icon catalog has no `code`, so code shows `<>`. */
+export const BAR_MARKS: readonly { mark: SimpleMark; label: string; key: string; icon?: IconName }[] = [
+  { mark: "bold", label: "Bold", key: "B", icon: "format_bold" },
+  { mark: "italic", label: "Italic", key: "I", icon: "format_italic" },
+  { mark: "underline", label: "Underline", key: "U", icon: "format_underlined" },
+  { mark: "strikethrough", label: "Strikethrough", key: "Shift+S", icon: "format_strikethrough" },
+  { mark: "code", label: "Code", key: "E" },
 ];
 
 /** What the bar shows for a selection: whether Turn into is offered, and which marks (and a link) the whole selection has. */
@@ -35,14 +35,6 @@ export function formatBarFor(state: EditorState, selection: Selection): FormatBa
   };
 }
 
-/** A chain link, until the design system's icon catalog has `link` (an emoji isn't drawn everywhere). */
-const LINK_GLYPH = (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-    <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" />
-    <path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
-  </svg>
-);
-
 const isMac = () => typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 const shortcut = (key: string) => (isMac() ? `⌘${key.replace("Shift+", "⇧")}` : `Ctrl+${key}`);
 
@@ -50,9 +42,9 @@ const shortcut = (key: string) => (isMac() ? `⌘${key.replace("Shift+", "⇧")}
 export type BarType = { value: string; label: string; current: boolean; choose: () => void };
 
 /**
- * The formatting bar over selected text, in a `HoverCard` (which never takes
- * focus) until the design system has a selection toolbar. Its buttons keep the
- * text's selection: they don't take the press.
+ * The formatting bar over selected text, in the design system's
+ * `SelectionToolbar`, which never takes focus: its buttons keep the text's
+ * selection.
  */
 export function FormatBar({
   bar,
@@ -67,7 +59,7 @@ export function FormatBar({
 }: {
   bar: FormatBarState | null;
   rect: DOMRect | null;
-  placement: "top-start" | "bottom-start";
+  placement: "top" | "bottom";
   typeLabel: string;
   types: () => BarType[];
   onMark: (mark: SimpleMark) => void;
@@ -85,16 +77,16 @@ export function FormatBar({
   };
   return (
     <>
-    <HoverCard
+    <SelectionToolbar
       open={bar !== null && rect !== null && typeMenu === null}
       anchorRect={rect}
       ariaLabel="Formatting"
       placement={placement}
-      // Choosing from the type menu is a press outside the card: the bar stays until the menu is done.
+      // Choosing from the type menu is a press outside the toolbar: the bar stays until the menu is done.
       onDismiss={() => typeMenu === null && onDismiss()}
     >
       {bar && (
-        <div className="format-bar" role="toolbar" aria-label="Formatting" onMouseDown={(event) => event.preventDefault()}>
+        <>
           {bar.turnInto && (
             <>
               <Button
@@ -104,23 +96,30 @@ export function FormatBar({
               >
                 {typeLabel} ▾
               </Button>
-              <span className="format-bar-divider" aria-hidden="true" />
+              <SelectionToolbar.Divider />
             </>
           )}
-          {BAR_MARKS.map(({ mark, label, key, glyph, style }) => (
-            <IconButton key={mark} ariaLabel={`${label} (${shortcut(key)})`} size="small" pressed={bar.pressed.has(mark)} onClick={() => onMark(mark)}>
-              <span className="format-bar-glyph" style={style} aria-hidden="true">
-                {glyph}
-              </span>
+          {BAR_MARKS.map(({ mark, label, key, icon }) => (
+            <IconButton
+              key={mark}
+              ariaLabel={`${label} (${shortcut(key)})`}
+              icon={icon}
+              size="small"
+              pressed={bar.pressed.has(mark)}
+              onClick={() => onMark(mark)}
+            >
+              {icon ? undefined : (
+                <span className="format-bar-glyph" aria-hidden="true">
+                  {"<>"}
+                </span>
+              )}
             </IconButton>
           ))}
-          <IconButton ariaLabel={`Link (${shortcut("K")})`} size="small" pressed={bar.link} onClick={onLink}>
-            {LINK_GLYPH}
-          </IconButton>
-        </div>
+          <IconButton ariaLabel={`Link (${shortcut("K")})`} icon="link" size="small" pressed={bar.link} onClick={onLink} />
+        </>
       )}
-    </HoverCard>
-    {/* Outside the card, so it outlives the card: an invisible anchor where Turn into was. */}
+    </SelectionToolbar>
+    {/* Outside the toolbar, so it outlives it: an invisible anchor where Turn into was. */}
     {typeMenu && (
       <span
         ref={setAnchor}

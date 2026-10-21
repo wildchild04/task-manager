@@ -751,7 +751,7 @@ export function PageEditor({
     let settle: ReturnType<typeof setTimeout> | undefined;
     let pointerSelecting = false;
     const onBarPointerDown = (event: PointerEvent) => {
-      if ((event.target as HTMLElement).closest?.(".format-bar")) return;
+      if ((event.target as HTMLElement).closest?.('[role="toolbar"]')) return;
       pointerSelecting = true;
     };
     const onBarPointerUp = () => {
@@ -1729,7 +1729,7 @@ export function PageEditor({
           <FormatBar
             bar={bar}
             rect={formatBar?.rect ?? null}
-            placement={typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches ? "bottom-start" : "top-start"}
+            placement={typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches ? "bottom" : "top"}
             typeLabel={barTypeLabel}
             types={barTypes}
             onMark={(mark) => fromBar(() => editor.toggleMark(mark))}
