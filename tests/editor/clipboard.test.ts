@@ -15,6 +15,7 @@ const reader: MarkdownReader = {
   referenceTarget: () => null,
   appLink: () => undefined,
   pageId: (id) => id,
+  contentUrl: (id) => `/content/${id}`,
 };
 
 describe("paste and copy", () => {

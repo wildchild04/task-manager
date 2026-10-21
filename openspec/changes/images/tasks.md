@@ -1,14 +1,14 @@
 ## 1. Content storage
 
-- [ ] 1.1 `src/domain/content/`: the `ContentRepository` port, `ContentType`, `MAX_CONTENT_BYTES`, `detectImageType(bytes)`, `contentIdOf(bytes, type)` and the ID check; tests (signatures, SVG refused, IDs)
-- [ ] 1.2 `src/infra/fs/fs-content.repository.ts` (atomic writes, two-character folders, no-op re-put, `url` with the base path) and the in-memory repository; a shared contract test run against both
-- [ ] 1.3 `src/composition.ts`: `content` in the services (`CONTENT_PATH`, default beside the database in `data/content`; in memory for tests)
-- [ ] 1.4 Routes: `POST /api/content` (raw body read up to the limit, 201/413/415) and `GET /content/:id` (type, `nosniff`, immutable cache, 404); tests through the route modules
+- [x] 1.1 `src/domain/content/`: the `ContentRepository` port, `ContentType`, `MAX_CONTENT_BYTES`, `detectImageType(bytes)`, `contentIdOf(bytes, type)` and the ID check; tests (signatures, SVG refused, IDs)
+- [x] 1.2 `src/infra/fs/fs-content.repository.ts` (atomic writes, two-character folders, no-op re-put, `url` with the base path) and the in-memory repository; a shared contract test run against both
+- [x] 1.3 `src/composition.ts`: `content` in the services (`CONTENT_PATH`, default beside the database in `data/content`; in memory for tests)
+- [x] 1.4 Routes: `POST /api/content` (raw body read up to the limit, 201/413/415) and `GET /content/:id` (type, `nosniff`, immutable cache, 404); tests through the route modules
 
 ## 2. Image blocks
 
-- [ ] 2.1 `image` in the block types and props schema (one source, `http(s)` URL, alt length), a leaf without content; validation tests
-- [ ] 2.2 Markdown: whole-line `![alt](src)` to image blocks (content URL to `contentId`, `http(s)` to `url`, else text with a warning; inline images warned), export with absolute content URLs through the reader; `htmlToMarkdown` for `<img>`; the Markdown guide; tests
+- [x] 2.1 `image` in the block types and props schema (one source, `http(s)` URL, alt length), a leaf without content; validation tests
+- [x] 2.2 Markdown: whole-line `![alt](src)` to image blocks (content URL to `contentId`, `http(s)` to `url`, else text with a warning; inline images warned), export with absolute content URLs through the reader; `htmlToMarkdown` for `<img>`; the Markdown guide; tests
 - [ ] 2.3 Read-only rendering: the view model's `src` from the content repository or URL; `Image` from the design system in `block-view.tsx`; tests
 
 ## 3. Editor

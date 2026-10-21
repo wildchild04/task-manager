@@ -1,5 +1,7 @@
-import type { BlockType, CalloutTone, Mark, NewBlock, RichText, SimpleMark, TextSpan, TreeNode } from "./types";
-import { MENTION_TEXT } from "./types";
+import { CONTENT_ID_PATTERN } from "../content/content.repository";
+import { isHttpUrl } from "./schema";
+import type { BlockType, CalloutTone, ImageProps, Mark, NewBlock, RichText, SimpleMark, TextSpan, TreeNode } from "./types";
+import { MAX_IMAGE_ALT, MAX_IMAGE_URL, MENTION_TEXT } from "./types";
 
 /**
  * Blocks as Markdown and back, for agents. The subset is small and line based:
@@ -19,6 +21,8 @@ export type MarkdownReader = {
   appLink(href: string): string | undefined;
   /** How a sub-page's ID is written. */
   pageId(id: string): string;
+  /** The URL an uploaded image is written with (absolute for agents and other apps). */
+  contentUrl(id: string): string;
   /** When given, each block's first line ends with ` ^` and this (the block's anchor). */
   anchor?(id: string): string;
   /** A pending suggestion's attributes (`id`, `by`, `action`, `target`, `status`, `note`), written on its tag line. */
@@ -159,6 +163,11 @@ function blockLines(node: TreeNode, reader: MarkdownReader, number: number): str
       return text.split("\n").map((line) => `> ${line}`);
     case "divider":
       return ["---"];
+    case "image": {
+      const image = props as ImageProps;
+      const src = "contentId" in image ? reader.contentUrl(image.contentId) : image.url;
+      return [imageMarkdown(image.alt, src)];
+    }
     case "toggle":
       return [`▸ ${text}`];
     case "page":
@@ -210,6 +219,32 @@ export function toMarkdown(nodes: readonly TreeNode[], reader: MarkdownReader, d
     previous = type;
   }
   return parts.join("");
+}
+
+// ----- Images -----
+
+/** An image's line: alt text escaped and on one line, and the few URL characters Markdown can't hold percent-encoded. */
+export function imageMarkdown(alt: string, src: string): string {
+  const text = alt.replace(/[\\[\]]/g, "\\$&").replace(/\s*\n\s*/g, " ");
+  const url = src.replace(/[()\s<>]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")}`);
+  return `![${text}](${url})`;
+}
+
+/** A line that is only an image: `![alt](src)`, optionally with a title (ignored). */
+const IMAGE_LINE = /^!\[((?:[^\]\\]|\\.)*)\]\(\s*<?([^\s()<>]+)>?(?:\s+"[^"]*")?\s*\)$/;
+const INLINE_IMAGE = /!\[[^\]]*\]\([^)]*\)/g;
+
+/** An uploaded item's URL, relative or absolute: anything ending in `/content/<id>`. */
+const CONTENT_URL = /(?:^|\/)content\/([^/?#]+)(?:[?#].*)?$/;
+
+/** An image's props from its Markdown source, or `null` when it can't be one. */
+export function imageFromMarkdown(src: string, alt: string): ImageProps | null {
+  alt = alt.replace(/\\(.)/g, "$1").slice(0, MAX_IMAGE_ALT);
+  const uploaded = CONTENT_URL.exec(src)?.[1];
+  if (uploaded && CONTENT_ID_PATTERN.test(uploaded) && (src.startsWith("/") || src.startsWith("content/") || isHttpUrl(src)))
+    return { contentId: uploaded, alt };
+  if (isHttpUrl(src) && src.length <= MAX_IMAGE_URL) return { url: src, alt };
+  return null;
 }
 
 // ----- Writing -----
@@ -379,8 +414,7 @@ function tableBlock(header: string[], body: string[][], writer: MarkdownWriter):
 function lineWarnings(raw: string, number: number, allowedTags: readonly string[]): string[] {
   const text = raw.replace(/`[^`]*`/g, "");
   const warnings: string[] = [];
-  for (const _image of text.matchAll(/!\[[^\]]*\]\([^)]*\)/g))
-    warnings.push(`Line ${number}: images aren't supported yet; kept as text`);
+  for (const _image of text.matchAll(INLINE_IMAGE)) warnings.push(`Line ${number}: images must be on a line of their own; kept as text`);
   for (const _note of text.matchAll(/\[\^[^\]]+\]/g)) warnings.push(`Line ${number}: footnotes aren't supported; kept as text`);
   // One warning per element: its opening tag.
   for (const tag of text.matchAll(/<([a-zA-Z][\w-]*)\b[^>]*>/g)) {
@@ -411,6 +445,12 @@ export const MARKDOWN_GUIDE = {
     { type: "quote", markdown: "`> ` on each line", example: "> Quoted text" },
     { type: "divider", markdown: "`---` alone on a line", example: "---" },
     {
+      type: "image",
+      markdown:
+        "`![alt text](https://…)` alone on a line: an http(s) URL, or the URL of an image uploaded to the app (as pages read). Images can't be inside a line of text",
+      example: "![Latency p95](https://grafana.example/render/p95.png)",
+    },
+    {
       type: "table",
       markdown:
         "GFM pipe table: a header row, a `|---|` separator row, then rows. `\\|` for a pipe and `<br>` for a line break in a cell; an all-empty header row means no header",
@@ -438,7 +478,8 @@ export const MARKDOWN_GUIDE = {
     { name: "mention", markdown: "@[Title](page:id) or @[Title](task:id)" },
   ],
   unsupported: [
-    { name: "Images", markdown: "![alt](src)", kept: "as text, with a warning" },
+    { name: "Images without an http(s) URL", markdown: "![alt](chart.png) or ![alt](data:…)", kept: "as text, with a warning" },
+    { name: "Images inside text", markdown: "See ![icon](https://…) here", kept: "as text, with a warning" },
     { name: "HTML", markdown: "<div>…</div> (anything but <u>, and <br> in table cells)", kept: "as text, with a warning" },
     { name: "Footnotes", markdown: "[^1]", kept: "as text, with a warning" },
     { name: "Tables without a separator row", markdown: "| a | b | with no |---| under it", kept: "as text, with a warning" },
@@ -451,7 +492,7 @@ export const MARKDOWN_GUIDE = {
 // ----- Writing blocks -----
 
 /** Types that can't hold the blocks written under them; those go to the nearest block that can. */
-const NO_CHILDREN: readonly BlockType[] = ["divider", "code", "table"];
+const NO_CHILDREN: readonly BlockType[] = ["divider", "code", "table", "image"];
 
 /**
  * Markdown as blocks. Consecutive lines of a paragraph (or a quote, or a
@@ -520,10 +561,20 @@ export function fromMarkdown(markdown: string, writer: MarkdownWriter, warnings?
       i = j - 1;
       continue;
     }
+    const image = IMAGE_LINE.exec(raw.trim());
+    if (image) {
+      const props = imageFromMarkdown(image[2]!, image[1]!);
+      if (props) {
+        place(depthOf(raw), { id: writer.newId(), type: "image", props }, "", true);
+        continuing = false;
+        continue;
+      }
+    }
     if (warnings) {
       if (isTableRow(raw) && !(i > 0 && isTableRow(lines[i - 1]!)))
         warnings.push(`Line ${i + 1}: a table needs a separator row (|---|) under its header; kept as text`);
-      warnings.push(...lineWarnings(raw, i + 1, ["u"]));
+      if (image) warnings.push(`Line ${i + 1}: images need an http(s) URL or an uploaded image; kept as text`);
+      warnings.push(...lineWarnings(image ? "" : raw, i + 1, ["u"]));
     }
 
     const line = parseLine(raw);

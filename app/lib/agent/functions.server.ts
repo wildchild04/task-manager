@@ -114,6 +114,7 @@ function reader(services: AppServices, anchors = false): MarkdownReader {
       return app ? `${app[1] === "pages" ? "page" : "task"}:${short(app[2]!)}` : undefined;
     },
     pageId: short,
+    contentUrl: (id) => services.content.url(id),
   };
 }
 

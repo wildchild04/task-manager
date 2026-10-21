@@ -10,7 +10,7 @@ npm run db:seed   # optional sample project
 npm run dev       # http://localhost:5173
 ```
 
-Settings come from the environment or `.env` (see `.env.example`): `DATABASE_PATH`, `TIME_ZONE`, `AGENT_TOKEN`. `just` lists the shortcuts.
+Settings come from the environment or `.env` (see `.env.example`): `DATABASE_PATH`, `CONTENT_PATH` (uploaded images, default `content` beside the database), `TIME_ZONE`, `AGENT_TOKEN`. `just` lists the shortcuts.
 
 ## Docker
 

@@ -428,20 +428,41 @@ describe("agent API", () => {
       const { body } = await call("GET", "markdown");
       expect(body.blocks.find((b: { type: string }) => b.type === "table").example).toContain("|---|");
       expect(body.blocks.find((b: { type: string }) => b.type === "code").markdown).toContain("```");
-      expect(body.unsupported.map((u: { name: string }) => u.name)).toContain("Images");
+      const image = body.blocks.find((b: { type: string }) => b.type === "image");
+      expect(image.example).toMatch(/^!\[[^\]]+\]\(https:\/\/.+\)$/);
+      expect(image.markdown).toContain("alone on a line");
     });
 
     it("warns about unsupported Markdown by line, and only then", async () => {
       expect(await create("A chart:\n\n![chart](chart.png)")).toEqual({
         ok: true,
         id: expect.any(String),
-        warnings: ["Line 3: images aren't supported yet; kept as text"],
+        warnings: ["Line 3: images need an http(s) URL or an uploaded image; kept as text"],
       });
       work("aaaa0001-0000-0000-0000-000000000000");
       const commented = await call("POST", "task/aaaa0001/comment", { markdown: "| a | b |\n|---|---|\n\n```\ncode\n```" });
       expect(commented.body).toEqual({ ok: true, id: expect.any(String) });
       const appended = await call("POST", "task/aaaa0001/description", { markdown: "See <div>this</div>" });
       expect(appended.body).toEqual({ ok: true, warnings: ["Line 1: HTML (<div>) isn't supported; kept as text"] });
+    });
+
+    it("adds images by URL and reads uploaded ones back with absolute URLs", async () => {
+      const page = await create("![Latency p95](https://grafana.example/render/p95.png)");
+      expect(page).toEqual({ ok: true, id: expect.any(String) });
+      const pageId = workspacePageTree(services)[0]!.id;
+      const { id } = await services.content.put(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), "image/png");
+      const [chart] = services.blocks.getChildren(pageId);
+      expect(chart).toMatchObject({ type: "image", props: { url: "https://grafana.example/render/p95.png", alt: "Latency p95" } });
+      services.blocks.apply([
+        { op: "insert", block: { id: "shot", type: "image", props: { contentId: id, alt: "Error dialog" } }, parentId: pageId, afterId: chart!.id },
+      ]);
+      expect((await call("GET", `page/${page.id}`)).body.markdown).toBe(
+        `![Latency p95](https://grafana.example/render/p95.png)\n\n![Error dialog](http://app/content/${id})`,
+      );
+      // Written back, the uploaded image's URL becomes the stored item again.
+      await create(`![Again](http://app/content/${id})`);
+      const again = workspacePageTree(services).find((p) => p.id !== pageId)!;
+      expect(services.blocks.getChildren(again.id)[0]).toMatchObject({ type: "image", props: { contentId: id, alt: "Again" } });
     });
 
     it("refuses a table's cell as a suggestion target, naming the table", async () => {

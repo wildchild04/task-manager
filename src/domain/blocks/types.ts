@@ -16,6 +16,7 @@ export const BLOCK_TYPES = [
   "table_cell",
   "code",
   "callout",
+  "image",
 ] as const;
 
 export type BlockType = (typeof BLOCK_TYPES)[number];
@@ -36,7 +37,7 @@ export const TEXT_TYPES = [
 ] as const satisfies readonly BlockType[];
 
 /** Types that can never have children. */
-export const LEAF_TYPES = ["divider", "reference", "table_cell", "code"] as const satisfies readonly BlockType[];
+export const LEAF_TYPES = ["divider", "reference", "table_cell", "code", "image"] as const satisfies readonly BlockType[];
 
 /** A table's structure: a table holds rows, a row holds cells. Nothing turns into or out of these. */
 export const TABLE_TYPES = ["table", "table_row", "table_cell"] as const satisfies readonly BlockType[];
@@ -84,7 +85,15 @@ export type PropsByType = {
   table_cell: Record<string, never>;
   code: { language: string };
   callout: { emoji: string; tone: CalloutTone };
+  image: ImageProps;
 };
+
+/** An image's source: an uploaded item (see `src/domain/content`) or an external `http(s)` URL. */
+export type ImageProps = ({ contentId: string } | { url: string }) & { alt: string };
+
+/** The longest external image URL and alt text an image block holds. */
+export const MAX_IMAGE_URL = 2048;
+export const MAX_IMAGE_ALT = 1000;
 
 export type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
 

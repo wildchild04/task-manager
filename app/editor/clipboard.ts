@@ -4,6 +4,8 @@
  * same converter agents use.
  */
 
+import { imageFromMarkdown, imageMarkdown } from "~/domain/blocks/markdown";
+
 /** Our own copies: Markdown with mentions and links to pages by their full IDs, so pasting back keeps them exactly. */
 export const APP_FORMAT = "application/x-taskhub-markdown";
 
@@ -55,11 +57,21 @@ const BLOCK_ELEMENTS = new Set([
   "DETAILS",
   "SUMMARY",
 ]);
-const SKIPPED = new Set(["SCRIPT", "STYLE", "TEMPLATE", "HEAD", "META", "LINK", "TITLE", "IMG", "SVG", "BUTTON", "INPUT"]);
+const SKIPPED = new Set(["SCRIPT", "STYLE", "TEMPLATE", "HEAD", "META", "LINK", "TITLE", "SVG", "BUTTON", "INPUT"]);
 
 const children = (node: DomNode) => Array.from(node.childNodes);
 const attribute = (node: DomNode, name: string) => node.getAttribute?.(name) ?? null;
-const isBlock = (node: DomNode) => node.nodeType === ELEMENT_NODE && BLOCK_ELEMENTS.has(node.nodeName);
+/** An image stands on its line of its own, and so does whatever holds one (GitHub links its images). */
+const holdsImage = (node: DomNode): boolean => node.nodeName === "IMG" || children(node).some(holdsImage);
+const isBlock = (node: DomNode) => node.nodeType === ELEMENT_NODE && (BLOCK_ELEMENTS.has(node.nodeName) || holdsImage(node));
+
+/** An image as `![alt](src)`, or nothing when its source can't be an image block (relative, `data:`). */
+function image(node: DomNode): string[] {
+  const src = attribute(node, "src")?.trim() ?? "";
+  const alt = (attribute(node, "alt") ?? "").replace(/\s+/g, " ").trim();
+  if (!src || !imageFromMarkdown(src, alt)) return [];
+  return [imageMarkdown(alt, src)];
+}
 const hasBlockChildren = (node: DomNode) => children(node).some(isBlock);
 
 /** Wraps text in a mark, keeping the text's surrounding spaces outside it, and nothing around empty text. */
@@ -218,7 +230,9 @@ function blocks(node: DomNode): string[] {
     }
     flush();
     const name = child.nodeName;
-    if (/^H[1-6]$/.test(name)) {
+    if (name === "IMG") {
+      out.push(...image(child));
+    } else if (/^H[1-6]$/.test(name)) {
       const text = paragraph([child])[0];
       if (text) out.push(`${"#".repeat(Number(name[1]))} ${text.replace(/\n/g, " ")}`);
     } else if (name === "UL" || name === "OL") {

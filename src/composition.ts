@@ -1,5 +1,5 @@
 import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 
 import Database from "better-sqlite3";
 
@@ -12,6 +12,7 @@ import { choresSection, DashboardRegistry, DashboardService, registerCoreSection
 import { ProjectService, projectProtection } from "~/domain/projects/project.service";
 import { PROJECT_OWNER_KIND } from "~/domain/projects/types";
 import { plainText } from "~/domain/blocks/text";
+import type { ContentRepository } from "~/domain/content/content.repository";
 import { CommentService, commentProtection } from "~/domain/comments/comment.service";
 import { COMMENT_OWNER_KIND } from "~/domain/comments/types";
 import type { ReferenceableKinds } from "~/domain/tasks/referenceable";
@@ -19,8 +20,10 @@ import { SuggestionService } from "~/domain/suggestions/suggestion.service";
 import { TaskService, taskProtection } from "~/domain/tasks/task.service";
 import { TASK_OWNER_KIND } from "~/domain/tasks/types";
 import type { UnitOfWork } from "~/domain/unit-of-work";
+import { FsContentRepository } from "~/infra/fs/fs-content.repository";
 import { MemoryBlockRepository } from "~/infra/memory/memory-block.repository";
 import { MemoryCommentRepository } from "~/infra/memory/memory-comment.repository";
+import { MemoryContentRepository } from "~/infra/memory/memory-content.repository";
 import { MemoryProjectRepository } from "~/infra/memory/memory-project.repository";
 import { MemorySuggestionRepository } from "~/infra/memory/memory-suggestion.repository";
 import { MemoryTaskRepository } from "~/infra/memory/memory-task.repository";
@@ -49,15 +52,20 @@ export type AppServices = {
   suggestions: SuggestionService;
   chores: ChoreService;
   dashboard: DashboardService;
+  /** Uploaded images and other binary content. */
+  content: ContentRepository;
   /** Where later changes add dashboard sections. */
   dashboardSections: DashboardRegistry;
   close(): void;
 };
 
-/** Overrides for tests (deterministic IDs and clock) and the workspace time zone. */
-export type ServiceOptions = { newId?: () => string; now?: () => string; timeZone?: string };
+/**
+ * Overrides for tests (deterministic IDs and clock), the workspace time zone,
+ * and the path the app is served under (for content URLs).
+ */
+export type ServiceOptions = { newId?: () => string; now?: () => string; timeZone?: string; basePath?: string };
 
-function buildServices(uow: UnitOfWork, close: () => void, options: ServiceOptions): AppServices {
+function buildServices(uow: UnitOfWork, content: ContentRepository, close: () => void, options: ServiceOptions): AppServices {
   const blocks = new BlockService(uow.repositories.blocks);
   const projects = new ProjectService(uow, options.newId, options.now);
   const { repositories } = uow;
@@ -84,7 +92,7 @@ function buildServices(uow: UnitOfWork, close: () => void, options: ServiceOptio
   registerCoreSections(dashboardSections, { tasks, blocks, projects });
   dashboardSections.replace(choresSection(tasks, chores));
   const dashboard = new DashboardService(dashboardSections, projects);
-  return { blocks, projects, library, tasks, comments, suggestions, chores, dashboard, dashboardSections, close };
+  return { blocks, projects, library, tasks, comments, suggestions, chores, dashboard, content, dashboardSections, close };
 
   /** Entity kinds a task can reference. Later domains (comments, subtasks) add theirs. */
   function referenceable(): ReferenceableKinds {
@@ -102,10 +110,15 @@ function buildServices(uow: UnitOfWork, close: () => void, options: ServiceOptio
   }
 }
 
-/** The application's services, backed by SQLite. The only place concrete repositories are chosen. */
+/**
+ * The application's services, backed by SQLite, with content as files beside
+ * the database (`CONTENT_PATH`, default `<database folder>/content`). The only
+ * place concrete repositories are chosen.
+ */
 export function createServices(
   dbPath = process.env.DATABASE_PATH ?? "data/app.sqlite",
   options: ServiceOptions = { timeZone: process.env.TIME_ZONE || undefined },
+  contentPath = process.env.CONTENT_PATH || join(dirname(dbPath), "content"),
 ): AppServices {
   if (dbPath !== ":memory:") mkdirSync(dirname(dbPath), { recursive: true });
   const db = new Database(dbPath);
@@ -118,7 +131,9 @@ export function createServices(
     comments: new SqliteCommentRepository(db),
     suggestions: new SqliteSuggestionRepository(db),
   });
-  return buildServices(uow, () => db.close(), options);
+  const content =
+    dbPath === ":memory:" ? new MemoryContentRepository(options.basePath) : new FsContentRepository(contentPath, options.basePath);
+  return buildServices(uow, content, () => db.close(), options);
 }
 
 /** The same services backed by memory, for tests and spikes. */
@@ -129,5 +144,5 @@ export function createInMemoryServices(options: ServiceOptions = {}): AppService
   const comments = new MemoryCommentRepository();
   const suggestions = new MemorySuggestionRepository();
   const uow = new MemoryUnitOfWork({ blocks, projects, tasks, comments, suggestions }, [blocks, projects, tasks, comments, suggestions]);
-  return buildServices(uow, () => {}, options);
+  return buildServices(uow, new MemoryContentRepository(options.basePath), () => {}, options);
 }

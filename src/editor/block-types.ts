@@ -63,6 +63,7 @@ export const BLOCK_TYPES: Readonly<Partial<Record<BlockType, BlockTypeBehavior>>
   table: nonText("table"),
   table_row: nonText("table_row"),
   divider: nonText("divider"),
+  image: nonText("image"),
   reference: nonText("reference"),
   page: nonText("page"),
   suggestion: nonText("suggestion"),

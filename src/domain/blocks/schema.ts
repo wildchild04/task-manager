@@ -1,9 +1,33 @@
 import { z } from "zod";
 
+import { CONTENT_ID_PATTERN } from "../content/content.repository";
 import { BlockOperationError } from "./errors";
-import { type BlockType, CALLOUT_TONES, isTextType, MENTION_TEXT, type RichText } from "./types";
+import { type BlockType, CALLOUT_TONES, isTextType, MAX_IMAGE_ALT, MAX_IMAGE_URL, MENTION_TEXT, type RichText } from "./types";
 
 const empty = z.object({}).strict();
+
+/** An absolute `http:` or `https:` URL, the only external sources an image may have. */
+export function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+const imageAlt = z.string().max(MAX_IMAGE_ALT).default("");
+
+/** Exactly one source: `contentId` or `url`. */
+const imageProps = z.union([
+  z.object({ contentId: z.string().regex(CONTENT_ID_PATTERN, { message: "Not a stored item's ID" }), alt: imageAlt }).strict(),
+  z
+    .object({
+      url: z.string().max(MAX_IMAGE_URL).refine(isHttpUrl, { message: "An image URL must be http or https" }),
+      alt: imageAlt,
+    })
+    .strict(),
+]);
 
 /** Props schema per block type. Defaults apply when a prop is omitted. */
 export const propsSchemas = {
@@ -36,6 +60,7 @@ export const propsSchemas = {
       tone: z.enum(CALLOUT_TONES).default("default"),
     })
     .strict(),
+  image: imageProps,
 } satisfies Record<BlockType, z.ZodType>;
 
 const markSchema = z.union([
@@ -75,6 +100,7 @@ export const blockTypeSchema = z.enum([
   "table_cell",
   "code",
   "callout",
+  "image",
 ]);
 
 function toError(prefix: string, error: z.ZodError): BlockOperationError {

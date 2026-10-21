@@ -16,6 +16,7 @@ const reader: MarkdownReader = {
   referenceTarget: () => null,
   appLink: () => undefined,
   pageId: (id) => id,
+  contentUrl: (id) => `/content/${id}`,
 };
 
 describe("selections beyond one block", () => {

@@ -102,6 +102,43 @@ describe("insert", () => {
   });
 });
 
+describe("images", () => {
+  const ID = `${"ab".repeat(32)}.png`;
+  const insert = (props: Record<string, unknown>, content?: { text: string }[]): Operation => ({
+    op: "insert",
+    block: { id: "img", type: "image", props, ...(content ? { content } : {}) },
+    parentId: "P",
+  });
+
+  it("accepts an uploaded or an external image, alt defaulting to empty", () => {
+    expect(validateOperation(insert({ contentId: ID }), fixture)).toMatchObject({ props: { contentId: ID, alt: "" } });
+    expect(validateOperation(insert({ url: "https://example.com/a.png", alt: "Chart" }), fixture)).toMatchObject({
+      props: { url: "https://example.com/a.png", alt: "Chart" },
+    });
+  });
+
+  it.each([
+    ["both sources", { contentId: ID, url: "https://example.com/a.png" }],
+    ["no source", { alt: "x" }],
+    ["a javascript: URL", { url: "javascript:alert(1)" }],
+    ["a relative URL", { url: "chart.png" }],
+    ["a data: URL", { url: "data:image/png;base64,AAAA" }],
+    ["a URL over 2 KB", { url: `https://example.com/${"a".repeat(2048)}` }],
+    ["a malformed content ID", { contentId: "../app.sqlite" }],
+    ["alt over 1,000 characters", { contentId: ID, alt: "a".repeat(1001) }],
+  ])("rejects %s", (_, props) => {
+    rejects(insert(props), "validation");
+  });
+
+  it("holds no content and no children", () => {
+    rejects(insert({ contentId: ID }, [{ text: "x" }]), "validation");
+    const reader = readerOf(block("P", "page", null), block("I", "image", "P", { props: { contentId: ID, alt: "" } } as Partial<Block>));
+    expect(() =>
+      validateOperation({ op: "insert", block: { id: "n", type: "paragraph" }, parentId: "I" }, reader),
+    ).toThrow(/cannot have children/);
+  });
+});
+
 describe("suggestions", () => {
   // S: a pending insert suggestion on P holding S1.
   const reader = readerOf(

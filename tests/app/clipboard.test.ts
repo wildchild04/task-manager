@@ -22,6 +22,16 @@ const text = (value: string): DomNode => ({ nodeType: 3, nodeName: "#text", chil
 const body = (...kids: (DomNode | string)[]) => el("body", {}, ...kids);
 
 describe("pasted HTML as Markdown", () => {
+  it("puts images on lines of their own, linked ones too, and drops those without an http(s) source", () => {
+    const html = body(
+      el("p", "Before ", el("img", { src: "https://x.dev/a.png", alt: "A chart" }), " after"),
+      el("p", el("a", { href: "https://github.com/x" }, el("img", { src: "https://camo.github.com/b.png", alt: "" }))),
+      el("img", { src: "data:image/png;base64,AAAA", alt: "inline" }),
+      el("img", { src: "relative.png" }),
+    );
+    expect(htmlToMarkdown(html)).toBe("Before\n\n![A chart](https://x.dev/a.png)\n\nafter\n\n![](https://camo.github.com/b.png)");
+  });
+
   it("converts paragraphs, headings, marks and links", () => {
     const html = body(
       el("h2", "Install"),

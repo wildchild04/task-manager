@@ -1254,11 +1254,13 @@ export function PageEditor({
       },
       appLink: () => undefined,
       pageId: (id) => id,
+      contentUrl: (id) => withBase(`/content/${id}`),
     };
     /** Copies for other apps: mentions as `@Title`, app links as full URLs. */
     const plainReader: MarkdownReader = {
       ...appReader,
       appLink: (href) => (href.startsWith("/") ? `${window.location.origin}${withBase(href)}` : undefined),
+      contentUrl: (id) => new URL(appReader.contentUrl(id), window.location.origin).href,
     };
     const readable = (markdown: string) => markdown.replace(/@\[([^\]]*)\]\((?:page|task):[^)\s]+\)/g, "@$1");
 

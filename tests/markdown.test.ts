@@ -39,6 +39,7 @@ const reader: MarkdownReader = {
   appLink: (href) =>
     href.startsWith("/pages/") ? `page:${href.slice(7)}` : href.startsWith("/tasks/") ? `task:${href.slice(7)}` : undefined,
   pageId: (id) => id,
+  contentUrl: (id) => `https://host/task-manager/content/${id}`,
 };
 
 let ids = 0;
@@ -314,7 +315,7 @@ describe("tables, code, headings 4–6 and callouts", () => {
       warnings,
     );
     expect(warnings).toEqual([
-      "Line 3: images aren't supported yet; kept as text",
+      "Line 3: images need an http(s) URL or an uploaded image; kept as text",
       "Line 4: footnotes aren't supported; kept as text",
       "Line 4: HTML (<div>) isn't supported; kept as text",
       "Line 5: a table needs a separator row (|---|) under its header; kept as text",
@@ -323,5 +324,56 @@ describe("tables, code, headings 4–6 and callouts", () => {
     const none: string[] = [];
     read("| a | b<br>c |\n|---|---|\n\n```\n<div>![x](y)\n```\n\n> [!TIP] ok", none);
     expect(none).toEqual([]);
+  });
+});
+
+describe("images", () => {
+  const ID = `${"ab".repeat(32)}.png`;
+  const read = (markdown: string, warnings?: string[]) => fromMarkdown(markdown, writer, warnings);
+
+  it("reads a line that is only an image: uploaded items by their URL, other http(s) URLs as external; nothing nests in one", () => {
+    const warnings: string[] = [];
+    const blocks = read(
+      [
+        "![Latency p95](https://grafana.example/render/p95.png)",
+        `![Error dialog](https://host/task-manager/content/${ID})`,
+        `![Relative](/task-manager/content/${ID})`,
+        `  ![Nested, with a title](https://x.dev/a.png "A title")`,
+        "![](http://x.dev/b.gif)",
+      ].join("\n"),
+      warnings,
+    );
+    expect(warnings).toEqual([]);
+    expect(blocks).toMatchObject([
+      { type: "image", props: { url: "https://grafana.example/render/p95.png", alt: "Latency p95" } },
+      { type: "image", props: { contentId: ID, alt: "Error dialog" } },
+      { type: "image", props: { contentId: ID, alt: "Relative" } },
+      { type: "image", props: { url: "https://x.dev/a.png", alt: "Nested, with a title" } },
+      { type: "image", props: { url: "http://x.dev/b.gif", alt: "" } },
+    ]);
+  });
+
+  it("keeps images without an http(s) URL, and images inside text, as text with warnings", () => {
+    const warnings: string[] = [];
+    const blocks = read(["![chart](chart.png)", "", "![x](data:image/png;base64,AAAA)", "", "See ![icon](https://x.dev/i.png) here"].join("\n"), warnings);
+    expect(blocks.map((b) => b.type)).toEqual(["paragraph", "paragraph", "paragraph"]);
+    expect(warnings).toEqual([
+      "Line 1: images need an http(s) URL or an uploaded image; kept as text",
+      "Line 3: images need an http(s) URL or an uploaded image; kept as text",
+      "Line 5: images must be on a line of their own; kept as text",
+    ]);
+  });
+
+  it("writes images on their own lines, uploaded ones by the reader's URL, and reads them back", () => {
+    const nodes = [
+      node("i1", "image", [], { contentId: ID, alt: "Error [dialog]\nsecond line" }),
+      node("i2", "image", [], { url: "https://x.dev/a (1).png", alt: "" }),
+    ];
+    const markdown = toMarkdown(nodes, reader);
+    expect(markdown).toBe(`![Error \\[dialog\\] second line](https://host/task-manager/content/${ID})\n\n![](https://x.dev/a%20%281%29.png)`);
+    expect(read(markdown)).toMatchObject([
+      { type: "image", props: { contentId: ID, alt: "Error [dialog] second line" } },
+      { type: "image", props: { url: "https://x.dev/a%20%281%29.png", alt: "" } },
+    ]);
   });
 });

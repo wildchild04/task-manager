@@ -57,6 +57,20 @@ const sameSecret = (a: string, b: string) => {
 const json = (status: number, body: unknown) => Response.json(body, { status });
 const refuse = (status: number, code: string, message: string) => json(status, { error: { code, message } });
 
+/** The services with uploaded images' URLs absolute (on this request's origin), as agents read them. */
+function withOrigin(services: AppServices, origin: string): AppServices {
+  const { content } = services;
+  return {
+    ...services,
+    content: {
+      put: (bytes, type) => content.put(bytes, type),
+      get: (id) => content.get(id),
+      delete: (id) => content.delete(id),
+      url: (id) => new URL(content.url(id), origin).href,
+    },
+  };
+}
+
 /**
  * Answers one agent request: checks the token and the agent's name, then runs
  * the function for `path` (the part after `/api/agent/`) as that agent.
@@ -87,7 +101,8 @@ export async function handleAgentRequest(
     }
   }
   try {
-    return json(200, found.route.handler(services, { kind: "agent", name }, found.params, input));
+    const scoped = withOrigin(services, new URL(request.url).origin);
+    return json(200, found.route.handler(scoped, { kind: "agent", name }, found.params, input));
   } catch (error) {
     if (error instanceof AgentError) return refuse(error.status, error.code, error.message);
     console.error("Agent API error", error);

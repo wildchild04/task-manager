@@ -59,6 +59,6 @@ To run from the source instead (while working on `mcp/`): `npm run mcp`, with th
 | `withdraw_suggestion` | Take back your own pending suggestion |
 | `get_markdown_guide` | The Markdown agents can write (headings to `######`, lists, todos, quotes, pipe tables, ``` code fences, `> [!NOTE]` callouts, marks, links, mentions) and what isn't supported |
 
-Tools that take Markdown keep anything unsupported (images, raw HTML, footnotes, a table without its `|---|` row, an unclosed fence) as text and say so in `warnings`, by line, e.g. `"Line 3: images aren't supported yet; kept as text"`.
+Images are written as `![alt](https://…)` on a line of their own; pages read back uploaded images with their absolute URLs. Tools that take Markdown keep anything unsupported (images without an http(s) URL or inside a line of text, raw HTML, footnotes, a table without its `|---|` row, an unclosed fence) as text and say so in `warnings`, by line, e.g. `"Line 3: images need an http(s) URL or an uploaded image; kept as text"`.
 
 Agents can't cancel, change chores or explorations, or delete anything, and they change existing pages and descriptions only through suggestions a human approves.
