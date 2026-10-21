@@ -1479,9 +1479,12 @@ export function PageEditor({
       toggleTodo: (id: string) => editor.toggleTodo(id),
       toggleOpen: (id: string) => editor.toggleOpen(id),
       run: (command: (editor: Editor) => unknown) => {
+        const revision = editor.revision;
         command(editor);
-        restoreSelection.current = true;
+        // The caret goes back only when something changed: otherwise a later render would move it (and scroll) unasked.
+        if (editor.revision !== revision) restoreSelection.current = true;
       },
+      peek: <T,>(read: (editor: Editor) => T): T => read(editor),
     }),
     [editor],
   );

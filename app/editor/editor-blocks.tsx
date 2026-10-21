@@ -178,6 +178,8 @@ export type BlockActions = {
   toggleOpen: (id: string) => void;
   /** Runs an editor command from a block's own controls (table, code and callout menus), then puts the caret back. */
   run: (command: (editor: Editor) => unknown) => void;
+  /** Reads from the editor without changing anything (where the caret is, for a menu about to open). */
+  peek: <T>(read: (editor: Editor) => T) => T;
 };
 
 type BlockProps = {
@@ -336,35 +338,41 @@ function SuggestionBlock({ id }: { id: string }) {
   );
 }
 
+type MenuItem = { value: string; label: ReactNode; disabled?: boolean; onClick: () => void };
+
 /** A button that opens a menu of commands, keeping the caret where it was. */
 function CommandMenu({
   label,
   ariaLabel,
   button,
   options,
+  className,
 }: {
+  className?: string;
   label?: ReactNode;
   ariaLabel: string;
   button?: "text" | "icon";
-  options: { value: string; label: ReactNode; disabled?: boolean; onClick: () => void }[];
+  /** The commands, or a function giving them when the menu opens (to reflect where the caret is then). */
+  options: MenuItem[] | (() => MenuItem[]);
 }) {
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const [menu, setMenu] = useState<{ anchor: HTMLElement; items: MenuItem[] } | null>(null);
+  const open = (anchor: HTMLElement) => setMenu({ anchor, items: typeof options === "function" ? options() : options });
   return (
-    <span contentEditable={false} onMouseDown={(event) => event.preventDefault()}>
+    <span className={className} contentEditable={false} onMouseDown={(event) => event.preventDefault()}>
       {button === "icon" ? (
-        <IconButton ariaLabel={ariaLabel} icon="menu" size="small" onClick={(event) => setAnchor(event.currentTarget)} />
+        <IconButton ariaLabel={ariaLabel} icon="menu" size="small" onClick={(event) => open(event.currentTarget)} />
       ) : (
-        <Button size="small" variant="text" ariaLabel={ariaLabel} onClick={(event) => setAnchor(event.currentTarget)}>
+        <Button size="small" variant="text" ariaLabel={ariaLabel} onClick={(event) => open(event.currentTarget)}>
           {label}
         </Button>
       )}
       <Menu
         dense
-        open={anchor !== null}
-        anchorEl={anchor}
-        options={options}
-        onClose={() => setAnchor(null)}
-        onSelect={() => setAnchor(null)}
+        open={menu !== null}
+        anchorEl={menu?.anchor ?? null}
+        options={menu?.items ?? []}
+        onClose={() => setMenu(null)}
+        onSelect={() => setMenu(null)}
       />
     </span>
   );
@@ -389,6 +397,19 @@ function TableBlock({ state, table, actions }: { state: EditorState; table: Edit
       const at = cellPosition(editor.state, editor.selection.blockId);
       if (at?.tableId === table.id) command(editor, at);
     });
+  /**
+   * The table menu as it opens: the commands on a row or column act on the caret's cell, so without the caret in
+   * this table they're disabled, with a line saying so.
+   */
+  const tableMenu = (items: MenuItem[]): MenuItem[] => {
+    const inTable = actions.peek((editor) => cellPosition(editor.state, editor.selection.blockId)?.tableId === table.id);
+    if (inTable) return items;
+    const atCaret = new Set(["row-above", "row-below", "col-left", "col-right", "row-up", "row-down", "col-left-move", "col-right-move", "row-delete", "col-delete"]);
+    return [
+      { value: "hint", label: "Click a cell first", disabled: true, onClick: () => {} },
+      ...items.map((item) => (atCaret.has(item.value) ? { ...item, disabled: true } : item)),
+    ];
+  };
   const toggle = (which: "headerRow" | "headerColumn", label: string) => ({
     value: which,
     label: `${table.props[which] ? "✓ " : ""}${label}`,
@@ -400,14 +421,19 @@ function TableBlock({ state, table, actions }: { state: EditorState; table: Edit
         headerRow={table.props.headerRow === true}
         headerColumn={table.props.headerColumn === true}
         rows={rows}
-        onAddRow={() => actions.run((editor) => editor.addTableRow(table.id))}
-        onAddColumn={() => actions.run((editor) => editor.addTableColumn(table.id))}
+        // Labelled buttons of our own: the table's built-in add controls are two identical "+" icons (reported as a design-system bug).
         tableActions={
-          <span contentEditable={false}>
+          <span contentEditable={false} className="editor-table-actions">
+            <Button size="small" variant="text" onClick={() => actions.run((editor) => editor.addTableRow(table.id))}>
+              + Row
+            </Button>
+            <Button size="small" variant="text" onClick={() => actions.run((editor) => editor.addTableColumn(table.id))}>
+              + Column
+            </Button>
             <CommandMenu
               ariaLabel="Table actions"
               button="icon"
-              options={[
+              options={() => tableMenu([
                 {
                   value: "row-above",
                   label: "Insert row above",
@@ -453,7 +479,7 @@ function TableBlock({ state, table, actions }: { state: EditorState; table: Edit
                   label: "Delete table",
                   onClick: () => actions.run((editor) => editor.deleteTable(table.id)),
                 },
-              ]}
+              ])}
             />
           </span>
         }
@@ -500,6 +526,7 @@ const CALLOUT_EMOJIS = ["💡", "ℹ️", "✅", "⚠️", "❗", "📌", "🔥"
 function CalloutStyleButton({ id, emoji, actions }: { id: string; emoji: string; actions: BlockActions }) {
   return (
     <CommandMenu
+      className="callout-emoji-button"
       ariaLabel="Callout emoji and colour"
       label={emoji}
       options={[

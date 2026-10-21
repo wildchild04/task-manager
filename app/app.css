@@ -355,6 +355,19 @@ body {
 
 /* ----- Tables, callouts and headings 4–6 (markdown-blocks) ----- */
 
+/* The editor's callout emoji is a button, taller than the line the callout's icon slot is made for: centred on the first line. */
+.callout-emoji-button {
+  display: block;
+  margin: -5px 0 -5px -6px;
+}
+
+/* A table's own controls under it: adding a row or a column, and its menu. */
+.editor-table-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 /* Code text in the design system's editor surface: one line per line, as typed. */
 .editor-code .editable {
   display: block;

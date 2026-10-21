@@ -75,9 +75,7 @@ export function TableFrame({
   headerRow: boolean;
   headerColumn: boolean;
   rows: { id: string; cells: { id: string; content: ReactNode }[] }[];
-  /** In the editor: adding rows and columns at the edges, and the table's menu. */
-  onAddRow?: () => void;
-  onAddColumn?: () => void;
+  /** In the editor: the table's controls (adding rows and columns, its menu), shown under it. */
   tableActions?: ReactNode;
 }) {
   return <DocumentTable headerRow={headerRow} headerColumn={headerColumn} rows={rows} ariaLabel="Table" {...editing} />;
