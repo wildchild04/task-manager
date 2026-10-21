@@ -494,7 +494,7 @@ On workspace pages and project pages, the slash menu's Page command SHALL create
 - **THEN** the slash menu offers no Page command
 
 ### Requirement: Adding a block from beside another
-A "+" button SHALL show beside each block's handle where the handle shows on pointing devices (not on touch screens). Clicking it SHALL add an empty paragraph holding `/` after the block, at the block's level (after a table as a whole), with the caret after the `/`, and open the slash menu there as if `/` had been typed; Alt/Option+click SHALL add it before the block instead. When the block is an empty paragraph without children, the `/` SHALL go into it instead of a new block. The handle menu's "Add below" SHALL do the same as clicking "+". Adding the block SHALL be one undo step, and the command then chosen from the menu SHALL be another.
+A "+" button SHALL show beside each block's handle wherever the handle shows, except on phone-sized touch screens, where the handle menu's "Add below" stands in for it. Clicking it SHALL add an empty paragraph holding `/` after the block, at the block's level (after a table as a whole), with the caret after the `/`, and open the slash menu there as if `/` had been typed; Alt/Option+click SHALL add it before the block instead. When the block is an empty paragraph without children, the `/` SHALL go into it instead of a new block. The handle menu's "Add below" SHALL do the same as clicking "+". Adding the block SHALL be one undo step, and the command then chosen from the menu SHALL be another.
 
 #### Scenario: Add after a table
 - **WHEN** the "+" beside a table is clicked and "Heading 2" is chosen from the menu
@@ -511,6 +511,10 @@ A "+" button SHALL show beside each block's handle where the handle shows on poi
 #### Scenario: Add below on touch
 - **WHEN** on a touch screen the handle beside a to-do is tapped and Add below is chosen
 - **THEN** a paragraph holding "/" follows the to-do with the slash menu open
+
+#### Scenario: The + on a tablet
+- **WHEN** on a tablet the caret is put in a paragraph and the "+" beside it is tapped
+- **THEN** a paragraph holding "/" follows it with the slash menu open
 
 ### Requirement: Inline formatting bar
 Selecting text within one block, other than the title or a code block, SHALL show a bar over the selection with Turn into (labelled with the block's type; not in table cells), Bold, Italic, Underline, Strikethrough, Code and Link. Each mark's button SHALL show pressed when all the selected text has that mark, and Link when the selection is within one link. The buttons SHALL do what Cmd/Ctrl+B, I, U, Shift+S, E and K do, keeping the text selected and the bar shown with updated states; Turn into SHALL list the types as the handle menu does. The bar SHALL show once a pointer selection is released or a keyboard selection has stopped changing, SHALL hide when the selection collapses, when text is typed or composed, when the selection spans blocks or whole blocks are selected, on Escape and on a click outside it, and SHALL never take focus from the text. On touch screens it SHALL show below the selection; elsewhere above it, each flipping when there is no room.
