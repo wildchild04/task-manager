@@ -29,6 +29,18 @@ async function createWorkspacePage(page: import("@playwright/test").Page, title:
   await expect(page.locator(".page-editor")).toBeVisible();
 }
 
+async function writeParagraphs(page: import("@playwright/test").Page, values: string[]) {
+  await page.locator(".editor-empty").click();
+  const first = page.locator('.editor-body .editable[data-type="paragraph"]');
+  await first.click();
+  for (const [index, value] of values.entries()) {
+    await page.keyboard.type(value);
+    if (index < values.length - 1) await page.keyboard.press("Enter");
+  }
+}
+
+const paragraphs = (page: import("@playwright/test").Page) => page.locator('.editor-body .editable[data-type="paragraph"]');
+
 /**
  * Spec coverage:
  * - project-screens: Create a project; Quick-add work
@@ -84,18 +96,10 @@ test("a page can create a sub-page through the slash menu", async ({ page }) => 
 
 test("selected blocks can be turned into a list from the block-action menu", async ({ page }) => {
   await createWorkspacePage(page, "Selection playground");
+  await writeParagraphs(page, ["First paragraph", "Second paragraph", "Third paragraph"]);
 
-  await page.locator(".editor-empty").click();
-  const paragraph = page.locator('.editor-body .editable[data-type="paragraph"]');
-  await paragraph.click();
-  await page.keyboard.type("First paragraph");
-  await paragraph.press("Enter");
-  await page.keyboard.type("Second paragraph");
-  await page.keyboard.press("Enter");
-  await page.keyboard.type("Third paragraph");
-
-  const paragraphs = page.locator('.editor-body .editable[data-type="paragraph"]');
-  await paragraphs.nth(0).click();
+  const items = paragraphs(page);
+  await items.nth(0).click();
   await page.keyboard.press("Escape");
   await expect(page.locator('[data-selected="true"]')).toHaveText(["First paragraph"]);
   await page.keyboard.press("Shift+ArrowDown");
@@ -132,11 +136,9 @@ test("ArrowDown from the final table cell creates a paragraph after the table", 
 
 test("the add button and formatting bar edit a block through visible controls", async ({ page }) => {
   await createWorkspacePage(page, "Editor controls");
-
-  await page.locator(".editor-empty").click();
-  const paragraph = page.locator('.editor-body .editable[data-type="paragraph"]');
+  await writeParagraphs(page, ["Format me"]);
+  const paragraph = paragraphs(page);
   await paragraph.click();
-  await page.keyboard.type("Format me");
   await paragraph.press("Control+a");
 
   const formatting = page.getByRole("toolbar", { name: "Formatting" });
@@ -147,5 +149,77 @@ test("the add button and formatting bar edit a block through visible controls", 
   const block = page.locator(".editor-body > [data-block]").first();
   await block.hover();
   await block.getByRole("button", { name: "Add a block below (Alt+click: above)" }).click();
-  await expect(page.locator('.editor-body .editable[data-type="paragraph"]')).toHaveCount(2);
+  await expect(paragraphs(page)).toHaveCount(2);
+});
+
+test("block-selection shortcuts duplicate selected blocks and undo restores the selection", async ({ page }) => {
+  await createWorkspacePage(page, "Block shortcuts");
+  await writeParagraphs(page, ["One", "Two", "Three"]);
+
+  await paragraphs(page).nth(1).click();
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Shift+ArrowDown");
+  await expect(page.locator('[data-selected="true"]')).toHaveText(["Two", "Three"]);
+
+  await page.keyboard.press("Control+d");
+  await expect(paragraphs(page)).toHaveText(["One", "Two", "Three", "Two", "Three"]);
+  await expect(page.locator('[data-selected="true"]')).toHaveText(["Two", "Three"]);
+
+  await page.keyboard.press("Control+z");
+  await expect(paragraphs(page)).toHaveText(["One", "Two", "Three"]);
+  await expect(page.locator('[data-selected="true"]')).toHaveText(["Two", "Three"]);
+});
+
+test("dragging a block moves it as a single undoable editor operation", async ({ page }) => {
+  await createWorkspacePage(page, "Block drag");
+  await writeParagraphs(page, ["First", "Second", "Third"]);
+
+  const blocks = page.locator(".editor-body > [data-block]");
+  await blocks.first().hover();
+  const handle = await blocks.first().getByRole("button", { name: "Drag to move, or open block actions" }).boundingBox();
+  const target = await blocks.nth(2).boundingBox();
+  if (!handle || !target) throw new Error("Editor block geometry was unavailable");
+
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height + 8, { steps: 12 });
+  await page.mouse.up();
+  await expect(paragraphs(page)).toHaveText(["Second", "Third", "First"]);
+
+  await page.keyboard.press("Control+z");
+  await expect(paragraphs(page)).toHaveText(["First", "Second", "Third"]);
+});
+
+test("typing over a drag selection spanning paragraphs replaces and joins them", async ({ page }) => {
+  await createWorkspacePage(page, "Cross-block selection");
+  await writeParagraphs(page, ["Alpha one", "Beta two"]);
+
+  const first = await paragraphs(page).nth(0).boundingBox();
+  const second = await paragraphs(page).nth(1).boundingBox();
+  if (!first || !second) throw new Error("Editor paragraph geometry was unavailable");
+
+  await page.mouse.move(first.x + 42, first.y + first.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(second.x + 38, second.y + second.height / 2, { steps: 12 });
+  await page.mouse.up();
+  await page.keyboard.type("X");
+
+  await expect(paragraphs(page)).toHaveCount(1);
+  await expect(paragraphs(page)).toContainText("X");
+});
+
+test("copying and pasting a block selection preserves its block structure", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await createWorkspacePage(page, "Clipboard");
+  await writeParagraphs(page, ["Copy me", "Paste target"]);
+
+  await paragraphs(page).first().click();
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Control+c");
+  await paragraphs(page).nth(1).click();
+  await page.keyboard.press("End");
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Control+v");
+
+  await expect(paragraphs(page)).toHaveText(["Copy me", "Paste target", "Copy me"]);
 });
