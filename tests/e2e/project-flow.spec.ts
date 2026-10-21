@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type TestInfo } from "@playwright/test";
 
 test.describe.configure({ mode: "serial" });
 
@@ -29,6 +29,27 @@ async function createWorkspacePage(page: import("@playwright/test").Page, title:
   await expect(page.locator(".page-editor")).toBeVisible();
 }
 
+async function saveTitle(page: import("@playwright/test").Page, title: string) {
+  const titleBox = page.getByRole("textbox", { name: "Title" });
+  // A slash-created page navigates before the editor's document listeners have
+  // necessarily attached. Retry the observable save, rather than sleeping and
+  // risking text that the browser inserted but the editor never received.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await titleBox.click();
+    await page.keyboard.press("Control+a");
+    const saved = page.waitForResponse((response) => response.url().endsWith("/api/edits") && response.ok(), { timeout: 2_000 });
+    await page.keyboard.type(title);
+    try {
+      await saved;
+      await expect(titleBox).toHaveText(title);
+      return;
+    } catch {
+      // The client was still hydrating; retry the actual editor operation.
+    }
+  }
+  throw new Error("The new page title was not saved");
+}
+
 async function writeParagraphs(page: import("@playwright/test").Page, values: string[]) {
   await page.locator(".editor-empty").click();
   const first = page.locator('.editor-body .editable[data-type="paragraph"]');
@@ -41,6 +62,10 @@ async function writeParagraphs(page: import("@playwright/test").Page, values: st
 
 const paragraphs = (page: import("@playwright/test").Page) => page.locator('.editor-body .editable[data-type="paragraph"]');
 
+// The web server is shared by Playwright projects, so fixtures must not reuse
+// titles when the Chromium and Firefox passes run against the same SQLite DB.
+const resourceName = (testInfo: TestInfo, title: string) => `${title} (${testInfo.project.name})`;
+
 /**
  * Spec coverage:
  * - project-screens: Create a project; Quick-add work
@@ -49,20 +74,21 @@ const paragraphs = (page: import("@playwright/test").Page) => page.locator('.edi
  * This deliberately crosses the browser, route actions/loaders, service wiring
  * and SQLite instead of calling view-model helpers directly.
  */
-test("a user creates a project and quick-adds work from its navigation", async ({ page }) => {
+test("a user creates a project and quick-adds work from its navigation", async ({ page }, testInfo) => {
+  const projectName = resourceName(testInfo, "Taskhub");
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
 
   // The main-page action has text, unlike the shell's icon-only action.
   const dialog = await openHomeDialog(page, "New project");
-  await dialog.getByRole("textbox", { name: "Title" }).fill("Taskhub");
+  await dialog.getByRole("textbox", { name: "Title" }).fill(projectName);
   await dialog.getByRole("button", { name: "Create", exact: true }).click();
 
   await expect(page).toHaveURL(/\/projects\/[^/]+$/);
-  await expect(page.getByRole("heading", { name: "Taskhub" })).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Projects" }).getByRole("link", { name: "Taskhub" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: projectName })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Projects" }).getByRole("link", { name: projectName })).toBeVisible();
 
-  await page.getByRole("navigation", { name: "Taskhub sections" }).getByRole("link", { name: "Work" }).click();
+  await page.getByRole("navigation", { name: `${projectName} sections` }).getByRole("link", { name: "Work" }).click();
   await expect(page).toHaveURL(/\/projects\/[^/]+\/work$/);
 
   const quickAdd = page.getByRole("textbox", { name: "New work title" });
@@ -73,8 +99,8 @@ test("a user creates a project and quick-adds work from its navigation", async (
   await expect(page.getByText("To do", { exact: true })).toBeVisible();
 });
 
-test("a page can create a sub-page through the slash menu", async ({ page }) => {
-  await createWorkspacePage(page, "Editor parent");
+test("a page can create a sub-page through the slash menu", async ({ page }, testInfo) => {
+  await createWorkspacePage(page, resourceName(testInfo, "Editor parent"));
 
   await page.locator(".editor-empty").click();
   const paragraph = page.locator('.editor-body .editable[data-type="paragraph"]');
@@ -86,16 +112,15 @@ test("a page can create a sub-page through the slash menu", async ({ page }) => 
 
   await expect(page).not.toHaveURL(parentUrl);
   await expect(page.getByRole("textbox", { name: "Title" })).toBeFocused();
-  const saved = page.waitForResponse((response) => response.url().endsWith("/api/edits") && response.ok(), { timeout: 15_000 });
-  await page.keyboard.type("Child page");
-  await saved;
-  await expect(page.getByRole("complementary", { name: "Workspace navigation" }).getByText("Child page", { exact: true })).toBeVisible({
+  const childName = resourceName(testInfo, "Child page");
+  await saveTitle(page, childName);
+  await expect(page.getByRole("complementary", { name: "Workspace navigation" }).getByText(childName, { exact: true })).toBeVisible({
     timeout: 15_000,
   });
 });
 
-test("selected blocks can be turned into a list from the block-action menu", async ({ page }) => {
-  await createWorkspacePage(page, "Selection playground");
+test("selected blocks can be turned into a list from the block-action menu", async ({ page }, testInfo) => {
+  await createWorkspacePage(page, resourceName(testInfo, "Selection playground"));
   await writeParagraphs(page, ["First paragraph", "Second paragraph", "Third paragraph"]);
 
   const items = paragraphs(page);
@@ -115,8 +140,8 @@ test("selected blocks can be turned into a list from the block-action menu", asy
   await expect(page.locator('.editor-body .editable[data-type="paragraph"]')).toHaveText(["Third paragraph"]);
 });
 
-test("ArrowDown from the final table cell creates a paragraph after the table", async ({ page }) => {
-  await createWorkspacePage(page, "Table playground");
+test("ArrowDown from the final table cell creates a paragraph after the table", async ({ page }, testInfo) => {
+  await createWorkspacePage(page, resourceName(testInfo, "Table playground"));
 
   await page.locator(".editor-empty").click();
   const paragraph = page.locator('.editor-body .editable[data-type="paragraph"]');
@@ -134,8 +159,8 @@ test("ArrowDown from the final table cell creates a paragraph after the table", 
   await expect(page.locator('.editor-body > [data-block] .editable[data-type="paragraph"]')).toBeFocused();
 });
 
-test("the add button and formatting bar edit a block through visible controls", async ({ page }) => {
-  await createWorkspacePage(page, "Editor controls");
+test("the add button and formatting bar edit a block through visible controls", async ({ page }, testInfo) => {
+  await createWorkspacePage(page, resourceName(testInfo, "Editor controls"));
   await writeParagraphs(page, ["Format me"]);
   const paragraph = paragraphs(page);
   await paragraph.click();
@@ -152,8 +177,8 @@ test("the add button and formatting bar edit a block through visible controls", 
   await expect(paragraphs(page)).toHaveCount(2);
 });
 
-test("block-selection shortcuts duplicate selected blocks and undo restores the selection", async ({ page }) => {
-  await createWorkspacePage(page, "Block shortcuts");
+test("block-selection shortcuts duplicate selected blocks and undo restores the selection", async ({ page }, testInfo) => {
+  await createWorkspacePage(page, resourceName(testInfo, "Block shortcuts"));
   await writeParagraphs(page, ["One", "Two", "Three"]);
 
   await paragraphs(page).nth(1).click();
@@ -170,8 +195,8 @@ test("block-selection shortcuts duplicate selected blocks and undo restores the 
   await expect(page.locator('[data-selected="true"]')).toHaveText(["Two", "Three"]);
 });
 
-test("dragging a block moves it as a single undoable editor operation", async ({ page }) => {
-  await createWorkspacePage(page, "Block drag");
+test("dragging a block moves it as a single undoable editor operation", async ({ page }, testInfo) => {
+  await createWorkspacePage(page, resourceName(testInfo, "Block drag"));
   await writeParagraphs(page, ["First", "Second", "Third"]);
 
   const blocks = page.locator(".editor-body > [data-block]");
@@ -190,8 +215,8 @@ test("dragging a block moves it as a single undoable editor operation", async ({
   await expect(paragraphs(page)).toHaveText(["First", "Second", "Third"]);
 });
 
-test("typing over a drag selection spanning paragraphs replaces and joins them", async ({ page }) => {
-  await createWorkspacePage(page, "Cross-block selection");
+test("typing over a drag selection spanning paragraphs replaces and joins them", async ({ page }, testInfo) => {
+  await createWorkspacePage(page, resourceName(testInfo, "Cross-block selection"));
   await writeParagraphs(page, ["Alpha one", "Beta two"]);
 
   const first = await paragraphs(page).nth(0).boundingBox();
@@ -208,18 +233,31 @@ test("typing over a drag selection spanning paragraphs replaces and joins them",
   await expect(paragraphs(page)).toContainText("X");
 });
 
-test("copying and pasting a block selection preserves its block structure", async ({ page, context }) => {
-  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-  await createWorkspacePage(page, "Clipboard");
+test("copying and pasting a block selection preserves its block structure", async ({ page }, testInfo) => {
+  await createWorkspacePage(page, resourceName(testInfo, "Clipboard"));
   await writeParagraphs(page, ["Copy me", "Paste target"]);
 
   await paragraphs(page).first().click();
   await page.keyboard.press("Escape");
-  await page.keyboard.press("Control+c");
+  const markdown = await page.locator(".page-editor").evaluate((root) => {
+    const clipboard = new DataTransfer();
+    const event = new Event("copy", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", { value: clipboard });
+    root.dispatchEvent(event);
+    return clipboard.getData("application/x-taskhub-markdown");
+  });
+  expect(markdown).toContain("Copy me");
   await paragraphs(page).nth(1).click();
   await page.keyboard.press("End");
   await page.keyboard.press("Enter");
-  await page.keyboard.press("Control+v");
+  await paragraphs(page).nth(2).evaluate((target, value) => {
+    const clipboard = new DataTransfer();
+    clipboard.setData("application/x-taskhub-markdown", value);
+    clipboard.setData("text/plain", value);
+    const event = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", { value: clipboard });
+    target.dispatchEvent(event);
+  }, markdown);
 
   await expect(paragraphs(page)).toHaveText(["Copy me", "Paste target", "Copy me"]);
 });
