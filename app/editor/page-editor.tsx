@@ -702,14 +702,19 @@ export function PageEditor({
       }
       setSlash(null);
       const created = editor.slash(menu.start, item.command);
-      edited();
-      // A new sub-page opens once the edit creating it is saved (if it can't be, the page stays here with the error).
-      if (created) {
-        queue.flush();
-        void queue.idle().then(() => {
-          if (!queue.dirty) void navigateRef.current(`/pages/${created}`);
-        });
+      if (!created) {
+        edited();
+        return;
       }
+      // A new sub-page opens once the edit creating it is saved (if it can't be, the page stays here with the error).
+      // Meanwhile nothing here holds the caret: typing would go to this page (its title, when the block was the only
+      // one) and be lost as it closes. The new page's title takes the caret when it opens.
+      (document.activeElement as HTMLElement | null)?.blur();
+      queue.flush();
+      void queue.idle().then(() => {
+        if (!queue.dirty) void navigateRef.current(`/pages/${created}`);
+        else writeSelection(root, editor.selection);
+      });
     };
 
     /**
