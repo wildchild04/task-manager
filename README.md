@@ -25,6 +25,19 @@ just docker-redeploy  # build and (re)start
 
 The app is at `http://localhost:3002/task-manager/`. Its SQLite database lives in `./data` (mounted at `/app/data`), with uploaded images in `./data/content`; migrations run on startup. Back up both: `sqlite3 data/app.sqlite ".backup 'backup.sqlite'"` for the database, and a copy of `data/content/` (its files never change once written). Compose reads `TIME_ZONE` (default `America/Mexico_City`) and `AGENT_TOKEN` from `.env`; see `.env.docker.example`.
 
+### Deploying by push
+
+A machine running the app from a clone (`~/apps/task-manager` on the homelab) can deploy on push: `scripts/homelab-deploy.sh` is its `post-receive` hook, rebuilding and restarting the app when `main` arrives. The build uses the pusher's forwarded SSH agent for GitHub, so the SSH host needs `ForwardAgent`:
+
+```ssh-config
+Host homelab
+	HostName 192.168.100.101
+	User wild
+	ForwardAgent yes
+```
+
+Then `just homelab-setup` (once) and `just deploy`, with your key loaded in an agent. The push waits for the build and prints it; a push is refused when the clone has local edits, and a failed build leaves the running version up.
+
 ### Behind a reverse proxy
 
 The app is built to live under `APP_BASE_PATH` (default `/task-manager`; set it in `.env` and rebuild to change it). The proxy must forward the path with its prefix, so in Caddy use `handle`, not the prefix-stripping `handle_path`:

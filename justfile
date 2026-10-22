@@ -73,3 +73,13 @@ agent-token:
   fi
   echo
   echo "Give the MCP server the same value (AGENT_TOKEN), with APP_URL pointing at this app."
+
+# Make the homelab checkout a push target that deploys: `git push homelab main` updates it and rebuilds the app.
+# Needs `ssh homelab` to work (see README); run once.
+homelab-setup:
+  ssh homelab 'cd ~/apps/task-manager && git config receive.denyCurrentBranch updateInstead && ln -sf ../../scripts/homelab-deploy.sh .git/hooks/post-receive'
+  git remote get-url homelab >/dev/null 2>&1 || git remote add homelab homelab:apps/task-manager
+
+# Push main to the homelab, which rebuilds and restarts the app (the push waits for the build).
+deploy:
+  git push homelab main
