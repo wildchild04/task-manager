@@ -4,7 +4,7 @@ import { type AppServices, createInMemoryServices } from "~/composition";
 import type { NewBlock, Operation } from "~/domain/blocks/types";
 import { matchSlashCommands, SLASH_COMMANDS } from "~/editor/block-types";
 import { Editor } from "~/editor/editor";
-import { caret, documentOrder, type EditorState, stateFromTree } from "~/editor/editor-state";
+import { arrowOrder, caret, documentOrder, type EditorState, stateFromTree } from "~/editor/editor-state";
 import { plain } from "~/editor/rich-text";
 import { verticalNeighbour } from "~/editor/tables";
 
@@ -357,14 +357,35 @@ describe("editor", () => {
       expect(editor.selection).toEqual(caret("a", 0));
     });
 
-    it("steps over an image with Backspace and Delete, keeping it", () => {
+    it("selects an image with Backspace after it and Delete before it; a second press deletes it", () => {
       seed([p("a", "Before"), image("i"), p("b", "After")]);
       at("b", 0);
       editor.deleteBackward();
-      expect(editor.selection).toEqual(caret("a", 6));
-      editor.deleteForward();
+      expect(editor.blocks).toEqual({ anchor: "i", focus: "i" });
       expect(outline()).toEqual(["paragraph:Before", "image:", "paragraph:After"]);
+      at("a", 6);
+      editor.deleteForward();
+      expect(editor.blocks).toEqual({ anchor: "i", focus: "i" });
+      editor.deleteBackward();
+      expect(outline()).toEqual(["paragraph:Before", "paragraph:After"]);
+      expect(editor.selection).toEqual(caret("a", 6));
+      editor.undo();
       expect(documentOrder(editor.state)).toEqual(["a", "i", "b"]);
+      expectInSync();
+    });
+
+    it("removes an empty paragraph after an image with Backspace, selecting the image", () => {
+      seed([p("a", "Before"), image("i"), p("b", "")]);
+      at("b", 0);
+      editor.deleteBackward();
+      expect(outline()).toEqual(["paragraph:Before", "image:"]);
+      expect(editor.blocks).toEqual({ anchor: "i", focus: "i" });
+      expectInSync();
+    });
+
+    it("stops the arrow keys at images", () => {
+      seed([p("a", "x"), image("i"), { id: "d", type: "divider" }, p("b", "y")]);
+      expect(arrowOrder(editor.state)).toEqual(["page", "a", "i", "b"]);
     });
 
     it("doesn't nest under an image", () => {

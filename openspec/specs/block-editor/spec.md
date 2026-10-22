@@ -559,11 +559,19 @@ Images SHALL be added to a page by the slash menu's Image command (which removes
 - **THEN** the page says the photo is too big (images can be at most 10 MB) and the PNG is added
 
 ### Requirement: Image blocks in the editor
-An image block SHALL show its image at most the page's width. It SHALL never hold the caret: arrow keys SHALL step over it, and Backspace at the start of the block after it SHALL move the caret to the end of the text block before it without deleting it. It SHALL be selected, moved, duplicated, copied and deleted like any block (see "Block selection" and "Acting on selected blocks"); a duplicate SHALL show the same stored image. Its handle menu SHALL offer "Alt text…", which edits the image's alt text as one undo step.
+An image block SHALL show its image at most the page's width. It SHALL never hold the caret, but it SHALL be an arrow-key stop: an arrow key leaving a text block toward it SHALL select the image (as a block selection), and while it alone is selected the arrow keys SHALL go on to the next stop. A click on the image SHALL select it (Shift+click extends the block selection). Backspace at the start of the block after it, and Delete at the end of the block before it, SHALL select the image without deleting it (an empty paragraph after it SHALL go on Backspace); Backspace or Delete on the selected image SHALL delete it. It SHALL be selected, moved, duplicated, copied and deleted like any block (see "Block selection" and "Acting on selected blocks"); a duplicate SHALL show the same stored image. Its handle menu SHALL offer "Alt text…", which edits the image's alt text as one undo step.
 
 #### Scenario: Backspace after an image
 - **WHEN** Backspace is pressed at the start of a paragraph that follows an image
-- **THEN** the image stays and the caret is at the end of the text block before it
+- **THEN** the image stays, selected; a second Backspace deletes it and the caret is at the end of the text block before it
+
+#### Scenario: Arrowing through an image
+- **WHEN** ↓ is pressed on the last line of a paragraph followed by an image, then ↓ again
+- **THEN** the first press selects the image and the second puts the caret in the text block after it
+
+#### Scenario: Clicking an image
+- **WHEN** an image is clicked
+- **THEN** it is selected, and Backspace deletes it
 
 #### Scenario: Alt text
 - **WHEN** "Alt text…" is chosen from an image's handle menu and "Server rack, front view" is entered

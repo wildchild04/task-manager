@@ -279,12 +279,20 @@ function backspaceAtStart(state: EditorState, id: string, context: CommandContex
   if (before.type === "reference" || before.type === "divider") {
     return { ops: [{ op: "delete", id: previous }], selection: caret(id, 0) };
   }
+  // An image is selected, to be deleted by a second Backspace; an empty paragraph before it goes.
+  if (before.type === "image") {
+    const blocks = { anchor: previous, focus: previous };
+    if (block.type !== "paragraph" || text.length(block.content) > 0 || block.children.length > 0) {
+      return { ops: [], selection: caret(id, 0), blocks };
+    }
+    const target = previousTextBlock(state, id, context.closed);
+    return { ops: [{ op: "delete", id }], selection: caret(target, text.length(getBlock(state, target).content)), blocks };
+  }
   // Sub-pages, suggestions and tables are never deleted by Backspace, nor does text merge into a table: step over
   // them. Code can't hold another block's children, so a block with children steps over it too.
   const stepOver =
     before.type === "page" ||
     before.type === "suggestion" ||
-    before.type === "image" ||
     isTablePart(before.type) ||
     (before.type === "code" && block.children.length > 0);
   if (stepOver) {
@@ -304,7 +312,8 @@ function deleteAtEnd(state: EditorState, id: string, context: CommandContext): C
   const after = getBlock(state, next);
   const length = text.length(current.content);
   if (after.type === "reference" || after.type === "divider") return { ops: [{ op: "delete", id: next }], selection: caret(id, length) };
-  if (after.type === "page" || after.type === "suggestion" || after.type === "image" || isTablePart(after.type)) return null;
+  if (after.type === "image") return { ops: [], selection: caret(id, length), blocks: { anchor: next, focus: next } };
+  if (after.type === "page" || after.type === "suggestion" || isTablePart(after.type)) return null;
   if (current.type === "code" && after.children.length > 0) return null;
   return merge(state, id, next);
 }

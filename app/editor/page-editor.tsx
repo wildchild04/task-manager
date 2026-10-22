@@ -20,6 +20,7 @@ import { behaviorOf, matchSlashCommands, SLASH_COMMANDS, type SlashCommand, type
 import { canTurnInto } from "~/editor/commands";
 import { Editor } from "~/editor/editor";
 import {
+  arrowOrder,
   caret,
   caretOrder,
   documentOrder,
@@ -27,6 +28,7 @@ import {
   getBlock,
   isCollapsed,
   type Point,
+  selectableOrder,
   type Selection,
   stateFromTree,
   type TextRange,
@@ -997,6 +999,22 @@ export function PageEditor({
       return order[order.indexOf(id) + step];
     };
 
+    /** The block the arrow keys stop at before (-1) or after (1) `id`: a text block for the caret, or an image to select. */
+    const arrowStop = (id: string, step: -1 | 1) => {
+      const order = arrowOrder(editor.state, editor.closed).filter((blockId) =>
+        getBlock(editor.state, blockId).type === "image" ? root.querySelector(`[data-block="${blockId}"]`) : editableOf(root, blockId),
+      );
+      return order[order.indexOf(id) + step];
+    };
+
+    /** Arrives at an arrow stop: selects an image whole, or puts the caret at `offset` in a text block. */
+    const arriveAt = (id: string, offset: (element: HTMLElement) => number) => {
+      if (getBlock(editor.state, id).type === "image") {
+        editor.selectBlock(id);
+        edited();
+      } else moveTo(caret(id, offset(editableOf(root, id)!)));
+    };
+
     /** Selects from `anchor` to `focus`: text within one block, or across blocks. */
     const selectBetween = (anchor: Point, focus: Point) => {
       if (anchor.blockId === focus.blockId) {
@@ -1105,6 +1123,16 @@ export function PageEditor({
       const key = event.key.toLowerCase();
       const vertical = event.key === "ArrowUp" || event.key === "ArrowDown";
       const step = event.key === "ArrowUp" ? -1 : 1;
+      const back = event.key === "ArrowUp" || event.key === "ArrowLeft";
+      const blocks = editor.blocks!;
+      // A lone selected image is an arrow stop like the caret: the arrows go on to the next stop.
+      const loneImage = blocks.anchor === blocks.focus && getBlock(editor.state, blocks.focus).type === "image";
+      const target = loneImage && event.key.startsWith("Arrow") && !event.shiftKey && !mod && !event.altKey && arrowStop(blocks.focus, back ? -1 : 1);
+      if (target) {
+        event.preventDefault();
+        arriveAt(target, () => (back ? plain(getBlock(editor.state, target).content).length : 0));
+        return;
+      }
       if (event.key === "Escape") editor.selectBlocks(null);
       else if (vertical && mod && event.shiftKey) editor.moveBlocks(step);
       else if (vertical && !mod && !event.altKey) editor.stepBlocks(step, event.shiftKey);
@@ -1255,10 +1283,11 @@ export function PageEditor({
             const inTable = getBlock(editor.state, selection.blockId).type === "table_cell";
             const target = inTable
               ? verticalNeighbour(editor.state, selection.blockId, up, editor.closed)
-              : neighbour(selection.blockId, up ? -1 : 1);
+              : arrowStop(selection.blockId, up ? -1 : 1);
             if (target) {
               goalX.current ??= caretRect()?.left ?? element.getBoundingClientRect().left;
-              moveTo(caret(target, offsetAtX(editableOf(root, target)!, goalX.current, up ? "last" : "first")));
+              const x = goalX.current;
+              arriveAt(target, (at) => offsetAtX(at, x, up ? "last" : "first"));
               event.preventDefault();
             } else if (!up && editor.exitBlock()) {
               // Nothing below a table or code block: ↓ leaves it for a new paragraph.
@@ -1269,15 +1298,15 @@ export function PageEditor({
           return;
         }
         if (plainArrow && event.key === "ArrowLeft" && isCollapsed(selection) && selection.focus === 0) {
-          const target = neighbour(selection.blockId, -1);
+          const target = arrowStop(selection.blockId, -1);
           if (target) {
-            moveTo(caret(target, plain(getBlock(editor.state, target).content).length));
+            arriveAt(target, () => plain(getBlock(editor.state, target).content).length);
             event.preventDefault();
           }
         } else if (plainArrow && event.key === "ArrowRight" && isCollapsed(selection) && selection.focus === length) {
-          const target = neighbour(selection.blockId, 1);
+          const target = arrowStop(selection.blockId, 1);
           if (target) {
-            moveTo(caret(target, 0));
+            arriveAt(target, () => 0);
             event.preventDefault();
           } else if (editor.exitBlock()) {
             event.preventDefault();
@@ -1512,8 +1541,17 @@ export function PageEditor({
       }
     };
 
-    /** Shift+click in another block selects from the selection's anchor to there. */
+    /** Shift+click in another block selects from the selection's anchor to there. A click on an image selects it. */
     const onMouseDown = (event: MouseEvent) => {
+      const image = (event.target as HTMLElement).closest?.<HTMLElement>(".block-image")?.closest<HTMLElement>("[data-block]");
+      const imageId = image && root.contains(image) ? image.dataset.block! : null;
+      if (event.button === 0 && imageId && selectableOrder(editor.state, editor.closed).includes(imageId)) {
+        event.preventDefault();
+        if (event.shiftKey) editor.extendBlocks(imageId);
+        else editor.selectBlock(imageId);
+        edited();
+        return;
+      }
       if (!event.shiftKey || event.button !== 0 || !(event.target as HTMLElement).closest?.(".editable")) return;
       const { selection } = editor;
       const anchor = editor.range?.anchor ?? { blockId: selection.blockId, offset: selection.anchor };

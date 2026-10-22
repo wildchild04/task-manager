@@ -186,25 +186,37 @@ test("a file that's too big is named, and the others are still added", async ({ 
   expect(svg.status()).toBe(415);
 });
 
-test("Backspace after an image keeps it; alt text is edited from the handle menu and undone", async ({ page }, testInfo) => {
+test("arrows and clicks select an image, Backspace deletes it; alt text is edited from the handle menu and undone", async ({ page }, testInfo) => {
   await createWorkspacePage(page, resourceName(testInfo, "Image editing"));
   await writeParagraphs(page, ["Before", "After"]);
   const png = await drawImage(page, 20, "image/png");
   await paragraphs(page).first().click();
   await dispatchFiles(page, '.editor-body .editable[data-type="paragraph"]', "paste", [asFile("x.png", "image/png", png)]);
   await expect(images(page)).toHaveCount(1);
+  const block = page.locator(".editor-body [data-block]").filter({ has: page.locator(".block-image") });
 
+  // Backspace at the start of the block after it selects the image, keeping it; ↑ goes on to the text before.
   await paragraphs(page).nth(1).click();
   await page.keyboard.press("Home");
   await page.keyboard.press("Backspace");
+  await expect(block).toHaveAttribute("data-selected", "true");
+  await page.keyboard.press("ArrowUp");
+  await expect(block).not.toHaveAttribute("data-selected", "true");
   await page.keyboard.type("!");
   expect(await outline(page)).toEqual(["text:Before!", "image", "text:After"]);
-  // Arrow keys step over it (keeping the caret's horizontal place).
+  // ↓ stops at the image, then goes on to the text after it.
   await page.keyboard.press("ArrowDown");
+  await expect(block).toHaveAttribute("data-selected", "true");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Home");
   await page.keyboard.type("?");
-  expect(await outline(page)).toEqual(["text:Before!", "image", "text:After?"]);
+  expect(await outline(page)).toEqual(["text:Before!", "image", "text:?After"]);
 
-  const block = page.locator(".editor-body [data-block]").filter({ has: page.locator(".block-image") });
+  // A click selects it.
+  await images(page).locator("img").click();
+  await expect(block).toHaveAttribute("data-selected", "true");
+  await page.keyboard.press("Escape");
+
   await block.hover();
   await block.getByRole("button", { name: "Drag to move, or open block actions" }).click();
   await page.getByRole("menuitem", { name: "Alt text…" }).click();
@@ -214,6 +226,13 @@ test("Backspace after an image keeps it; alt text is edited from the handle menu
   await expect(images(page).locator("img")).toHaveAttribute("alt", "Server rack, front view");
   await page.keyboard.press("Control+z");
   await expect(images(page).locator("img")).toHaveAttribute("alt", "");
+
+  // Clicked and deleted with Backspace, the caret goes to the end of the text before.
+  await images(page).locator("img").click();
+  await page.keyboard.press("Backspace");
+  await expect(images(page)).toHaveCount(0);
+  await page.keyboard.type("#");
+  expect(await outline(page)).toEqual(["text:Before!#", "text:?After"]);
 });
 
 test("an external image from pasted Markdown shows its error state when broken, and agents read images back", async ({ page }, testInfo) => {

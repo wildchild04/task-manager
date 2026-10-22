@@ -99,6 +99,15 @@ export function caretOrder(state: EditorState, closed: ReadonlySet<string> = new
   return [state.rootId, ...documentOrder(state, closed).filter((id) => behaviorOf(getBlock(state, id).type).text)];
 }
 
+/** Where the arrow keys stop, in reading order: the blocks that hold the caret, and images, which are selected whole. */
+export function arrowOrder(state: EditorState, closed: ReadonlySet<string> = new Set()): string[] {
+  const stops = documentOrder(state, closed).filter((id) => {
+    const { type } = getBlock(state, id);
+    return type === "image" || behaviorOf(type).text;
+  });
+  return [state.rootId, ...stops];
+}
+
 /**
  * The blocks a block selection can stop at, in reading order: every block of
  * the page, except that a table stands for its rows and cells, a suggestion
