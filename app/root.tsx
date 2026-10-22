@@ -6,6 +6,9 @@ import "./app.css";
 import { ErrorPage } from "./components/error-page";
 import { AppThemeProvider, readThemeCookie } from "./theme-mode";
 
+/** The favicon, under the base path (`/task-manager/favicon.svg`) so it's served behind the proxy too. */
+export const links: Route.LinksFunction = () => [{ rel: "icon", type: "image/svg+xml", href: `${import.meta.env.BASE_URL}favicon.svg` }];
+
 export async function loader({ request }: Route.LoaderArgs) {
   return { themeMode: readThemeCookie(request.headers.get("cookie")) ?? ("light" as ThemeMode) };
 }
