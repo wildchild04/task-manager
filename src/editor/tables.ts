@@ -1,6 +1,6 @@
 import type { Operation } from "~/domain/blocks/types";
 
-import { caret, caretOrder, type EditorState, getBlock, previousSibling, type Selection } from "./editor-state";
+import { arrowOrder, caret, caretOrder, type EditorState, getBlock, previousSibling, type Selection } from "./editor-state";
 import { length } from "./rich-text";
 
 /** What a table command produces (as `CommandResult`): the operations and where the selection goes. */
@@ -86,7 +86,7 @@ export function cellBelow(state: EditorState, cellId: string, newId: () => strin
 
 /**
  * ↑ or ↓ from a cell's first or last line: the cell above or below in the same column, or, from the first or
- * last row, the text block before or after the table (`undefined` when there is none).
+ * last row, the arrow stop before or after the table: a text block, or an image (`undefined` when there is none).
  */
 export function verticalNeighbour(
   state: EditorState,
@@ -100,7 +100,7 @@ export function verticalNeighbour(
   if (inTable) return inTable;
   const { rows, columns } = tableSize(state, at.tableId);
   const edge = up ? cellAt(state, at.tableId, 0, 0)! : cellAt(state, at.tableId, rows - 1, columns - 1)!;
-  const order = caretOrder(state, closed);
+  const order = arrowOrder(state, closed);
   return order[order.indexOf(edge) + (up ? -1 : 1)];
 }
 

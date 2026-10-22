@@ -393,6 +393,11 @@ body {
   margin: -5px 0 -5px -6px;
 }
 
+/* Tables have square corners; DocumentTable has no prop for it yet (design-system feature request document-table-corners). */
+[data-document-table] > .MuiTableContainer-root {
+  border-radius: 0;
+}
+
 /* While the table menu is open: the cell whose row and column its commands change. */
 [data-menu-target] {
   outline: 2px solid var(--ds-secondary);

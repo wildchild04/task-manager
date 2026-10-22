@@ -483,6 +483,18 @@ describe("editor", () => {
       expect(verticalNeighbour(editor.state, "c", false)).toBe("y");
     });
 
+    it("stops at an image when leaving the table", () => {
+      const row = (id: string, cells: string[]): Seed => ({ id, type: "table_row", children: cells.map((c) => cell(c)) });
+      seed([
+        { id: "I1", type: "image", props: { url: "https://example.com/a.png" } },
+        { id: "T", type: "table", props: { headerRow: false, headerColumn: false }, children: [row("r1", ["a"]), row("r2", ["c"])] },
+        { id: "I2", type: "image", props: { url: "https://example.com/b.png" } },
+        p("y", ""),
+      ]);
+      expect(verticalNeighbour(editor.state, "c", false)).toBe("I2");
+      expect(verticalNeighbour(editor.state, "a", true)).toBe("I1");
+    });
+
     it("adds, moves and deletes rows and columns as single undo steps", () => {
       seedTable();
       at("a", 0);
