@@ -38,7 +38,7 @@ In Normal mode the caret SHALL be shown as a block cursor over the character aft
 - **THEN** the block cursor is over "o"
 
 ### Requirement: Counts and motions
-In Normal and Visual mode a count (digits, not starting with 0) SHALL repeat the following motion or operator. The motions SHALL be: `h` and `l` (a character left and right, within the block), `w` and `b` (to the next and previous word start), `e` (to the next word end), `0` (the line's start), `^` (the line's first non-blank character), `$` (the line's last character), `gg` (the first text block of the page) and `G` (the last text block). `w`, `b` and `e` SHALL move into the next or previous text block at a block's edge. `j` and `k` SHALL move a visual line down and up, and between blocks, as ↓ and ↑ do without Vim mode: keeping the column, moving by column in tables, and stopping at images, which are then selected whole; from a selected image `j` and `k` SHALL go on to the next stop. Lines SHALL be the block's lines as the browser lays them out, and a code block's lines its text lines.
+In Normal and Visual mode a count (digits, not starting with 0) SHALL repeat the following motion or operator. The motions SHALL be: `h` and `l` (a character left and right, within the block), `w` and `b` (to the next and previous word start), `e` (to the next word end), `0` (the line's start), `^` (the line's first non-blank character), `$` (the line's last character), `gg` (the start of the cursor's block's first line) and `G` (the start of its last line); `gg` and `G` SHALL never leave the cursor's block. `w`, `b` and `e` SHALL move into the next or previous text block at a block's edge. `j` and `k` SHALL move a visual line down and up, and between blocks, as ↓ and ↑ do without Vim mode: keeping the column, moving by column in tables, and stopping at images, which are then selected whole; from a selected image `j` and `k` SHALL go on to the next stop. Lines SHALL be the block's lines as the browser lays them out, and a code block's lines its text lines.
 
 #### Scenario: Count with a word motion
 - **WHEN** `3w` is pressed at the start of "one two three four"
@@ -52,9 +52,9 @@ In Normal and Visual mode a count (digits, not starting with 0) SHALL repeat the
 - **WHEN** `j` is pressed on the last line of a paragraph followed by an image, then `j` again
 - **THEN** the first press selects the image and the second puts the cursor in the text block after it
 
-#### Scenario: `gg` and `G`
-- **WHEN** `G` is pressed, then `gg`
-- **THEN** the cursor goes to the last text block, then to the first
+#### Scenario: `gg` and `G` stay in the block
+- **WHEN** `G` is pressed in the middle of a three-line code block that has paragraphs before and after it, then `gg`
+- **THEN** the cursor goes to the start of the code block's last line, then to the start of its first line
 
 ### Requirement: Entering Insert mode
 In Normal mode `i` SHALL enter Insert at the cursor, `a` after the cursor's character, `I` at the line's first non-blank character, `A` at the block's end; `o` and `O` SHALL add a block after or before the cursor's block and enter Insert in it, the new block taking the type Enter would give it (a list item after a list item, an unchecked to-do after a to-do, a paragraph otherwise). `Esc` in Insert SHALL return to Normal with the cursor one character back (not before the line's start); with a slash menu, mention menu, link card or formatting bar open, `Esc` SHALL first close it, and a second `Esc` return to Normal. In Insert mode every key SHALL behave as it does without Vim mode, except that `Esc` never selects the block.

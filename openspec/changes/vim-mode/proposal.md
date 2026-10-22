@@ -8,7 +8,7 @@ Writing in the editor means reaching for arrow keys, Home/End and the mouse to m
 - **Modes**: Normal, Insert and Visual (characterwise), shown in a small mode indicator. With Vim mode on, the editor starts in Normal mode; clicking into text keeps the current mode.
 - **Normal mode**: the caret is drawn as a block cursor over the character it is on, and typed text never reaches the page (IME composition started in Normal mode is cancelled).
   - Counts before motions and operators (`3w`, `2dd`).
-  - Motions: `h j k l`, `w b e`, `0 ^ $`, `gg G`. `j`/`k` move by visual line and between blocks like ↓/↑ do today: keeping the column, moving by column in tables, and stopping at images, which are selected whole.
+  - Motions: `h j k l`, `w b e`, `0 ^ $`, `gg G` (the first and last line of the cursor's block, never leaving it). `j`/`k` move by visual line and between blocks like ↓/↑ do today: keeping the column, moving by column in tables, and stopping at images, which are selected whole.
   - Entering Insert: `i a I A o O`.
   - Operators: `x`, `dd`, `dw`, `d$`, `cw`, `cc`, `yy`, `p`, `P`. `dd`/`yy` act on whole blocks, as one undo step, and `p`/`P` paste them after/before the cursor's block.
   - `u` and `Ctrl-r` undo and redo.

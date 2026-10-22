@@ -20,7 +20,7 @@ Vim mode is desktop-only (no on-screen keyboards), opt-in per browser, and must 
 
 `VimMachine` holds `mode`, a pending count, a pending operator (`d`, `c`, `y`), a pending `g` and the leader state. `feed(key, context)` returns a list of **actions** (`move(point)`, `select(range)`, `deleteTo(point)`, `deleteBlocks(n)`, `yankBlocks(n)`, `paste(side)`, `enterInsert(point | newBlock)`, `openMenu("/" | "@")`, `selectBlock`, `undo`, `redo`, `setMode`). It never touches the DOM or the Editor directly. `page-editor.tsx` runs those actions with the Editor and the DOM helpers it already has.
 
-Motions are pure functions over `EditorState` and a point (`motions.ts` next to it). The exceptions are `j`/`k`, `0`/`$`/`^` on wrapped lines and `gg`/`G` scrolling, which need layout. The machine takes those through a small `Layout` interface (`lineStart(point)`, `lineEnd(point)`, `lineBelow(point, goalX)`, `lineAbove(...)`). The DOM implements it with `offsetOnEdgeLine`, `rectAt`, `pointAt`, `arrowStop` and `arriveAt`. Tests use a fake where every block is one line.
+Motions are pure functions over `EditorState` and a point (`motions.ts` next to it). The exceptions are `j`/`k`, and `0`/`$`/`^`/`gg`/`G` on wrapped lines, which need layout (`gg`/`G` stay in the cursor's block). The machine takes those through a small `Layout` interface (`lineStart(point)`, `lineEnd(point)`, `lineBelow(point, goalX)`, `lineAbove(...)`, `firstLine(block)`, `lastLine(block)`). The DOM implements it with `offsetOnEdgeLine`, `rectAt`, `pointAt`, `arrowStop` and `arriveAt`. Tests use a fake where every block is one line.
 
 *Alternatives:* a Vim emulation library (CodeMirror's `@replit/codemirror-vim`, VSCodeVim's core). These are tied to their own editors' document and selection models, so adapting them would be bigger than writing the subset we need. *Why actions, not direct calls:* the machine stays testable, and the app keeps sole ownership of the DOM and focus.
 
@@ -66,4 +66,4 @@ None: a new opt-in setting with no stored data besides a cookie. Turning it off 
 
 ## Open Questions
 
-- Should `gg`/`G` include the title as the first stop (Vim's "top of file")? The spec currently goes to the first and last text blocks, leaving the title out, like Select all.
+None.
