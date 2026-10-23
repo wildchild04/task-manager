@@ -98,8 +98,17 @@ export class Editor {
     const open = new Set(Object.values(this.state.blocks).filter((b) => b.type === "toggle" && !this.closed.has(b.id)).map((b) => b.id));
     this.state = state;
     this.closed = new Set([...foldedToggles(state)].filter((id) => !open.has(id)));
-    if (!state.blocks[this.selection.blockId]) this.selection = caret(state.rootId, 0);
+    // The caret stays in its block, at most at the block's new end.
+    const clamp = (blockId: string, offset: number) => Math.min(offset, length(state.blocks[blockId]!.content));
+    const { blockId, anchor, focus } = this.selection;
+    this.selection = state.blocks[blockId]
+      ? { blockId, anchor: clamp(blockId, anchor), focus: clamp(blockId, focus) }
+      : caret(state.rootId, 0);
     if (this.range && !(state.blocks[this.range.anchor.blockId] && state.blocks[this.range.focus.blockId])) this.range = null;
+    else if (this.range) {
+      const point = ({ blockId, offset }: { blockId: string; offset: number }) => ({ blockId, offset: clamp(blockId, offset) });
+      this.range = { anchor: point(this.range.anchor), focus: point(this.range.focus) };
+    }
     if (this.blocks && !(state.blocks[this.blocks.anchor] && state.blocks[this.blocks.focus])) this.blocks = null;
     this.history = new History();
     this.notify();

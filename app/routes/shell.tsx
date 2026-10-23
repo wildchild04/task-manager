@@ -11,6 +11,7 @@ import { type ProjectSection, shellView } from "../lib/shell.server";
 import { useThemeMode } from "../theme-mode";
 import type { Route } from "./+types/shell";
 import { withBase } from "../lib/base-path";
+import { useLiveRefresh } from "../lib/live-refresh";
 
 export function loader({ request }: Route.LoaderArgs) {
   return shellView(services, new URL(request.url).pathname);
@@ -67,6 +68,8 @@ function Group({
 export default function Shell({ loaderData }: Route.ComponentProps) {
   const { projects, current, pages, notifications } = loaderData;
   const { mode, setMode } = useThemeMode();
+  // Every screen is inside the shell: one subscription per tab keeps them all current.
+  useLiveRefresh();
   const navigate = useNavigate();
   const [creatingProject, setCreatingProject] = useState(false);
   const [creatingPage, setCreatingPage] = useState(false);

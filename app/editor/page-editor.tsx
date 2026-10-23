@@ -73,6 +73,7 @@ import {
 } from "./editor-blocks";
 import { IMAGE_ACCEPT, imageFiles, uploadImages } from "./upload";
 import { withBase, withoutBase } from "../lib/base-path";
+import { recordOwnChange } from "../lib/live-refresh";
 
 const SLASH_MENU_ID = "slash-menu";
 
@@ -115,7 +116,9 @@ async function sendBatch(page: EditablePage, batch: Operation[]): Promise<SendRe
       return { ok: false, retry: false, message: body.message ?? "The edit was refused" };
     }
     if (!response.ok) return { ok: false, retry: true };
-    const body = (await response.json()) as { version: string };
+    const body = (await response.json()) as { version: string; seq: number };
+    // The change event for this save mustn't refresh the screen.
+    recordOwnChange(body.seq);
     return { ok: true, version: body.version };
   } catch {
     return { ok: false, retry: true };
@@ -462,6 +465,15 @@ export function PageEditor({
   const navigateRef = useRef(navigate);
   navigateRef.current = navigate;
   const knownVersion = useRef(page.version);
+  // Versions this editor's own saves produced: a re-read showing one of them isn't a change made elsewhere.
+  const savedVersions = useRef(new Set<string>());
+  // Content changed elsewhere arrived while edits were unsaved: re-read once they're saved.
+  const missedChange = useRef(false);
+  /** Makes the next re-read replace the content, whatever its version. */
+  const forgetVersion = () => {
+    knownVersion.current = "";
+    savedVersions.current.clear();
+  };
   const restoreSelection = useRef(false);
   const composing = useRef(false);
   const goalX = useRef<number | null>(null);
@@ -527,6 +539,7 @@ export function PageEditor({
         const result = await sendBatch(page, batch);
         if (result.ok && result.version) {
           knownVersion.current = result.version;
+          savedVersions.current.add(result.version);
           // A new title shows in the navigation, lists and breadcrumbs; a new or removed sub-page in the sidebar.
           const changesPages = batch.some(
             (op) =>
@@ -541,7 +554,7 @@ export function PageEditor({
       onStatus: setStatus,
       onRejected: (message) => {
         setError(`${message}. The page was reloaded.`);
-        knownVersion.current = "";
+        forgetVersion();
         void revalidator.revalidate();
       },
     });
@@ -611,13 +624,28 @@ export function PageEditor({
     [editor, pageNames, setLinkCard],
   );
 
-  // Content changed elsewhere (e.g. a task's return): take it when nothing is waiting to be saved.
+  // Content changed elsewhere (another tab, an agent, a task's return): take it when nothing is waiting to be saved.
   useEffect(() => {
-    if (page.version !== knownVersion.current && !queue.dirty) {
-      knownVersion.current = page.version;
-      editor.reset(stateFromTree(page.tree));
+    // An older version of this editor's own saves (a re-read that started before a later save) isn't news either.
+    if (page.version === knownVersion.current || savedVersions.current.has(page.version)) return;
+    if (queue.dirty) {
+      missedChange.current = true;
+      return;
     }
+    knownVersion.current = page.version;
+    savedVersions.current.clear();
+    // With focus in the editor, the caret goes back into its block once the new content is drawn.
+    if (rootRef.current?.contains(document.activeElement)) restoreSelection.current = true;
+    editor.reset(stateFromTree(page.tree));
   }, [page.version, page.tree, editor, queue]);
+
+  // Once the edits that held back a change from elsewhere are saved, re-read the page to show both.
+  useEffect(() => {
+    if (status !== "saved" || !missedChange.current) return;
+    missedChange.current = false;
+    forgetVersion();
+    void revalidator.revalidate();
+  }, [status, revalidator]);
 
   useSyncExternalStore(
     useCallback((listener) => editor.subscribe(listener), [editor]),
@@ -693,7 +721,7 @@ export function PageEditor({
       } catch {
         result = { ok: false, message: "The server couldn't be reached; try again" };
       }
-      knownVersion.current = "";
+      forgetVersion();
       await revalidator.revalidate();
       setDeciding(false);
       setDecided(

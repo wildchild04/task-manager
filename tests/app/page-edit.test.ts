@@ -32,7 +32,7 @@ describe("page edits", () => {
       { op: "insert", block: { id: "b", type: "todo", props: { checked: false } }, parentId: "doc", afterId: "a" },
       { op: "update", id: "doc", content: [{ text: "Renamed" }] },
     ]);
-    expect(result).toEqual({ ok: true, version: editablePage(services, "page", "doc")!.version });
+    expect(result).toEqual({ ok: true, version: editablePage(services, "page", "doc")!.version, seq: services.changes.current });
     expect(result.ok && result.version).not.toBe(before);
     expect(services.blocks.getBlock("doc")!.content).toEqual([{ text: "Renamed" }]);
   });

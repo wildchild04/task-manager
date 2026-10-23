@@ -24,7 +24,12 @@ const port = Number(process.env.PORT ?? 3000);
 const app = express();
 app.disable("x-powered-by");
 app.set("trust proxy", process.env.TRUST_PROXY ?? "loopback, uniquelocal");
-app.use(compression());
+// Event streams aren't compressed: gzip would hold each event back until its buffer fills.
+app.use(
+  compression({
+    filter: (req, res) => !String(res.getHeader("Content-Type") ?? "").startsWith("text/event-stream") && compression.filter(req, res),
+  }),
+);
 // Fingerprinted assets never change; everything else in build/client is served as is.
 app.use(path.posix.join(build.publicPath, "assets"), express.static(path.join(clientDir, "assets"), { immutable: true, maxAge: "1y" }));
 app.use(build.publicPath, express.static(clientDir));
@@ -35,4 +40,10 @@ const server = process.env.HOST ? app.listen(port, process.env.HOST, ready) : ap
 function ready() {
   console.log(`Listening on http://${process.env.HOST ?? "localhost"}:${port}${build.basename ?? ""}`);
 }
-for (const signal of ["SIGTERM", "SIGINT"]) process.once(signal, () => server.close(console.error));
+// Open change streams never end by themselves, so after a moment for requests in flight, cut what's left.
+for (const signal of ["SIGTERM", "SIGINT"]) {
+  process.once(signal, () => {
+    server.close(console.error);
+    setTimeout(() => server.closeAllConnections(), 1000).unref();
+  });
+}

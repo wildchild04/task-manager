@@ -7,6 +7,8 @@ import { BlockService } from "~/domain/blocks/block.service";
 import type { ProtectionHooks } from "~/domain/blocks/validate";
 import type { ProjectResolvers } from "~/domain/library/library.service";
 import { LibraryService } from "~/domain/library/library.service";
+import type { ChangeFeed } from "~/domain/changes";
+import { createChangeFeed } from "~/domain/changes";
 import { ChoreService } from "~/domain/chores/chore.service";
 import { choresSection, DashboardRegistry, DashboardService, registerCoreSections } from "~/domain/projects/dashboard";
 import { ProjectService, projectProtection } from "~/domain/projects/project.service";
@@ -56,6 +58,8 @@ export type AppServices = {
   content: ContentRepository;
   /** Where later changes add dashboard sections. */
   dashboardSections: DashboardRegistry;
+  /** Advances after every committed write, whoever made it. */
+  changes: ChangeFeed;
   close(): void;
 };
 
@@ -65,8 +69,33 @@ export type AppServices = {
  */
 export type ServiceOptions = { newId?: () => string; now?: () => string; timeZone?: string; basePath?: string };
 
-function buildServices(uow: UnitOfWork, content: ContentRepository, close: () => void, options: ServiceOptions): AppServices {
-  const blocks = new BlockService(uow.repositories.blocks);
+/**
+ * Wraps the two write doors, the unit of work and block batches, so the
+ * outermost one that returns (and so has committed) advances the feed once.
+ */
+function countWrites(store: UnitOfWork, blocks: BlockService): { uow: UnitOfWork; changes: ChangeFeed } {
+  const { feed, committed } = createChangeFeed();
+  let depth = 0;
+  function counted<T>(write: () => T): T {
+    depth++;
+    let result: T;
+    try {
+      result = write();
+    } finally {
+      depth--;
+    }
+    if (depth === 0) committed();
+    return result;
+  }
+  const apply = blocks.apply.bind(blocks);
+  blocks.apply = (batch, options) => counted(() => apply(batch, options));
+  const uow: UnitOfWork = { repositories: store.repositories, run: (work) => counted(() => store.run(work)) };
+  return { uow, changes: feed };
+}
+
+function buildServices(store: UnitOfWork, content: ContentRepository, close: () => void, options: ServiceOptions): AppServices {
+  const blocks = new BlockService(store.repositories.blocks);
+  const { uow, changes } = countWrites(store, blocks);
   const projects = new ProjectService(uow, options.newId, options.now);
   const { repositories } = uow;
   const resolvers: ProjectResolvers = {
@@ -92,7 +121,7 @@ function buildServices(uow: UnitOfWork, content: ContentRepository, close: () =>
   registerCoreSections(dashboardSections, { tasks, blocks, projects });
   dashboardSections.replace(choresSection(tasks, chores));
   const dashboard = new DashboardService(dashboardSections, projects);
-  return { blocks, projects, library, tasks, comments, suggestions, chores, dashboard, content, dashboardSections, close };
+  return { blocks, projects, library, tasks, comments, suggestions, chores, dashboard, content, dashboardSections, changes, close };
 
   /** Entity kinds a task can reference. Later domains (comments, subtasks) add theirs. */
   function referenceable(): ReferenceableKinds {

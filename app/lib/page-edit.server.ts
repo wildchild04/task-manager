@@ -106,7 +106,8 @@ export function editablePage(services: AppServices, surface: EditSurface, id: st
   };
 }
 
-export type EditResult = { ok: true; version: string } | { ok: false; message: string };
+/** `seq` is the change number of the save, so the tab that made it can skip its own change event. */
+export type EditResult = { ok: true; version: string; seq: number } | { ok: false; message: string };
 
 const surfaces: readonly string[] = ["page", "project", "task", "comment"];
 
@@ -144,7 +145,8 @@ export function applyEdit(services: AppServices, body: unknown): EditResult {
     if (error instanceof TaskError) return { ok: false, message: error.message };
     throw error;
   }
-  return { ok: true, version: treeVersion(services.blocks.loadTree(target.rootId)!) };
+  // The write is synchronous, so the feed's number right after it is this save's.
+  return { ok: true, version: treeVersion(services.blocks.loadTree(target.rootId)!), seq: services.changes.current };
 }
 
 // ----- Deleting pages -----

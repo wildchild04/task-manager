@@ -52,6 +52,8 @@ example.home {
 
 The server (`server.mjs`) trusts `X-Forwarded-Proto` from proxies on loopback and private networks (`TRUST_PROXY` overrides it, as Express's `trust proxy`). Without that, form posts through an HTTPS proxy are refused as cross-site.
 
+Open tabs refresh themselves from a Server-Sent Events stream, `/api/changes`. Caddy passes it through as is (it flushes event streams at once and has no response timeout), but a proxy that buffers responses would hold events back. After deploying, check it through the proxy: `curl -N https://192.168.100.101/task-manager/api/changes` should print `event: hello` at once, and an `event: change` when something is edited.
+
 For local development `npm run dev` stays at the root; `APP_BASE_PATH=/task-manager npm run build && npm start` runs a production build under the prefix.
 
 ## Agents

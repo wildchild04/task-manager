@@ -844,6 +844,42 @@ describe("editor", () => {
     });
   });
 
+  describe("reset to newer content", () => {
+    const reload = () => editor.reset(stateFromTree(services.blocks.loadTree("page")!));
+
+    it("keeps the caret in its block when content is added elsewhere", () => {
+      seed([p("a", "First"), p("b", "Second")]);
+      at("b", 3);
+      services.blocks.apply([{ op: "insert", block: { id: "c", type: "paragraph", content: [{ text: "Third" }] }, parentId: "page", afterId: "b" }]);
+      reload();
+      expect(editor.selection).toEqual(caret("b", 3));
+      expect(outline()).toEqual(["paragraph:First", "paragraph:Second", "paragraph:Third"]);
+    });
+
+    it("clamps the caret and selected text to the block's new length", () => {
+      seed([p("a", "First"), p("b", "Second")]);
+      editor.setSelection({ blockId: "b", anchor: 2, focus: 6 });
+      services.blocks.apply([{ op: "update", id: "b", content: [{ text: "Sec" }] }]);
+      reload();
+      expect(editor.selection).toEqual({ blockId: "b", anchor: 2, focus: 3 });
+      editor.setRange({ anchor: { blockId: "a", offset: 1 }, focus: { blockId: "b", offset: 3 } });
+      services.blocks.apply([{ op: "update", id: "b", content: [{ text: "S" }] }]);
+      reload();
+      expect(editor.range).toEqual({ anchor: { blockId: "a", offset: 1 }, focus: { blockId: "b", offset: 1 } });
+    });
+
+    it("moves the caret to the title when its block is gone, and starts the undo history afresh", () => {
+      seed([p("a", "First"), p("b", "Second")]);
+      at("b", 6);
+      typeText("!");
+      services.blocks.apply([{ op: "delete", id: "b" }]);
+      reload();
+      expect(editor.selection).toEqual(caret("page", 0));
+      editor.undo();
+      expect(outline()).toEqual(["paragraph:First"]);
+    });
+  });
+
   describe("undo and redo", () => {
     it("undoes a burst of typing in one step, and a pause starts a new one", () => {
       seed([p("a", "")]);
