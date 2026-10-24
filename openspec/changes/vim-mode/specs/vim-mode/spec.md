@@ -1,14 +1,18 @@
 ## ADDED Requirements
 
 ### Requirement: Vim mode setting
-The app shell's header SHALL offer a "Vim mode" toggle next to the theme toggle, only on desktop browsers: where `(hover: hover) and (pointer: fine)` matches. The setting SHALL be kept in a cookie and read by the root loader, so the server renders the editor in the chosen setting. Where the media query doesn't match, the toggle SHALL be hidden and Vim mode SHALL be off whatever the cookie says. Vim mode SHALL apply to page editors and task description editors; titles, comment drafts and other text fields SHALL keep their usual keys. With Vim mode off, the editor SHALL behave exactly as without this capability.
+The app shell's header SHALL offer a "Vim mode" toggle next to the theme toggle, only on desktop browsers: where `(hover: hover) and (pointer: fine)` matches. The setting SHALL be kept in the browser's local storage and SHALL be off until turned on, so the editor behaves as without this capability by default; it SHALL take effect once the page has loaded in the browser. Where local storage can't be used, Vim mode SHALL be off unless turned on for the open page. Where the media query doesn't match, the toggle SHALL be hidden and Vim mode SHALL be off whatever is stored. Vim mode SHALL apply to page editors and task description editors; titles, comment drafts and other text fields SHALL keep their usual keys. With Vim mode off, the editor SHALL behave exactly as without this capability.
+
+#### Scenario: Off by default
+- **WHEN** the app is opened in a browser where Vim mode was never turned on
+- **THEN** the toggle is off and the editor behaves as without Vim mode
 
 #### Scenario: Setting survives reload
 - **WHEN** Vim mode is turned on and the page is reloaded
 - **THEN** the toggle is on and the editor is in Normal mode
 
 #### Scenario: Not offered on touch devices
-- **WHEN** the app is opened on a phone with the Vim mode cookie set
+- **WHEN** the app is opened on a phone where Vim mode is stored as on
 - **THEN** no Vim mode toggle shows and the editor behaves as without Vim mode
 
 #### Scenario: Title keeps its keys
@@ -38,7 +42,7 @@ In Normal mode the caret SHALL be shown as a block cursor over the character aft
 - **THEN** the block cursor is over "o"
 
 ### Requirement: Counts and motions
-In Normal and Visual mode a count (digits, not starting with 0) SHALL repeat the following motion or operator. The motions SHALL be: `h` and `l` (a character left and right, within the block), `w` and `b` (to the next and previous word start), `e` (to the next word end), `0` (the line's start), `^` (the line's first non-blank character), `$` (the line's last character), `gg` (the start of the cursor's block's first line) and `G` (the start of its last line); `gg` and `G` SHALL never leave the cursor's block. `w`, `b` and `e` SHALL move into the next or previous text block at a block's edge. `j` and `k` SHALL move a visual line down and up, and between blocks, as ↓ and ↑ do without Vim mode: keeping the column, moving by column in tables, and stopping at images, which are then selected whole; from a selected image `j` and `k` SHALL go on to the next stop. Lines SHALL be the block's lines as the browser lays them out, and a code block's lines its text lines.
+In Normal and Visual mode a count (digits, not starting with 0) SHALL repeat the following motion or operator. The motions SHALL be: `h` and `l` (a character left and right, within the block), `w` and `b` (to the next and previous word start), `e` (to the next word end), `0` (the line's start), `^` (the line's first non-blank character), `$` (the line's last character), `gg` (the start of the cursor's block's first line) and `G` (the start of its last line); `gg` and `G` SHALL never leave the cursor's block. `w`, `b` and `e` SHALL move into the next or previous text block at a block's edge. `j` and `k` SHALL move a visual line down and up, and between blocks, as ↓ and ↑ do without Vim mode: keeping the column, moving by column in tables, and stopping at images, which are then selected whole; from a selected image `j` and `k` SHALL go on to the next stop. Motions SHALL never move the cursor into the page's title: `k` (or ↑) in the first block SHALL leave the cursor where it is. Lines SHALL be the block's lines as the browser lays them out, and a code block's lines its text lines.
 
 #### Scenario: Count with a word motion
 - **WHEN** `3w` is pressed at the start of "one two three four"
@@ -51,6 +55,10 @@ In Normal and Visual mode a count (digits, not starting with 0) SHALL repeat the
 #### Scenario: `j` stops at an image
 - **WHEN** `j` is pressed on the last line of a paragraph followed by an image, then `j` again
 - **THEN** the first press selects the image and the second puts the cursor in the text block after it
+
+#### Scenario: `k` stops at the first block
+- **WHEN** `k` is pressed in the page's first block
+- **THEN** the cursor stays in that block and the title isn't entered
 
 #### Scenario: `gg` and `G` stay in the block
 - **WHEN** `G` is pressed in the middle of a three-line code block that has paragraphs before and after it, then `gg`
@@ -126,3 +134,14 @@ Shortcuts with Ctrl or Cmd (marks, links, turn into, select all, copy, cut, past
 #### Scenario: Esc in Normal
 - **WHEN** Esc is pressed in Normal mode
 - **THEN** nothing changes and no block is selected
+
+### Requirement: Key help
+With Vim mode on, `?` in Normal mode and a click on the mode indicator SHALL open a dialog listing the keys Vim mode handles, by group (moving, entering Insert, changing, Visual, the leader, shortcuts in every mode), each with what it does. Closing the dialog SHALL return to the editor with the cursor where it was. `?` in Insert mode SHALL type as usual.
+
+#### Scenario: `?` lists the keys
+- **WHEN** `?` is pressed in Normal mode
+- **THEN** a "Vim mode keys" dialog lists the motions, operators, Visual mode and the leader; Esc closes it and the next key acts in the editor again
+
+#### Scenario: From the indicator
+- **WHEN** the mode indicator is clicked
+- **THEN** the same dialog opens

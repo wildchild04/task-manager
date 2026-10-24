@@ -135,6 +135,8 @@ export function deleteBlocks(
   roots: readonly string[],
   newId: () => string,
   closed?: ReadonlySet<string>,
+  /** Where the caret prefers to go: the text block before (the default) or after (Vim's `dd`). */
+  prefer: "before" | "after" = "before",
 ): CommandResult | null {
   const doomed = roots.filter((id) => !containsProtected(state, id));
   if (doomed.length === 0) return null;
@@ -147,8 +149,9 @@ export function deleteBlocks(
   const at = order.indexOf(doomed[0]!);
   const isTextLeft = (id: string) => !gone.has(id) && behaviorOf(getBlock(state, id).type).text;
   const before = order.slice(0, at).filter(isTextLeft).at(-1);
-  if (before) return { ops, selection: caret(before, text.length(getBlock(state, before).content)), blocks };
   const after = order.slice(at).find(isTextLeft);
+  if (prefer === "after" && after) return { ops, selection: caret(after, 0), blocks };
+  if (before) return { ops, selection: caret(before, text.length(getBlock(state, before).content)), blocks };
   if (after) return { ops, selection: caret(after, 0), blocks };
   if (getBlock(state, state.rootId).children.every((id) => gone.has(id))) {
     const id = newId();

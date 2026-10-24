@@ -12,6 +12,21 @@ npm run dev       # http://localhost:5173
 
 Settings come from the environment or `.env` (see `.env.example`): `DATABASE_PATH`, `CONTENT_PATH` (uploaded images, default `content` beside the database), `TIME_ZONE`, `AGENT_TOKEN`. `just` lists the shortcuts.
 
+## Vim mode
+
+On desktop browsers, the terminal button in the header turns Vim mode on for page and task description editors (not titles or comments). It's off by default and remembered per browser, in local storage. The mode shows at the editor's bottom right.
+
+| Mode | Keys |
+|---|---|
+| Normal | `h j k l` (and the arrows), `w b e`, `0 ^ $`, `gg G` (within the cursor's block), counts (`3w`, `2dd`) |
+| | `i a I A o O` to Insert; `v` to Visual |
+| | `x`, `dw`, `d$`, `cw`, `cc`, `dd`, `yy`, `p`, `P`; `u` and `Ctrl-r` to undo and redo |
+| | Space is the leader: `Space /` the slash menu, `Space @` the mention menu, `Space Esc` selects the block |
+| Insert | the editor as usual; `Esc` closes an open menu, then returns to Normal |
+| Visual | motions extend the selection, across blocks too; `d`/`x`, `c`, `y` (also to the clipboard); `Esc` or `v` to leave |
+
+Shortcuts with Ctrl or Cmd (bold, links, turn into, undo) work in every mode. `j`/`k` stop at images like ↓/↑, and go on from them. `?` in Normal mode, or a click on the mode indicator, lists the keys in the app.
+
 ## Docker
 
 The design system is installed from GitHub over SSH, so the build needs an SSH agent with access to it:

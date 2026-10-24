@@ -254,6 +254,20 @@ export function rectAt(element: HTMLElement, offset: number): DOMRect | null {
   return rect && rect.height > 0 ? rect : null;
 }
 
+/**
+ * The client rectangle of the character at a text offset, or `null` for one
+ * the browser draws nothing for (a line break, a mention's hidden placeholder).
+ */
+export function charRect(element: HTMLElement, offset: number): DOMRect | null {
+  const start = positionOf(element, offset);
+  const end = positionOf(element, offset + 1);
+  const range = document.createRange();
+  range.setStart(start.node, start.offset);
+  range.setEnd(end.node, end.offset);
+  const rect = [...range.getClientRects()].find((r) => r.width > 0 && r.height > 0);
+  return rect ?? null;
+}
+
 /** Whether a text offset is on the first (or last) visual line of its block. */
 export function offsetOnEdgeLine(element: HTMLElement, offset: number, edge: "first" | "last"): boolean {
   return onEdgeLine(element, rectAt(element, offset), edge);

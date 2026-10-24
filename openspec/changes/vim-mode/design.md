@@ -18,11 +18,11 @@ Vim mode is desktop-only (no on-screen keyboards), opt-in per browser, and must 
 
 ### 1. A pure state machine in `src/editor/vim.ts`, driven from the existing `keydown`
 
-`VimMachine` holds `mode`, a pending count, a pending operator (`d`, `c`, `y`), a pending `g` and the leader state. `feed(key, context)` returns a list of **actions** (`move(point)`, `select(range)`, `deleteTo(point)`, `deleteBlocks(n)`, `yankBlocks(n)`, `paste(side)`, `enterInsert(point | newBlock)`, `openMenu("/" | "@")`, `selectBlock`, `undo`, `redo`, `setMode`). It never touches the DOM or the Editor directly. `page-editor.tsx` runs those actions with the Editor and the DOM helpers it already has.
+`Vim` holds `mode`, a pending count, a pending operator (`d`, `c`, `y`), a pending `g`, the leader state and the register. `key(key, ctrl)` returns whether it took the key, and makes the edits itself with the Editor: its existing commands (`setSelection`, `type`, `undo`) and a few new pure ones in `vim-commands.ts` (`deleteText`, `insertContent`, `openLine`, `pasteTrees`), each applied through `Editor.runCommand` as one undo step. It never touches the DOM. What only the page can do comes back through callbacks: `openMenu(blockId, start)` and `copy()` (Visual `y`), and `onMode` for the indicator. Tests drive a real Editor over the in-memory store, key by key.
 
 Motions are pure functions over `EditorState` and a point (`motions.ts` next to it). The exceptions are `j`/`k`, and `0`/`$`/`^`/`gg`/`G` on wrapped lines, which need layout (`gg`/`G` stay in the cursor's block). The machine takes those through a small `Layout` interface (`lineStart(point)`, `lineEnd(point)`, `lineBelow(point, goalX)`, `lineAbove(...)`, `firstLine(block)`, `lastLine(block)`). The DOM implements it with `offsetOnEdgeLine`, `rectAt`, `pointAt`, `arrowStop` and `arriveAt`. Tests use a fake where every block is one line.
 
-*Alternatives:* a Vim emulation library (CodeMirror's `@replit/codemirror-vim`, VSCodeVim's core). These are tied to their own editors' document and selection models, so adapting them would be bigger than writing the subset we need. *Why actions, not direct calls:* the machine stays testable, and the app keeps sole ownership of the DOM and focus.
+*Alternatives:* a Vim emulation library (CodeMirror's `@replit/codemirror-vim`, VSCodeVim's core). These are tied to their own editors' document and selection models, so adapting them would be bigger than writing the subset we need. *Why not a list of actions for the page to run:* the edits only need the Editor, which has no DOM either, so the machine stays testable while running them itself; only menus, the clipboard and the mode indicator need the page.
 
 ### 2. Vim intercepts `keydown` first, only when on
 
@@ -36,17 +36,19 @@ In Normal mode the DOM selection stays a collapsed caret (so `selectionchange`, 
 
 *Alternative:* a one-character DOM selection as the cursor (what some web Vim modes do). That fights `sync()`, which would read it as a text selection, and the formatting bar, which opens on selections.
 
-### 4. The register lives in the Editor, as blocks or text
+### 4. The register lives in `Vim`, as blocks or text
 
-`Editor` gains `register: { kind: "blocks"; trees: TreeNode[] } | { kind: "text"; content: RichText } | null`. `yy` fills it with `blockTrees`, and `x`/`d`/`c` fill it with the removed text. `p`/`P` reuse `pasteBlocks`, which already inserts trees after a block and gives them fresh IDs, or `insertText` for plain text. Visual `y` also writes the system clipboard through the existing copy path, so text yanked in Vim can be pasted elsewhere.
+`Vim` has `register: { kind: "blocks"; trees: TreeNode[] } | { kind: "text"; content: RichText } | null`. `yy` fills it with `blockTrees`, and `x`/`d`/`c` fill it with the removed text. `p`/`P` insert copies of the trees with fresh IDs beside the cursor's block (`pasteTrees`, leaving out sub-pages and suggestions as duplicating does), or the text at the cursor with its marks (`insertContent`). Visual `y` also writes the system clipboard through the existing copy path, so text yanked in Vim can be pasted elsewhere.
 
 ### 5. `dd` and `o`/`O` reuse block commands
 
-`dd` with a count takes the next *n* blocks in `selectableOrder` from the cursor's block and calls `deleteBlocks`, which already skips sub-pages and suggestions and picks where the caret goes. The spec wants the block *after* (Vim's behavior), so a small option on `deleteBlocks` prefers the following text block. `o` runs `splitBlock` at the block's end, and `O` the same at its start; that gives the same new-block type as Enter (list item, unchecked to-do).
+`dd` with a count takes the next *n* blocks in `selectableOrder` from the cursor's block and calls `deleteBlocks`, which already skips sub-pages and suggestions and picks where the caret goes. The spec wants the block *after* (Vim's behavior), so a small option on `deleteBlocks` prefers the following text block. `o` and `O` insert an empty block after or before the cursor's block with `newBlockAfter`, the rule Enter uses for the new block's type (list item, unchecked to-do); unlike Enter, an empty list item doesn't turn into a paragraph. In code they add a line instead.
 
-### 6. Setting: a cookie like the theme, gated by a media query on the client
+### 6. Setting: local storage, gated by a media query on the client
 
-`vim-setting.ts` mirrors `theme-mode.ts`: the root loader reads the `vim` cookie, and a context provides `{ enabled, setEnabled }`. The shell renders the toggle only after hydration when `matchMedia("(hover: hover) and (pointer: fine)")` matches. The editor's effective setting is `cookie && media`, so a phone with the cookie set never enters Vim mode.
+`vim-setting.ts` keeps the setting under the local storage key `vim-mode` (`"on"`, anything else or nothing meaning off, so it's off by default) and `useVimSetting()` reads it as `{ offered, enabled, setEnabled }` from a small store (`useSyncExternalStore`), so no provider is needed. It's read after hydration, as is `matchMedia("(hover: hover) and (pointer: fine)")`: the server and the first browser render are without Vim mode, and the editor switches to Normal mode once both say on. The shell renders the toggle only after hydration when the media query matches. The editor's effective setting is `stored && media`, so a phone with the setting stored never enters Vim mode. A `storage` event (the toggle changed in another tab) updates the setting. Reading and writing are wrapped in `try`/`catch`: where storage is unavailable, Vim mode is off and the toggle works for the session.
+
+*Alternative:* a cookie read by the root loader, like the theme, so the server renders the chosen setting. Not needed: the media query can only be checked in the browser anyway, so the editor can't be in Vim mode before hydration either way, and nothing on the server needs the setting.
 
 ### 7. Mode indicator
 
@@ -62,7 +64,7 @@ A small `Chip` at the editor's bottom-right corner, `position: sticky`, with `ar
 
 ## Migration Plan
 
-None: a new opt-in setting with no stored data besides a cookie. Turning it off restores today's behavior immediately.
+None: a new opt-in setting, stored only in the browser's local storage. Turning it off restores today's behavior immediately.
 
 ## Open Questions
 

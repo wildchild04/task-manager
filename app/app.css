@@ -433,3 +433,69 @@ body {
   box-shadow: none;
   padding-left: 0;
 }
+
+/* Vim mode: in Normal mode a block cursor is drawn over the character instead of the caret. */
+.page-editor.vim-normal .editor-body .editable {
+  caret-color: transparent;
+}
+
+.vim-cursor {
+  position: fixed;
+  display: none;
+  pointer-events: none;
+  background: var(--ds-primary);
+  opacity: 0.4;
+  border-radius: 1px;
+  z-index: 2;
+}
+
+/* The mode, at the editor's bottom right, staying in view while the page scrolls. */
+.vim-mode {
+  position: sticky;
+  bottom: 8px;
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+  pointer-events: none;
+}
+
+.vim-mode > * {
+  pointer-events: auto;
+}
+
+/* The help dialog's list of keys. Dialogs render outside the theme's variables, so colours come from the text's. */
+.vim-keys {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 4px;
+}
+
+.vim-keys th {
+  width: 11rem;
+  padding: 4px 12px 4px 0;
+  text-align: left;
+  font-weight: normal;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.vim-keys td {
+  padding: 4px 0;
+  vertical-align: top;
+}
+
+.vim-keys tr + tr {
+  border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.vim-keys kbd {
+  display: inline-block;
+  margin-right: 4px;
+  padding: 0 6px;
+  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, currentColor 7%, transparent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+  line-height: 1.6;
+}

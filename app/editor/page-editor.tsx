@@ -1,6 +1,7 @@
 import {
   Alert,
   Button,
+  Chip,
   createAppTheme,
   Dialog,
   HoverCard,
@@ -38,15 +39,19 @@ import { linkAt, linkRangeAt, nextCharacter, plain, previousCharacter, slice } f
 import { type SaveStatus, SaveQueue, type SendResult } from "~/editor/save-queue";
 import { blockTrees, selectedTrees } from "~/editor/clipboard";
 import { verticalNeighbour } from "~/editor/tables";
+import { Vim, type VimLayout, type VimMode } from "~/editor/vim";
+import { lastCharacter } from "~/editor/vim-motions";
 
 import { SuggestionsContext } from "../blocks/block-view";
 import { MentionTargetsContext } from "../blocks/rich-text";
 import type { MentionTargets } from "../blocks/view-model";
 import type { EditablePage } from "../lib/page-edit.server";
 import { useThemeMode } from "../theme-mode";
+import { useVimSetting } from "../vim-setting";
 import {
   caretOnEdgeLine,
   caretRect,
+  charRect,
   offsetOf,
   editableOf,
   offsetAtX,
@@ -63,6 +68,7 @@ import {
 import { APP_FORMAT, htmlToMarkdown } from "./clipboard";
 import { dragBlocks } from "./block-drag";
 import { type BarType, FormatBar, formatBarFor } from "./format-bar";
+import { VimHelp } from "./vim-help";
 import {
   BlockSelectionContext,
   EditableText,
@@ -73,7 +79,7 @@ import {
 } from "./editor-blocks";
 import { IMAGE_ACCEPT, imageFiles, uploadImages } from "./upload";
 import { withBase, withoutBase } from "../lib/base-path";
-import { recordOwnChange } from "../lib/live-refresh";
+import { trackOwnSave } from "../lib/live-refresh";
 
 const SLASH_MENU_ID = "slash-menu";
 
@@ -95,6 +101,8 @@ const TURN_INTO = SLASH_COMMANDS.flatMap((command) =>
   typeof command.action === "object" ? [{ value: command.value, label: command.label, action: command.action }] : [],
 );
 
+const VIM_MODE_LABEL: Record<VimMode, string> = { normal: "NORMAL", insert: "INSERT", visual: "VISUAL" };
+
 const STATUS_TEXT: Record<SaveStatus, string> = {
   saved: "Saved",
   pending: "Saving…",
@@ -105,6 +113,8 @@ const STATUS_TEXT: Record<SaveStatus, string> = {
 
 /** Sends one batch to the edit endpoint. Refusals don't retry; network problems do. */
 async function sendBatch(page: EditablePage, batch: Operation[]): Promise<SendResult & { version?: string }> {
+  // The change event for this save mustn't refresh the screen, even when it arrives before the answer.
+  const saved = trackOwnSave();
   try {
     const response = await fetch(withBase("/api/edits"), {
       method: "POST",
@@ -112,16 +122,18 @@ async function sendBatch(page: EditablePage, batch: Operation[]): Promise<SendRe
       body: JSON.stringify({ surface: page.surface, id: page.id, batch }),
     });
     if (response.status === 400 || response.status === 422) {
+      saved();
       const body = (await response.json()) as { message?: string };
       return { ok: false, retry: false, message: body.message ?? "The edit was refused" };
     }
     if (!response.ok) return { ok: false, retry: true };
     const body = (await response.json()) as { version: string; seq: number };
-    // The change event for this save mustn't refresh the screen.
-    recordOwnChange(body.seq);
+    saved(body.seq);
     return { ok: true, version: body.version };
   } catch {
     return { ok: false, retry: true };
+  } finally {
+    saved();
   }
 }
 
@@ -494,6 +506,15 @@ export function PageEditor({
   const cardTimers = useMemo(() => hoverTimers(), []);
   const pageNames = useMemo(() => new Map<string, string>(), []);
   const [status, setStatus] = useState<SaveStatus>("saved");
+  // Vim mode, when turned on: in page and task description editors, not in comments or comment drafts.
+  const vimSetting = useVimSetting();
+  const vimOn = vimSetting.enabled && !draft && page.surface !== "comment";
+  const vimOnRef = useRef(vimOn);
+  vimOnRef.current = vimOn;
+  const vimRef = useRef<Vim | null>(null);
+  const [vimMode, setVimMode] = useState<VimMode>("normal");
+  const vimCursorRef = useRef<HTMLDivElement>(null);
+  const [vimHelp, setVimHelp] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [linkFor, setLinkFor] = useState<{ selection: Selection; href: string } | null>(null);
   // The formatting bar over selected text: where the selection is on screen, and which selection it's for.
@@ -702,6 +723,71 @@ export function PageEditor({
     placeSelection();
   });
 
+  // ----- Vim mode's cursor -----
+
+  // Turning Vim mode on starts in Normal mode.
+  useEffect(() => {
+    if (vimOn) vimRef.current?.toNormal();
+  }, [vimOn]);
+
+  /** In Normal mode, draws the block cursor over the character at the caret while the caret is in a block. */
+  const placeVimCursor = useCallback(() => {
+    const cursor = vimCursorRef.current;
+    const root = rootRef.current;
+    if (!cursor || !root) return;
+    const { selection } = editor;
+    const element = selection.blockId === editor.state.rootId ? null : editableOf(root, selection.blockId);
+    const focused = element !== null && element.contains(document.activeElement);
+    if (!focused || vimRef.current?.mode !== "normal" || editor.blocks || editor.range) {
+      cursor.style.display = "none";
+      return;
+    }
+    const value = plain(getBlock(editor.state, selection.blockId).content);
+    const offset = Math.min(selection.focus, lastCharacter(value));
+    const char = value.length > 0 && value[offset] !== "\n" ? charRect(element, offset) : null;
+    let box: { left: number; top: number; width: number; height: number };
+    if (char) box = char;
+    else {
+      // An empty line or block: a box of about a character's width where the caret would be.
+      const style = getComputedStyle(element);
+      const caretAt = rectAt(element, offset);
+      const bounds = element.getBoundingClientRect();
+      const height = caretAt?.height || parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.5;
+      box = {
+        left: caretAt?.left ?? bounds.left + parseFloat(style.paddingLeft),
+        top: caretAt?.top ?? bounds.top + parseFloat(style.paddingTop),
+        width: parseFloat(style.fontSize) * 0.6,
+        height,
+      };
+    }
+    Object.assign(cursor.style, {
+      display: "block",
+      left: `${box.left}px`,
+      top: `${box.top}px`,
+      width: `${box.width}px`,
+      height: `${box.height}px`,
+    });
+  }, [editor]);
+
+  useLayoutEffect(() => placeVimCursor());
+
+  useEffect(() => {
+    if (!vimOn) return;
+    const root = rootRef.current;
+    document.addEventListener("selectionchange", placeVimCursor);
+    window.addEventListener("scroll", placeVimCursor, true);
+    window.addEventListener("resize", placeVimCursor);
+    root?.addEventListener("focusin", placeVimCursor);
+    root?.addEventListener("focusout", placeVimCursor);
+    return () => {
+      document.removeEventListener("selectionchange", placeVimCursor);
+      window.removeEventListener("scroll", placeVimCursor, true);
+      window.removeEventListener("resize", placeVimCursor);
+      root?.removeEventListener("focusin", placeVimCursor);
+      root?.removeEventListener("focusout", placeVimCursor);
+    };
+  }, [vimOn, placeVimCursor]);
+
   // ----- Suggestions -----
 
   /** Sends a decision once every edit is saved, then takes the page as the server has it. */
@@ -767,6 +853,17 @@ export function PageEditor({
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
+
+    /**
+     * Whether Vim mode is in Normal or Visual for an event's block (the caret's
+     * block without one): the title keeps its usual keys.
+     */
+    const vimTakes = (target: EventTarget | null): boolean => {
+      const vim = vimOnRef.current ? vimRef.current : null;
+      if (!vim || vim.mode === "insert") return false;
+      const element = target instanceof Element ? target.closest<HTMLElement>("[data-block-id]") : null;
+      return (element?.dataset.blockId ?? editor.selection.blockId) !== editor.state.rootId;
+    };
 
     /** Takes the DOM selection into the editor: text across blocks, or the caret or text in one block. */
     const sync = (): Selection | null => {
@@ -841,13 +938,14 @@ export function PageEditor({
      * Opens the inline menu for a `/` (commands) or `@` (pages) just typed at
      * `start`, if it's at the start of a text block or after a space.
      */
-    const openMenuAt = (blockId: string, start: number, anchor: DOMRect | null) => {
+    const openMenuAt = (blockId: string, start: number, anchor: DOMRect | null, anywhere = false) => {
       const block = editor.state.blocks[blockId];
       if (!block || block.id === editor.state.rootId || !behaviorOf(block.type).text) return;
       const text = plain(block.content);
       const trigger = text[start];
       const previous = text[start - 1];
-      if ((trigger !== "/" && trigger !== "@") || (previous !== undefined && !/\s/.test(previous))) return;
+      // Vim's leader opens the menus anywhere; typed, they open at a word's start.
+      if ((trigger !== "/" && trigger !== "@") || (!anywhere && previous !== undefined && !/\s/.test(previous))) return;
       // Code is plain text: no menus. A table cell can mention pages but not change type.
       if (block.type === "code" || (block.type === "table_cell" && trigger === "/")) return;
       setSlash({
@@ -868,7 +966,8 @@ export function PageEditor({
       // The selection may have changed since the last selectionchange was handled (a double-click's word, say).
       if (!composing.current && !dragRange && !editor.blocks) sync();
       const selection = window.getSelection();
-      const ok = !editor.range && !editor.blocks && !composing.current && formatBarFor(editor.state, editor.selection);
+      const ok =
+        !editor.range && !editor.blocks && !composing.current && !vimTakes(null) && formatBarFor(editor.state, editor.selection);
       const rect = ok && selection && selection.rangeCount > 0 ? selection.getRangeAt(0).getBoundingClientRect() : null;
       setFormatBar(rect && rect.width > 0 ? { rect, selection: editor.selection } : null);
     };
@@ -911,6 +1010,11 @@ export function PageEditor({
     };
 
     const onBeforeInput = (event: InputEvent) => {
+      // Nothing is typed in Vim's Normal and Visual modes; pasting still works.
+      if (vimTakes(event.target) && event.inputType !== "insertFromPaste") {
+        event.preventDefault();
+        return;
+      }
       setLinkCard(null);
       clearTimeout(settle);
       setFormatBar(null);
@@ -983,7 +1087,15 @@ export function PageEditor({
       refreshSlash();
     };
 
-    const onCompositionStart = () => {
+    const onCompositionStart = (event: CompositionEvent) => {
+      // In Vim's Normal and Visual modes, refocusing cancels the composition before it inserts anything.
+      if (vimTakes(event.target)) {
+        const element = document.activeElement as HTMLElement | null;
+        element?.blur();
+        element?.focus({ preventScroll: true });
+        placeSelection();
+        return;
+      }
       clearTimeout(settle);
       setFormatBar(null);
       // Text selected across blocks goes first (its own undo step); the composition then runs at the join.
@@ -996,6 +1108,7 @@ export function PageEditor({
 
     // While composing, the browser owns the text. At the end, read what changed and apply it as one edit.
     const onCompositionEnd = (event: CompositionEvent) => {
+      if (!composing.current) return;
       composing.current = false;
       const element = (event.target as HTMLElement).closest<HTMLElement>("[data-block-id]");
       if (!element) return;
@@ -1051,6 +1164,91 @@ export function PageEditor({
         editor.setRange({ anchor, focus });
         writeRange(root, { anchor, focus });
       }
+    };
+
+    // ----- Vim mode -----
+
+    /** Where the visual line holding a point starts and ends: a code block's text lines, wrapped as the browser lays them out. */
+    const lineOf = ({ blockId, offset }: Point) => {
+      const value = plain(getBlock(editor.state, blockId).content);
+      const hardStart = value.lastIndexOf("\n", offset - 1) + 1;
+      const found = value.indexOf("\n", offset);
+      const hardEnd = found < 0 ? value.length : found;
+      const element = editableOf(root, blockId);
+      const at = Math.min(offset, hardEnd - 1);
+      const line = element && hardEnd > hardStart ? charRect(element, at) : null;
+      if (!element || !line) return { start: hardStart, end: hardEnd };
+      // Characters drawn on the same line as the one at the cursor (those drawn nothing for go along).
+      const sameLine = (index: number) => {
+        const rect = charRect(element, index);
+        const middle = rect && rect.top + rect.height / 2;
+        return middle === null || (middle >= line.top - 1 && middle <= line.bottom + 1);
+      };
+      let start = at;
+      while (start > hardStart && sameLine(start - 1)) start--;
+      let end = at + 1;
+      while (end < hardEnd && sameLine(end)) end++;
+      return { start, end };
+    };
+
+    /** Lines in code are kept by character column; elsewhere ↓/↑'s horizontal position (`goalX`) is kept. */
+    let codeColumn: number | null = null;
+    const vimLayout: VimLayout = {
+      line: lineOf,
+      forgetColumn: () => {
+        goalX.current = null;
+        codeColumn = null;
+      },
+      vertical(from, step) {
+        const up = step === -1;
+        if (!("image" in from)) {
+          const element = editableOf(root, from.blockId);
+          if (!element) return null;
+          goalX.current ??= rectAt(element, from.offset)?.left ?? element.getBoundingClientRect().left;
+          const block = getBlock(editor.state, from.blockId);
+          if (block.type === "code") {
+            const value = plain(block.content);
+            const here = lineOf(from);
+            codeColumn ??= from.offset - here.start;
+            const next = up ? (here.start > 0 ? lineOf({ blockId: block.id, offset: here.start - 1 }) : null) : here.end < value.length ? lineOf({ blockId: block.id, offset: here.end + 1 }) : null;
+            if (next) return { blockId: block.id, offset: Math.min(next.start + codeColumn, next.end) };
+          } else if (!offsetOnEdgeLine(element, from.offset, up ? "first" : "last")) {
+            // A line up or down inside the block: the point half a line above or below.
+            const rect = charRect(element, from.offset) ?? rectAt(element, from.offset);
+            const to = rect && pointAt(root, goalX.current, up ? rect.top - rect.height / 2 : rect.bottom + rect.height / 2);
+            if (to?.blockId === from.blockId) return to;
+          }
+        }
+        const id = "image" in from ? from.image : from.blockId;
+        // In a table, the column is kept, leaving the table from its first or last row.
+        const target =
+          getBlock(editor.state, id).type === "table_cell" ? verticalNeighbour(editor.state, id, up, editor.closed) : arrowStop(id, step);
+        if (!target) return null;
+        if (getBlock(editor.state, target).type === "image") return { image: target };
+        const element = editableOf(root, target);
+        if (!element) return null;
+        if (goalX.current === null) return { blockId: target, offset: up ? plain(getBlock(editor.state, target).content).length : 0 };
+        return { blockId: target, offset: offsetAtX(element, goalX.current, up ? "last" : "first") };
+      },
+    };
+    const vim = new Vim(editor, vimLayout, {
+      onMode: setVimMode,
+      // The menu opens at the trigger once it's drawn.
+      openMenu: (blockId, start) => requestAnimationFrame(() => openMenuAt(blockId, start, null, true)),
+      copy: () => {
+        placeSelection();
+        document.execCommand("copy");
+      },
+      help: () => setVimHelp(true),
+    });
+    vimRef.current = vim;
+    setVimMode(vim.mode);
+
+    /** After a key Vim took: the DOM selection where the editor's is, now and once the edit is drawn. */
+    const afterVim = () => {
+      restoreSelection.current = true;
+      placeSelection();
+      refreshSlash();
     };
 
     /**
@@ -1182,7 +1380,20 @@ export function PageEditor({
     const onKeyDown = (event: KeyboardEvent) => {
       if (composing.current || event.isComposing) return;
       if (editor.blocks && event.target === root) {
+        const blocks = editor.blocks;
+        const vimOnBlocks = vimOnRef.current ? vimRef.current : null;
+        // In Vim mode `j` and `k` go on from a selected image like ↓ and ↑.
+        const loneImage = blocks.anchor === blocks.focus && getBlock(editor.state, blocks.focus).type === "image";
+        const plainKey = !event.metaKey && !event.ctrlKey && !event.altKey;
+        if (vimOnBlocks && loneImage && plainKey && (event.key === "j" || event.key === "k")) {
+          event.preventDefault();
+          vimOnBlocks.fromImage(blocks.focus, event.key === "j" ? 1 : -1);
+          afterVim();
+          return;
+        }
         onBlocksKey(event);
+        // Esc ends the block selection back in Normal mode.
+        if (vimOnBlocks && event.key === "Escape") vimOnBlocks.toNormal();
         return;
       }
       // Only keys typed into the text: buttons placed inside the editor (a task's actions) keep their own keys.
@@ -1227,6 +1438,24 @@ export function PageEditor({
           return;
         }
       }
+      // Vim mode gets the keys first: every key without Ctrl, Cmd or Alt in Normal and Visual (and Ctrl+R), Esc in Insert.
+      const vimHere = vimOnRef.current && selection.blockId !== editor.state.rootId ? vimRef.current : null;
+      if (vimHere?.mode === "insert" && event.key === "Escape" && !mod && !linkCardRef.current && !formatBarRef.current) {
+        event.preventDefault();
+        vimHere.key("Escape");
+        afterVim();
+        return;
+      }
+      const ctrlR = event.ctrlKey && !event.metaKey && !event.altKey && key === "r";
+      if (vimHere && vimHere.mode !== "insert" && (!(mod || event.altKey) || ctrlR)) {
+        event.preventDefault();
+        setLinkCard(null);
+        clearTimeout(settle);
+        setFormatBar(null);
+        vimHere.key(event.key, ctrlR);
+        afterVim();
+        return;
+      }
       if (event.shiftKey && !mod && !event.altKey && event.key.startsWith("Arrow") && extendSelection(event.key)) {
         event.preventDefault();
         return;
@@ -1261,7 +1490,8 @@ export function PageEditor({
         // A link card open over the text closes first.
         if (linkCardRef.current) setLinkCard(null);
         else if (formatBarRef.current) setFormatBar(null);
-        else editor.selectBlock(selection.blockId);
+        // With Vim mode on, Esc is Vim's (Space then Esc selects the block).
+        else if (!vimHere) editor.selectBlock(selection.blockId);
       } else if (mod && key === "a" && selection.blockId !== editor.state.rootId) {
         // The block's text first; once it's all selected, every block of the page.
         const whole = Math.min(selection.anchor, selection.focus) === 0 && Math.max(selection.anchor, selection.focus) === length;
@@ -1530,6 +1760,8 @@ export function PageEditor({
     const onPointerDown = (event: PointerEvent) => {
       dragFrom = null;
       dragRange = null;
+      // A click while in Visual mode returns to Normal; otherwise clicking keeps the mode.
+      if (vimOnRef.current && vimRef.current?.mode === "visual") vimRef.current.toNormal();
       if (event.button !== 0 || event.pointerType === "touch" || event.shiftKey) return;
       if (!(event.target as HTMLElement).closest?.(".editable")) return;
       const from = pointAt(root, event.clientX, event.clientY);
@@ -1823,7 +2055,7 @@ export function PageEditor({
         <BlockSelectionContext.Provider value={blockSelection}>
         <ImageSourceContext.Provider value={imageSource}>
         <div
-          className="page-editor"
+          className={vimOn ? `page-editor vim-${vimMode}` : "page-editor"}
           ref={rootRef}
           tabIndex={-1}
           role="group"
@@ -1931,6 +2163,23 @@ export function PageEditor({
               </>
             )}
           </div>
+
+          {vimOn && <div ref={vimCursorRef} className="vim-cursor" aria-hidden="true" />}
+          {vimOn && !hideBody && (
+            <div className="vim-mode" aria-live="polite">
+              <Chip size="small" variant="outlined" label={`${VIM_MODE_LABEL[vimMode]} · ?`} onClick={() => setVimHelp(true)} />
+            </div>
+          )}
+          {vimOn && (
+            <VimHelp
+              open={vimHelp}
+              onClose={() => {
+                setVimHelp(false);
+                // Back to the editor, where the cursor was.
+                restoreSelection.current = true;
+              }}
+            />
+          )}
 
           <InlineCommandMenu
             id={SLASH_MENU_ID}

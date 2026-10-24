@@ -4,7 +4,7 @@ Writing in the editor means reaching for arrow keys, Home/End and the mouse to m
 
 ## What Changes
 
-- **A Vim mode setting**: a toggle in the app header, next to the theme toggle, remembered per browser in a cookie like the theme. It is offered only on desktop browsers (`(hover: hover) and (pointer: fine)`); elsewhere it is hidden and Vim mode is off even when the cookie says on.
+- **A Vim mode setting**: a toggle in the app header, next to the theme toggle, remembered per browser in local storage and off by default, so the editor works as today until it's turned on. It is offered only on desktop browsers (`(hover: hover) and (pointer: fine)`); elsewhere it is hidden and Vim mode is off even when stored as on.
 - **Modes**: Normal, Insert and Visual (characterwise), shown in a small mode indicator. With Vim mode on, the editor starts in Normal mode; clicking into text keeps the current mode.
 - **Normal mode**: the caret is drawn as a block cursor over the character it is on, and typed text never reaches the page (IME composition started in Normal mode is cancelled).
   - Counts before motions and operators (`3w`, `2dd`).
@@ -48,6 +48,6 @@ None. The toggle uses the design system's `Switch` (or `IconButton`) and the mod
 - `src/editor/editor.ts`: small additions the operators need (deleting to a motion's end, yanking blocks into an in-memory register).
 - `app/editor/page-editor.tsx`: routes keys to Vim mode when it's on, blocks input in Normal mode, draws the block cursor and the mode indicator, and moves today's `Esc` behind the leader.
 - `app/editor/dom-caret.ts`: the block cursor's position, reusing the caret geometry helpers.
-- `app/routes/shell.tsx`, `app/theme-mode.ts` (or a sibling `vim-setting.ts`), `app/root.tsx`: the toggle and its cookie.
+- `app/vim-setting.ts` (new) and `app/routes/shell.tsx`: the setting in local storage and the toggle.
 - `app/app.css`: block cursor and mode indicator styles.
 - Tests: Vitest for motions, operators, counts, the leader and modes; Playwright for the main flows in Chromium and Firefox.

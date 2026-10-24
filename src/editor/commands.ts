@@ -140,7 +140,8 @@ export function setLink(state: EditorState, selection: Selection, href: string |
 // ----- Enter -----
 
 /** The block Enter creates next to `id`, by its type's rule. */
-function newBlockAfter(state: EditorState, id: string, newId: string, content: NewBlock["content"]): NewBlock {
+/** The block Enter adds after `id`: by its type's rule, a block of the same type, an unchecked to-do or a paragraph. */
+export function newBlockAfter(state: EditorState, id: string, newId: string, content: NewBlock["content"]): NewBlock {
   const { type } = getBlock(state, id);
   const rule = behaviorOf(type).enter;
   if (rule === "same-type") return { id: newId, type, content };

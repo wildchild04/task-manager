@@ -9,6 +9,7 @@ import { PageTree } from "../components/page-tree";
 import { services } from "../lib/services.server";
 import { type ProjectSection, shellView } from "../lib/shell.server";
 import { useThemeMode } from "../theme-mode";
+import { useVimSetting } from "../vim-setting";
 import type { Route } from "./+types/shell";
 import { withBase } from "../lib/base-path";
 import { useLiveRefresh } from "../lib/live-refresh";
@@ -68,6 +69,7 @@ function Group({
 export default function Shell({ loaderData }: Route.ComponentProps) {
   const { projects, current, pages, notifications } = loaderData;
   const { mode, setMode } = useThemeMode();
+  const vim = useVimSetting();
   // Every screen is inside the shell: one subscription per tab keeps them all current.
   useLiveRefresh();
   const navigate = useNavigate();
@@ -145,6 +147,16 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
       actions={
         <Stack direction="row" alignItems="center" spacing={1}>
           <NotificationBell items={notifications} />
+          {/* Offered on desktop browsers only, so it shows once the page has loaded. */}
+          {vim.offered && (
+            <IconButton
+              ariaLabel="Vim mode"
+              icon="terminal"
+              pressed={vim.enabled}
+              color={vim.enabled ? "primary" : "inherit"}
+              onClick={() => vim.setEnabled(!vim.enabled)}
+            />
+          )}
           <ThemeToggle mode={mode} onModeChange={setMode} ariaLabel="Toggle dark mode" />
         </Stack>
       }

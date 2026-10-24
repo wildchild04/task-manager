@@ -1,4 +1,4 @@
-import { expect, type Page, type TestInfo } from "@playwright/test";
+import { type APIRequestContext, expect, type Page, type TestInfo } from "@playwright/test";
 
 export async function openHomeDialog(page: Page, name: "New page" | "New project") {
   const button = page.getByRole("heading", { name: "Home" }).locator("xpath=..").getByRole("button", { name, exact: true });
@@ -65,3 +65,27 @@ export const paragraphs = (page: Page) => page.locator('.editor-body .editable[d
 export const resourceName = (testInfo: TestInfo, title: string) =>
   `${title} (${testInfo.project.name} repeat ${testInfo.repeatEachIndex} retry ${testInfo.retry})`;
 
+const AGENT_HEADERS = { authorization: "Bearer playwright-agent-token", "x-agent-name": "builder" };
+
+/** Calls the agent API, as the MCP server does, and expects it to succeed. */
+export async function agent(request: APIRequestContext, path: string, body: unknown) {
+  const response = await request.post(`/api/agent/${path}`, { headers: AGENT_HEADERS, data: body });
+  expect(response.ok(), await response.text()).toBe(true);
+}
+
+/** Creates a project with one work task, opens the task and returns its short ID for the agent API. */
+export async function openNewTask(page: Page, project: string, title: string): Promise<string> {
+  await page.goto("/");
+  const dialog = await openHomeDialog(page, "New project");
+  await dialog.getByRole("textbox", { name: "Title" }).fill(project);
+  await dialog.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(page).toHaveURL(/\/projects\/[^/]+$/);
+  await page.goto(`${new URL(page.url()).pathname}/work`);
+  const quickAdd = page.getByRole("textbox", { name: "New work title" });
+  await quickAdd.fill(title);
+  await quickAdd.press("Enter");
+  await page.getByRole("link", { name: title }).click();
+  await expect(page).toHaveURL(/\/tasks\/[^/]+$/);
+  await expect(page.locator(".page-editor")).toBeVisible();
+  return new URL(page.url()).pathname.split("/").at(-1)!.slice(0, 8);
+}

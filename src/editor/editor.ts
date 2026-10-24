@@ -165,6 +165,14 @@ export class Editor {
     return true;
   }
 
+  /**
+   * Applies a command built outside the editor (by Vim mode, over this
+   * editor's state) as one undo step. Returns whether anything happened.
+   */
+  runCommand(result: CommandResult | null): boolean {
+    return this.run(result);
+  }
+
   // ----- Edits -----
 
   /** Types text at the selection. A space or `-` may complete a markdown shortcut, which is its own undo step. */

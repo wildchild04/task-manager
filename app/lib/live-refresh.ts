@@ -14,9 +14,27 @@ const CLOSED = 2;
 /** Change numbers this tab's editor saves produced: their events aren't refreshed for. */
 const own = new Set<number>();
 
+/** This tab's saves still waiting for their answer: until they have it, a change may be theirs. */
+let saving = 0;
+
 /** Records the change number of one of this tab's own saves (from the `/api/edits` answer). */
 export function recordOwnChange(seq: number): void {
   own.add(seq);
+}
+
+/**
+ * Marks one of this tab's saves as on its way. Call the function it returns
+ * with the save's change number once answered (or with nothing if it failed).
+ */
+export function trackOwnSave(): (seq?: number) => void {
+  saving++;
+  let done = false;
+  return (seq) => {
+    if (done) return;
+    done = true;
+    saving--;
+    if (seq !== undefined) own.add(seq);
+  };
 }
 
 /** The minimum of `EventSource` this needs, so tests can stand in for it. */
@@ -60,6 +78,11 @@ export function followChanges({ open, refresh, hidden }: LiveRefreshOptions): { 
 
   function due() {
     timer = undefined;
+    // A change that arrived before the answer to this tab's save may be that save's: wait for the answer.
+    if (saving > 0 && unseen.length > 0) {
+      schedule();
+      return;
+    }
     if (unseen.filter(foreign).length > 0) wanted = true;
     unseen = [];
     void run();

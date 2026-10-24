@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { type ChangeSource, followChanges, recordOwnChange } from "../../app/lib/live-refresh";
+import { type ChangeSource, followChanges, recordOwnChange, trackOwnSave } from "../../app/lib/live-refresh";
 
 /** A stand-in for `EventSource` that the test drives. */
 class FakeSource implements ChangeSource {
@@ -65,6 +65,22 @@ describe("following changes", () => {
     recordOwnChange(11);
     await vi.advanceTimersByTimeAsync(150);
     expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("waits for the answer to its own save before deciding a change is someone else's", async () => {
+    const answered = trackOwnSave();
+    source().emit("change", 11);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(refresh).not.toHaveBeenCalled();
+    answered(11);
+    await vi.advanceTimersByTimeAsync(150);
+    expect(refresh).not.toHaveBeenCalled();
+    // A failed save frees the change to be refreshed for.
+    const failed = trackOwnSave();
+    source().emit("change", 12);
+    failed();
+    await vi.advanceTimersByTimeAsync(150);
+    expect(refresh).toHaveBeenCalledTimes(1);
   });
 
   it("refreshes once more after a refresh that a change arrived during", async () => {
