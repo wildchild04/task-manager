@@ -14,10 +14,17 @@ while read -r _old new ref; do
 done
 $deploy || exit 0
 
-# The build fetches the design system from GitHub with the pusher's forwarded SSH agent.
+# The build fetches the design system from GitHub over SSH: with the pusher's forwarded agent if there is one,
+# otherwise with the homelab's own read-only deploy key for that repository, in an agent for this build only.
+deploy_key="$HOME/.ssh/design-system-deploy"
 if ! ssh-add -l >/dev/null 2>&1; then
-  echo "deploy: no SSH agent forwarded (push with ForwardAgent and a key loaded); the code is updated but not deployed." >&2
-  exit 1
+  if [[ ! -f $deploy_key ]]; then
+    echo "deploy: no SSH agent forwarded and no $deploy_key; the code is updated but not deployed." >&2
+    exit 1
+  fi
+  eval "$(ssh-agent -s)" >/dev/null
+  trap 'ssh-agent -k >/dev/null' EXIT
+  ssh-add -q "$deploy_key"
 fi
 
 echo "deploy: building $(git rev-parse --short HEAD)…"

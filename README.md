@@ -27,16 +27,15 @@ The app is at `http://localhost:3002/task-manager/`. Its SQLite database lives i
 
 ### Deploying by push
 
-A machine running the app from a clone (`~/apps/task-manager` on the homelab) can deploy on push: `scripts/homelab-deploy.sh` is its `post-receive` hook, rebuilding and restarting the app when `main` arrives. The build uses the pusher's forwarded SSH agent for GitHub, so the SSH host needs `ForwardAgent`:
+A machine running the app from a clone (`~/apps/task-manager` on the homelab) can deploy on push: `scripts/homelab-deploy.sh` is its `post-receive` hook, rebuilding and restarting the app when `main` arrives. The build fetches the design system from GitHub with the homelab's own key, `~/.ssh/design-system-deploy` (no passphrase), added to the design system repository as a read-only deploy key; a forwarded SSH agent is used instead when there is one. The SSH host for pushing:
 
 ```ssh-config
 Host homelab
 	HostName 192.168.100.101
 	User wild
-	ForwardAgent yes
 ```
 
-Then `just homelab-setup` (once) and `just deploy`, with your key loaded in an agent. The push waits for the build and prints it; a push is refused when the clone has local edits, and a failed build leaves the running version up.
+Then `just homelab-setup` (once) and `just deploy`. The push waits for the build and prints it; a push is refused when the clone has local edits, and a failed build leaves the running version up.
 
 ### Behind a reverse proxy
 
