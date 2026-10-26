@@ -115,7 +115,7 @@ describe("agent API", () => {
         state: "todo",
         title: "Add login",
         project: "proj0001",
-        transitions: ["start"],
+        transitions: ["start", "cancel"],
         counts: { comments: 1, references: 0 },
       });
     });
@@ -158,12 +158,41 @@ describe("agent API", () => {
   describe("permissions and claiming", () => {
     beforeEach(() => work("aaaa0001-0000-0000-0000-000000000000", "Add login"));
 
-    it("refuses cancelling and changing anything but work", async () => {
-      const cancel = await call("POST", "task/aaaa0001/transition", { name: "cancel" });
-      expect(cancel).toMatchObject({ status: 403, body: { error: { code: "forbidden" } } });
+    it("cancels and reopens work", async () => {
+      expect((await call("POST", "task/aaaa0001/transition", { name: "cancel" })).body).toEqual({ ok: true, state: "cancelled" });
+      expect((await call("GET", "task/aaaa0001")).body.transitions).toEqual(["reopen"]);
+      expect((await call("POST", "task/aaaa0001/transition", { name: "reopen" })).body).toEqual({ ok: true, state: "todo" });
+    });
+
+    it("promotes an exploration into work born from it", async () => {
+      services.tasks.create({ id: "ex000001-0000-0000-0000-000000000000", projectId: P, kind: "exploration", title: "Idea" });
+      expect((await call("GET", "task/ex000001")).body.transitions).toEqual(["promote", "tombstone"]);
+      const promoted = await call("POST", "task/ex000001/transition", { name: "promote", title: "Build the idea" });
+      expect(promoted.body).toMatchObject({ ok: true, state: "promoted" });
+      expect((await call("GET", `task/${promoted.body.work}`)).body).toMatchObject({ kind: "work", state: "todo", title: "Build the idea" });
+      expect(services.tasks.history("ex000001-0000-0000-0000-000000000000")[0]!.actor).toEqual({ kind: "agent", name: "builder" });
+    });
+
+    it("tombstones and revives ideas, promoting with the idea's title by default", async () => {
+      services.tasks.create({ id: "ex000001-0000-0000-0000-000000000000", projectId: P, kind: "exploration", title: "Idea" });
+      expect((await call("POST", "task/ex000001/transition", { name: "tombstone" })).body).toEqual({ ok: true, state: "tombstoned" });
+      expect((await call("POST", "task/ex000001/transition", { name: "revive" })).body).toEqual({ ok: true, state: "open" });
+      const promoted = await call("POST", "task/ex000001/transition", { name: "promote" });
+      expect((await call("GET", `task/${promoted.body.work}`)).body.title).toBe("Idea");
+    });
+
+    it("completes and cancels chores", async () => {
+      const chore = (id: string) =>
+        services.tasks.create({ id, projectId: P, kind: "chore", title: id, attributes: { urgency: "normal" } });
+      chore("ch000001-0000-0000-0000-000000000000");
+      chore("ch000002-0000-0000-0000-000000000000");
+      expect((await call("POST", "task/ch000001/transition", { name: "complete" })).body).toEqual({ ok: true, state: "done" });
+      expect((await call("POST", "task/ch000002/transition", { name: "cancel" })).body).toEqual({ ok: true, state: "cancelled" });
+    });
+
+    it("refuses comments on anything but work", async () => {
       services.tasks.create({ id: "ex000001-0000-0000-0000-000000000000", projectId: P, kind: "exploration", title: "Idea" });
       expect((await call("POST", "task/ex000001/comment", { markdown: "x" })).body.error.code).toBe("forbidden");
-      expect((await call("POST", "task/ex000001/transition", { name: "tombstone" })).body.error.code).toBe("forbidden");
     });
 
     it("lets only the agent that started a task finish it", async () => {

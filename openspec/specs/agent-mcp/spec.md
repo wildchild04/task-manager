@@ -11,8 +11,8 @@ A stdio MCP server in `mcp/` SHALL expose the agent API as tools — `list_proje
 - **THEN** the result is at most three `{ id, kind, state, title }` entries and `more`, and nothing else
 
 #### Scenario: Refused change
-- **WHEN** an agent calls `transition` with `name: "cancel"`
-- **THEN** the tool returns an error with code `forbidden`
+- **WHEN** an agent calls `transition` with a transition not allowed from the task's state
+- **THEN** the tool returns an error with code `invalid_transition`
 
 #### Scenario: Missing configuration
 - **WHEN** the server starts without `AGENT_TOKEN` or `AGENT_NAME`

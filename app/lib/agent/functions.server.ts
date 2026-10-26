@@ -21,9 +21,6 @@ import { TASK_KINDS, TASK_OWNER_KIND, type Actor, type TaskSummary } from "~/dom
 import { allPages } from "../page-search.server";
 import { AgentError, cut, limitSchema, maxCharsSchema, offsetSchema, pageOf, parse, resolveId, short } from "./support.server";
 
-/** The changes agents may make to work tasks. Everything else is read-only for them. */
-const AGENT_TRANSITIONS = ["start", "pause", "complete", "return"];
-
 /** An agent acting through the API. */
 export type AgentActor = Extract<Actor, { kind: "agent" }>;
 
@@ -207,13 +204,12 @@ export function listTasks(services: AppServices, input: unknown) {
   };
 }
 
-/** The transitions this agent may apply to the task now. */
+/** The transitions this agent may apply to the task now: any its kind allows from its state, unless another agent holds it. */
 function allowedTransitions(services: AppServices, task: TaskSummary, actor: AgentActor): string[] {
-  if (task.kind !== "work") return [];
   const heldBy = holder(services, task);
   if (heldBy && heldBy !== actor.name) return [];
-  return Object.entries(kinds.work.transitions)
-    .filter(([name, transition]) => AGENT_TRANSITIONS.includes(name) && transition.from.includes(task.state))
+  return Object.entries(kinds[task.kind].transitions)
+    .filter(([, transition]) => transition.from.includes(task.state))
     .map(([name]) => name);
 }
 
@@ -406,21 +402,43 @@ export function createPage(services: AppServices, input: unknown) {
   return withWarnings({ ok: true as const, id: short(id) }, warnings);
 }
 
-const transitionBody = z.object({ name: z.string().min(1), reason: z.string().optional() });
+const transitionBody = z.object({
+  name: z.string().min(1),
+  reason: z.string().optional(),
+  title: z.string().optional(),
+  next: z.boolean().optional(),
+  scope: z.enum(["occurrence", "series"]).optional(),
+});
 
+/** The input a transition takes, from the agent's request; `undefined` for transitions without input. */
+function transitionInput(task: TaskSummary, body: z.infer<typeof transitionBody>) {
+  if (body.name === "promote") {
+    const title = (body.title ?? task.title).trim();
+    if (!title) throw new AgentError(422, "validation", "The work needs a title");
+    return { workId: crypto.randomUUID(), title };
+  }
+  if (task.kind === "work" && body.name === "return") {
+    if (!body.reason?.trim()) throw new AgentError(422, "validation", "A return needs a reason");
+    return { reason: body.reason };
+  }
+  if (task.kind === "chore" && body.name === "complete") return body.next === undefined ? {} : { next: body.next };
+  if (task.kind === "chore" && body.name === "cancel") return { scope: body.scope ?? "occurrence" };
+  return undefined;
+}
+
+/**
+ * Applies any transition the task's kind allows. A work task another agent
+ * holds can't be changed. Promoting answers with the new work's ID.
+ */
 export function transition(services: AppServices, actor: AgentActor, id: string, input: unknown) {
   const body = parse(transitionBody, input);
   const task = findTask(services, id);
-  checkWork(task);
-  if (!AGENT_TRANSITIONS.includes(body.name)) throw new AgentError(403, "forbidden", `Agents can't ${body.name} work`);
   if (body.name !== "start") checkHeld(services, task, actor);
-  if (body.name === "return" && !body.reason?.trim()) throw new AgentError(422, "validation", "A return needs a reason");
+  const given = transitionInput(task, body);
   try {
-    const result = services.tasks.transition(task.id, body.name, {
-      actor,
-      ...(body.name === "return" ? { input: { reason: body.reason } } : {}),
-    });
-    return { ok: true as const, state: result.state };
+    const result = services.tasks.transition(task.id, body.name, { actor, ...(given ? { input: given } : {}) });
+    const work = body.name === "promote" ? { work: short((given as { workId: string }).workId) } : {};
+    return { ok: true as const, state: result.state, ...work };
   } catch (error) {
     return toAgentError(error);
   }

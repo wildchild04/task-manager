@@ -137,12 +137,15 @@ export function createAgentServer(call: AgentCall): McpServer {
     "transition",
     {
       description:
-        "Move a work task: start (take it; you then hold it until it leaves in_progress), pause, complete, or return (give it back to todo; needs a `reason`, posted as your comment). Returns { ok, state }.",
+        "Move a task through its lifecycle; get_task lists the `transitions` you may apply now. Explorations and updates (open, promoted, tombstoned): promote (turn it into a new work task born from it; `title` defaults to the idea's), tombstone, revive. Work (todo, in_progress, done, cancelled): start (take it; you then hold it until it leaves in_progress), pause, complete, return (back to todo; needs a `reason`, posted as your comment), cancel, reopen. Chores (todo, done, cancelled): complete (`next`: create the following occurrence; defaults to yes when recurring), cancel (`scope`: occurrence (default) or series). Returns { ok, state, work? } (`work`: the new work task's ID, after promote).",
       inputSchema: {
         id,
         // Not an enum: the app decides what's allowed, and says why when it isn't.
-        name: z.string().describe("start, pause, complete or return"),
-        reason: z.string().optional().describe("Why you're returning the task (required for return)"),
+        name: z.string().describe("The transition, e.g. promote, tombstone, start, complete, return, cancel"),
+        reason: z.string().optional().describe("return: why you're giving the work back (required)"),
+        title: z.string().optional().describe("promote: the new work task's title (default: the idea's title)"),
+        next: z.boolean().optional().describe("Chore complete: create the following occurrence"),
+        scope: z.enum(["occurrence", "series"]).optional().describe("Chore cancel: this occurrence (default) or the whole series"),
       },
     },
     ({ id, ...rest }) => run(call, "POST", `task/${enc(id)}/transition`, rest),

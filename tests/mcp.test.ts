@@ -140,9 +140,9 @@ describe("MCP server", () => {
 
   it("returns refusals as tool errors with the API's code", async () => {
     const client = await connect(services);
-    const result = await client.callTool({ name: "transition", arguments: { id: "task0001", name: "cancel" } });
+    const result = await client.callTool({ name: "transition", arguments: { id: "task0001", name: "complete" } });
     expect(result.isError).toBe(true);
-    expect(text(result)).toMatch(/^forbidden: /);
+    expect(text(result)).toMatch(/^invalid_transition: /);
     const missing = await client.callTool({ name: "get_task", arguments: { id: "nothere" } });
     expect(text(missing)).toMatch(/^not_found: /);
   });

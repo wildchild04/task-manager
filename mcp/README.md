@@ -48,7 +48,7 @@ To run from the source instead (while working on `mcp/`): `npm run mcp`, with th
 | `read_description` | The description as Markdown; `maxChars` (default 2000), `offset`, `anchors` (block IDs) |
 | `list_comments` | Newest first; `limit` (default 5), `cursor`, `maxChars` per comment (default 1000) |
 | `list_references` | What the task references |
-| `transition` | `start`, `pause`, `complete`, `return` (with `reason`) on work tasks |
+| `transition` | Any transition the task's kind allows: `promote` (an exploration or update into work; optional `title`, answers the new `work` ID), `tombstone`, `revive`; work `start`, `pause`, `complete`, `return` (with `reason`), `cancel`, `reopen`; chore `complete` (`next`), `cancel` (`scope`) |
 | `comment` | Comment on a work task in Markdown; mention with `@[Title](task:id)` or `@[Title](page:id)` |
 | `append_description` | Add Markdown to the end of a work task's description |
 | `search_pages` | Knowledge library and workspace pages by title |
@@ -61,4 +61,4 @@ To run from the source instead (while working on `mcp/`): `npm run mcp`, with th
 
 Images are written as `![alt](https://…)` on a line of their own; pages read back uploaded images with their absolute URLs. Tools that take Markdown keep anything unsupported (images without an http(s) URL or inside a line of text, raw HTML, footnotes, a table without its `|---|` row, an unclosed fence) as text and say so in `warnings`, by line, e.g. `"Line 3: images need an http(s) URL or an uploaded image; kept as text"`.
 
-Agents can't cancel, change chores or explorations, or delete anything, and they change existing pages and descriptions only through suggestions a human approves.
+Agents can apply any transition, but can't delete anything, and they change existing pages and descriptions only through suggestions a human approves. A work task another agent started is held by that agent until it leaves in progress.
