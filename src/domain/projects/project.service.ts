@@ -2,8 +2,7 @@ import { plainText } from "../blocks/text";
 import type { ProtectionHook } from "../blocks/validate";
 import type { UnitOfWork } from "../unit-of-work";
 import type { Project, ProjectSummary } from "./types";
-import { COMMENT_OWNER_KIND } from "../comments/types";
-import { TASK_OWNER_KIND } from "../tasks/types";
+import { removeTask } from "../tasks/task.service";
 import { PROJECT_OWNER_KIND } from "./types";
 
 export class ProjectError extends Error {
@@ -64,15 +63,8 @@ export class ProjectService {
       const project = repos.projects.get(id);
       if (!project) throw new ProjectError("not_found", `Project ${id} does not exist`);
       // The owning domains' protection stops ordinary edits from removing these roots; this removes them on purpose.
-      const bypass = { bypassProtectionFor: [PROJECT_OWNER_KIND, TASK_OWNER_KIND, COMMENT_OWNER_KIND] };
-      for (const task of repos.tasks.list(id)) {
-        for (const comment of repos.comments.listByTask(task.id)) {
-          repos.blocks.apply([{ op: "delete", id: comment.bodyBlockId }], bypass);
-          repos.comments.delete(comment.id);
-        }
-        repos.blocks.apply([{ op: "delete", id: task.bodyPageId }], bypass);
-        repos.tasks.delete(task.id);
-      }
+      const bypass = { bypassProtectionFor: [PROJECT_OWNER_KIND] };
+      for (const task of repos.tasks.list(id)) removeTask(repos, task);
       repos.blocks.apply(
         [
           { op: "delete", id: project.homePageId },

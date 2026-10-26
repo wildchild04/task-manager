@@ -454,6 +454,14 @@ describe("task screen", () => {
     });
   });
 
+  describe("deleting", () => {
+    it("deletes the task and goes to its kind's list", () => {
+      create("E", "exploration");
+      expect(post("E", { intent: "delete" })).toEqual({ ok: true, id: "E", redirectTo: "/projects/P/explorations" });
+      expect(services.tasks.get("E")).toBeUndefined();
+    });
+  });
+
   describe("dispatch", () => {
     it("answers unknown tasks and intents with a status", () => {
       create("W", "work");

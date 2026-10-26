@@ -178,3 +178,14 @@ Clicking a chore's schedule button, while the chore is in to do, SHALL open a di
 - **WHEN** the schedule dialog is saved with time "25:00"
 - **THEN** the schedule is unchanged and the dialog shows the time error
 
+
+### Requirement: Deleting a task
+The task page SHALL show a delete button at the top right for a task of any kind, in any state. It SHALL open a confirmation dialog naming the task and saying how many comments go with it; only confirming SHALL delete. Deleting SHALL remove the task with its body page, comments, history and the relations from it, in one unit of work, and the browser SHALL go to the project's list for the task's kind. References, mentions and lineage pointing to the deleted task SHALL resolve as missing.
+
+#### Scenario: Delete an exploration
+- **WHEN** the delete button of an exploration is pressed and the deletion confirmed
+- **THEN** the exploration no longer exists and the browser is on the project's explorations list
+
+#### Scenario: Reference to a deleted task
+- **WHEN** a task references another task that is then deleted
+- **THEN** the reference shows as missing

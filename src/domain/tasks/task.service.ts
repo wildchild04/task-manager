@@ -1,4 +1,5 @@
 import { batchStaysWithin } from "../blocks/batch-scope";
+import { COMMENT_OWNER_KIND } from "../comments/types";
 import { plainText } from "../blocks/text";
 import type { Batch, NewBlock, TreeNode } from "../blocks/types";
 import type { ProtectionHook } from "../blocks/validate";
@@ -25,6 +26,22 @@ import { HUMAN, TASK_KINDS, TASK_OWNER_KIND } from "./types";
 /** A task's body page can be edited through block batches but never deleted. */
 export const taskProtection: ProtectionHook = ({ op, targetIsRoot }) =>
   op.op === "delete" && targetIsRoot ? "A task's body page cannot be deleted" : undefined;
+
+/**
+ * Removes a task with its comments, body page, history and relations from it.
+ * Must run inside a unit of work. Pointers from elsewhere (references,
+ * mentions, the lineage of tasks born from it) are kept and resolve as missing.
+ */
+export function removeTask(repos: Repositories, task: Task): void {
+  // Ordinary edits can't remove these owned roots; this removes them on purpose.
+  const bypass = { bypassProtectionFor: [TASK_OWNER_KIND, COMMENT_OWNER_KIND] };
+  for (const comment of repos.comments.listByTask(task.id)) {
+    repos.blocks.apply([{ op: "delete", id: comment.bodyBlockId }], bypass);
+    repos.comments.delete(comment.id);
+  }
+  repos.blocks.apply([{ op: "delete", id: task.bodyPageId }], bypass);
+  repos.tasks.delete(task.id);
+}
 
 export type CreateTaskInput = {
   id: string;
@@ -100,6 +117,14 @@ export class TaskService {
       return task;
     });
     return this.summarize(task);
+  }
+
+  /** Deletes a task of any kind, in any state, for good (see `removeTask`). */
+  delete(id: string): void {
+    this.uow.run((repos) => {
+      const task = repos.tasks.get(id) ?? fail("not_found", `Task ${id} does not exist`);
+      removeTask(repos, task);
+    });
   }
 
   get(id: string): TaskSummary | undefined {

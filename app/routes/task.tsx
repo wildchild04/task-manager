@@ -6,6 +6,7 @@ import { Blocks } from "../blocks/block-view";
 import { MentionTargetsContext } from "../blocks/rich-text";
 import { Backlinks } from "../components/backlinks";
 import { ChoreControls } from "../components/chore-controls";
+import { DeleteTaskButton } from "../components/delete-task";
 import { NotFound } from "../components/not-found";
 import { PageEditor } from "../editor/page-editor";
 import { editablePage } from "../lib/page-edit.server";
@@ -127,7 +128,15 @@ export default function Task({ loaderData }: Route.ComponentProps) {
             { id: "task", label: task.title },
           ]}
         />
-        <span ref={setStatusSlot} />
+        <Stack direction="row" spacing={1} alignItems="center">
+          <span ref={setStatusSlot} />
+          <DeleteTaskButton
+            key={task.id}
+            title={task.title}
+            kindLabel={task.kindLabel}
+            comments={view.comments?.length ?? 0}
+          />
+        </Stack>
       </Stack>
       {/* The title and description are edited in place; the editor stays mounted while other tabs are open. */}
       {hydrated && editable ? (

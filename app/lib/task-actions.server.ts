@@ -7,6 +7,7 @@ import type { CommentBlockInput } from "~/domain/comments/types";
 import { choreAttributes, isRecurring, urgencySchema } from "~/domain/chores/schedule";
 import type { TaskKind, TaskSummary } from "~/domain/tasks/types";
 
+import { slugOfKind } from "./format";
 import { type ActionResult, domainError, formValues, invalid } from "./forms.server";
 import { scheduleFromForm } from "./task-lists.server";
 import { paragraphsFromText } from "./text.server";
@@ -227,6 +228,16 @@ function startUpdate(services: AppServices, task: TaskSummary, values: Record<st
   }
 }
 
+/** Deletes the task for good and goes to its project's list for its kind. */
+function deleteTask(services: AppServices, task: TaskSummary, values: Record<string, string>): ActionResult {
+  try {
+    services.tasks.delete(task.id);
+  } catch (error) {
+    return domainError(error, values, null);
+  }
+  return success(task.id, `/projects/${task.projectId}/${slugOfKind(task.kind)}`);
+}
+
 const HANDLERS = {
   transition: applyTransition,
   urgency: setUrgency,
@@ -237,6 +248,7 @@ const HANDLERS = {
   "reference-remove": removeReference,
   "start-exploration": startExploration,
   "start-update": startUpdate,
+  delete: deleteTask,
 } satisfies Record<string, (services: AppServices, task: TaskSummary, values: Record<string, string>) => ActionResult>;
 
 export type TaskIntent = keyof typeof HANDLERS;

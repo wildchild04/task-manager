@@ -395,6 +395,39 @@ export function taskContract(name: string, factory: ServicesFactory) {
       });
     });
 
+    describe("deletion", () => {
+      it("deletes a task of any kind with its comments, body page, history and relations", () => {
+        create("E", "exploration");
+        services.tasks.transition("E", "promote", { input: { workId: "W", title: "Build" } });
+        services.tasks.addReference("W", { kind: "task", id: "E" });
+        services.tasks.transition("W", "start");
+        services.comments.add({ id: "c", taskId: "W", blocks: [{ id: "cp", type: "paragraph", content: [{ text: "Hi" }] }] });
+        const body = services.tasks.get("W")!.bodyPageId;
+
+        services.tasks.delete("W");
+
+        expect(services.tasks.get("W")).toBeUndefined();
+        expect(services.tasks.list("P").map((t) => t.id)).toEqual(["E"]);
+        expect(services.tasks.history("W")).toEqual([]);
+        expect(services.tasks.relations("W")).toEqual([]);
+        expect(services.comments.get("c")).toBeUndefined();
+        for (const id of [body, "cp"]) expect(services.blocks.getBlock(id)).toBeUndefined();
+        expect(services.tasks.lineage("E")).toMatchObject({ task: { id: "E" }, children: [] });
+      });
+
+      it("keeps references to it, resolving as missing", () => {
+        create("A", "work");
+        create("B", "work");
+        services.tasks.addReference("B", { kind: "task", id: "A" });
+        services.tasks.delete("A");
+        expect(services.tasks.relations("B", "references")[0]!.target).toEqual({ status: "missing", kind: "task", id: "A" });
+      });
+
+      it("refuses deleting an unknown task", () => {
+        expectTaskError(() => services.tasks.delete("nope"), "not_found");
+      });
+    });
+
     describe("lineage", () => {
       const shape = (node: ReturnType<AppServices["tasks"]["lineage"]>): unknown =>
         node && { id: node.task.id, children: node.children.map(shape) };
