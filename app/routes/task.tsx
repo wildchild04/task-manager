@@ -144,12 +144,15 @@ export default function Task({ loaderData }: Route.ComponentProps) {
           key={editable.id}
           page={editable}
           afterTitle={header}
+          titleGutterBottom
           statusSlot={statusSlot}
           hideBody={tab !== "description"}
         />
       ) : (
         <>
-          <Typography variant="h1">{task.title}</Typography>
+          <Typography variant="h1" gutterBottom>
+            {task.title}
+          </Typography>
           {header}
           {tab === "description" && description}
         </>

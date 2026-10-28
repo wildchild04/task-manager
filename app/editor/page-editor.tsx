@@ -447,6 +447,7 @@ function AltTextDialog({ initial, onDone }: { initial: string; onDone: (alt: str
 export function PageEditor({
   page,
   titleVariant = "h1",
+  titleGutterBottom = false,
   afterTitle,
   statusSlot,
   draft,
@@ -455,6 +456,8 @@ export function PageEditor({
 }: {
   page: EditablePage;
   titleVariant?: "h1" | "h2";
+  /** Adds the design-system heading gutter before content placed after the title. */
+  titleGutterBottom?: boolean;
   /** Shown between the title and the blocks (a task's state and actions). */
   afterTitle?: ReactNode;
   /** Where to show the saving indicator; at the top right of the editor when not given. */
@@ -2079,7 +2082,7 @@ export function PageEditor({
             </Alert>
           )}
           {page.title && (
-            <Typography variant={titleVariant}>
+            <Typography variant={titleVariant} gutterBottom={titleGutterBottom}>
               <EditableText block={root} placeholder="Untitled" ariaLabel="Title" />
             </Typography>
           )}
