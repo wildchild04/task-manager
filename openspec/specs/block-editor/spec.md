@@ -204,7 +204,7 @@ Cmd/Ctrl+Z SHALL undo the last edit and Shift+Cmd/Ctrl+Z (or Ctrl+Y) SHALL redo 
 - **THEN** they are back in their place and still selected
 
 ### Requirement: Saving edits
-Every edit SHALL show at once and be saved in the background as a batch of block operations: typing after it pauses briefly, and any structural edit at once, preserving the order of edits. The page SHALL show whether edits are being saved, are saved, or couldn't be saved. A failed save SHALL keep the edits on the page and retry; a save the server rejects SHALL show the reason and reload the page's content from the server. Following a link with unsaved edits SHALL save them first and leave once they are saved; while they aren't, it SHALL ask whether to leave and lose them. Closing the browser tab with unsaved edits SHALL ask for confirmation. A change made elsewhere to the page while it is open with no unsaved edits (for example a task's return appending to its description) SHALL appear in the editor.
+Every edit SHALL show at once and be saved in the background as a batch of block operations: typing after it pauses briefly, and any structural edit at once, preserving the order of edits. The page SHALL show whether edits are being saved, are saved, or couldn't be saved. A failed save SHALL keep the edits on the page and retry; a save the server rejects SHALL show the reason and reload the page's content from the server. Following a link with unsaved edits SHALL save them first and leave once they are saved; while they aren't, it SHALL ask whether to leave and lose them. Closing the browser tab with unsaved edits SHALL ask for confirmation. A change made elsewhere to the page while it is open (in another tab, or by an agent; see the live-refresh capability) SHALL appear in the editor without navigating once it has no unsaved edits; unsaved edits SHALL never be replaced. When the content is replaced, the caret SHALL stay in its block (at most at the block's new end) when the block still exists, and the undo history SHALL start afresh.
 
 #### Scenario: Fast typing then Enter
 - **WHEN** text is typed and Enter pressed several times quickly, then the page is reloaded once saved
@@ -213,6 +213,14 @@ Every edit SHALL show at once and be saved in the background as a batch of block
 #### Scenario: Leaving with unsaved edits
 - **WHEN** a link is followed while an edit hasn't been saved, and the server can't be reached
 - **THEN** the page asks whether to leave and lose the edit, and stays if asked to
+
+#### Scenario: An agent appends to the open description
+- **WHEN** a task's description is open with the caret in its second paragraph and nothing unsaved, and an agent appends a paragraph to it
+- **THEN** the new paragraph appears at the end and the caret is still in the second paragraph
+
+#### Scenario: Unsaved edits are kept
+- **WHEN** a change made elsewhere arrives while an edit on the page hasn't been saved yet
+- **THEN** the edit stays on the page and is saved, and the other change appears once nothing is unsaved
 
 ### Requirement: Edits stay inside the edited page
 The server SHALL accept an edit batch only if every block it touches is in the edited page's own content, outside any sub-page's content; it SHALL reject a batch that deletes a sub-page, deletes or changes the type of the page block itself, or inserts a page, comment or suggestion block. On workspace pages and project pages, it SHALL accept inserting a page block holding only its title (an empty sub-page) where a block may go, and deleting a sub-page that has no blocks of its own; a sub-page with blocks, or a block containing a sub-page, SHALL still not be deleted. It SHALL also reject a batch that inserts into, updates or deletes a suggestion, that updates, moves or deletes a block inside one, or that deletes a block containing a suggestion; suggestions change only by being approved or rejected. Moving a suggestion as a whole (its proposed blocks go with it), moving a block that contains one, and editing or deleting a suggestion's target, SHALL be allowed. A rejected batch SHALL change nothing.
@@ -396,7 +404,7 @@ Cmd/Ctrl+A in a text block SHALL select its whole text. Pressed again while the 
 - **THEN** the first press selects the paragraph's text and the second selects every block of the page
 
 ### Requirement: Block selection
-Whole blocks SHALL be selectable: Escape in a text block (when no menu, link dialog or link card is open) SHALL select that block, a table cell selecting its table; clicking a block's handle SHALL select it; Escape over a text selection across blocks SHALL select the blocks it covers. While blocks are selected, ↑ and ↓ SHALL select the previous or next block alone, Shift+↑ and Shift+↓ SHALL extend or shrink the selection by one block, and Shift+click on another block's handle SHALL extend the selection to it. A block selection SHALL always be a run of consecutive blocks in reading order; selecting a block SHALL include its children; dividers, sub-pages, references and suggestions SHALL be selectable like any block; the rows and cells of a table, the blocks inside a suggestion and the children of closed toggles SHALL not be selectable on their own. Selected blocks SHALL be highlighted, no caret SHALL show, and the number of selected blocks SHALL be announced to screen readers. Escape, a click in text, or a click outside the editor SHALL end the block selection.
+Whole blocks SHALL be selectable: Escape in a text block (when no menu, link dialog or link card is open) SHALL select that block, a table cell selecting its table (with Vim mode on, Space then Escape in Normal mode does this instead, and Escape is Vim's; see the vim-mode capability); clicking a block's handle SHALL select it; Escape over a text selection across blocks SHALL select the blocks it covers. While blocks are selected, ↑ and ↓ SHALL select the previous or next block alone, Shift+↑ and Shift+↓ SHALL extend or shrink the selection by one block, and Shift+click on another block's handle SHALL extend the selection to it. A block selection SHALL always be a run of consecutive blocks in reading order; selecting a block SHALL include its children; dividers, sub-pages, references and suggestions SHALL be selectable like any block; the rows and cells of a table, the blocks inside a suggestion and the children of closed toggles SHALL not be selectable on their own. Selected blocks SHALL be highlighted, no caret SHALL show, and the number of selected blocks SHALL be announced to screen readers. Escape, a click in text, or a click outside the editor SHALL end the block selection.
 
 #### Scenario: Escape selects the block
 - **WHEN** Escape is pressed with the caret in a paragraph
@@ -409,6 +417,10 @@ Whole blocks SHALL be selectable: Escape in a text block (when no menu, link dia
 #### Scenario: A cell selects its table
 - **WHEN** Escape is pressed with the caret in a table cell
 - **THEN** the whole table is selected
+
+#### Scenario: With Vim mode on, the leader selects the block
+- **WHEN** Vim mode is on and Space then Escape is pressed in Normal mode in a paragraph
+- **THEN** the paragraph is selected; Escape alone would not have selected it
 
 ### Requirement: Acting on selected blocks
 With blocks selected: Backspace or Delete SHALL remove them; Cmd/Ctrl+D SHALL duplicate them right after the last one, with their children, and select the copies; paste SHALL replace them with the pasted blocks; Enter SHALL put the caret at the end of the last selected text block (or the start of the first text block after the selection); Tab and Shift+Tab SHALL nest and un-nest them together when they share a parent, following the nesting rules for a single block. Sub-pages, suggestions and blocks containing either SHALL never be removed or duplicated this way: removing keeps them, selected, and duplicating leaves them out. After removing blocks the caret SHALL go to the end of the text block before them, or the start of the one after, or an empty paragraph when the page is left with no blocks. Typing a character SHALL do nothing. Each action SHALL be one undo step, and undoing it SHALL select the same blocks again.
@@ -576,3 +588,4 @@ An image block SHALL show its image at most the page's width. It SHALL never hol
 #### Scenario: Alt text
 - **WHEN** "Alt text…" is chosen from an image's handle menu and "Server rack, front view" is entered
 - **THEN** the image's alt text is "Server rack, front view", and Cmd/Ctrl+Z restores the previous one
+
