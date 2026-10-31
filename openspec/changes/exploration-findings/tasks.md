@@ -20,4 +20,4 @@
 ## 4. Check
 
 - [x] 4.1 Typecheck, unit tests and the Playwright suite; a Playwright check of adding a finding on an exploration and following a `#finding-` link
-- [ ] 4.2 After deploying, add the decision on "What agents are allowed to do" as a finding through MCP
+- [x] 4.2 After deploying, add the decision on "What agents are allowed to do" as a finding through MCP
