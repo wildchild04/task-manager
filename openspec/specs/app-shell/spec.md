@@ -97,3 +97,10 @@ The app shell's top bar SHALL show a bell button on every screen, with a badge c
 - **WHEN** the only active work is in progress with an agent
 - **THEN** the bell has no badge
 
+### Requirement: Account menu
+While signed in, the shell's top bar SHALL show an account button naming the account's email, opening a menu with Settings (to `/settings`) and Sign out.
+
+#### Scenario: Open settings
+- **WHEN** the account button is opened and Settings chosen
+- **THEN** the browser is on `/settings`
+

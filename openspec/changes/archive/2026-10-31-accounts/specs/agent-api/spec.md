@@ -14,3 +14,11 @@ Every request to `/api/agent/*` SHALL carry `Authorization: Bearer <token>` with
 #### Scenario: Revoked token
 - **WHEN** an agent's token was revoked
 - **THEN** its requests are answered with status 401
+
+#### Scenario: API off
+- **WHEN** no agent is registered
+- **THEN** every agent request is answered with status 401
+
+#### Scenario: Acting as the agent
+- **WHEN** the agent "builder" starts a work task
+- **THEN** the task's history shows the start by "builder"
