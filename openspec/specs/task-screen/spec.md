@@ -151,9 +151,10 @@ Below the task's header (title, kind and state, chore urgency and schedule, and 
 |---|---|
 | Work | Description · Comments · Lineage · References · History |
 | Chore | Description · Comments · References · History |
-| Exploration, update | Description · Lineage · References · History |
+| Exploration | Description · Findings · Lineage · References · History |
+| Update | Description · Lineage · References · History |
 
-Comments and References tabs SHALL show how many items they hold (References counting what the task references and what mentions or references it). The References tab SHALL list both what the task references and where it is mentioned. The open tab SHALL be part of the URL (`?tab=`), defaulting to Description, so a reload or a shared link opens the same tab; a link to a comment (`#comment-<id>`) SHALL open the Comments tab and show that comment. Every tab SHALL be shown even when empty, with its empty state. The header's actions SHALL work from every tab.
+The Comments, Findings and References tabs SHALL show how many items they hold (References counting what the task references and what mentions or references it). The References tab SHALL list both what the task references and where it is mentioned. The open tab SHALL be part of the URL (`?tab=`), defaulting to Description, so a reload or a shared link opens the same tab. A link to a comment (`#comment-<id>`) SHALL open the Comments tab and show that comment, and a link to a finding (`#finding-<id>`) SHALL open the Findings tab and show that finding. Every tab SHALL be shown even when empty, with its empty state. The header's actions SHALL work from every tab.
 
 #### Scenario: Comments tab
 - **WHEN** a work task with 2 comments is opened and the "Comments (2)" tab is chosen
@@ -167,6 +168,14 @@ Comments and References tabs SHALL show how many items they hold (References cou
 - **WHEN** a chore is opened
 - **THEN** its tabs are Description, Comments, References and History, and its schedule is in the header
 
+#### Scenario: Exploration tabs
+- **WHEN** an exploration with 3 findings is opened
+- **THEN** its tabs are Description, Findings (3), Lineage, References and History
+
+#### Scenario: Link to a finding
+- **WHEN** `/tasks/E#finding-f1` is opened
+- **THEN** the Findings tab is open and finding f1 is in view
+
 ### Requirement: Editing a chore's schedule
 Clicking a chore's schedule button, while the chore is in to do, SHALL open a dialog with every schedule option (no schedule, at a time, on a date, daily/weekly/monthly at a time, every X, timer), prefilled with the current schedule. Saving SHALL change the chore's configured schedule (carried to its following chores) and recompute its due time from now; invalid input SHALL be shown next to its field without losing what was entered.
 
@@ -178,9 +187,8 @@ Clicking a chore's schedule button, while the chore is in to do, SHALL open a di
 - **WHEN** the schedule dialog is saved with time "25:00"
 - **THEN** the schedule is unchanged and the dialog shows the time error
 
-
 ### Requirement: Deleting a task
-The task page SHALL show a delete button at the top right for a task of any kind, in any state. It SHALL open a confirmation dialog naming the task and saying how many comments go with it; only confirming SHALL delete. Deleting SHALL remove the task with its body page, comments, history and the relations from it, in one unit of work, and the browser SHALL go to the project's list for the task's kind. References, mentions and lineage pointing to the deleted task SHALL resolve as missing.
+The task page SHALL show a delete button at the top right for a task of any kind, in any state. It SHALL open a confirmation dialog naming the task and saying how many comments or findings go with it; only confirming SHALL delete. Deleting SHALL remove the task with its body page, comments, findings, history and the relations from it, in one unit of work, and the browser SHALL go to the project's list for the task's kind. References, mentions and lineage pointing to the deleted task SHALL resolve as missing.
 
 #### Scenario: Delete an exploration
 - **WHEN** the delete button of an exploration is pressed and the deletion confirmed
@@ -189,3 +197,19 @@ The task page SHALL show a delete button at the top right for a task of any kind
 #### Scenario: Reference to a deleted task
 - **WHEN** a task references another task that is then deleted
 - **THEN** the reference shows as missing
+
+### Requirement: Findings on the exploration page
+Exploration pages SHALL show the exploration's findings oldest first, each with its author ("You" or the agent's name), its time, an "Edited" marker once it has been edited, and its content rendered like page content. Each finding SHALL be addressable at `#finding-<id>`. The page SHALL offer writing a new finding with the same editor as comments, saved with an "Add finding" button or Cmd/Ctrl+Enter; nothing SHALL be saved until then, and an empty finding SHALL be rejected. Each finding, whoever wrote it, SHALL offer editing in place as comments do, and deleting after a confirmation. Its todos SHALL be checkable without editing it, and its toggles SHALL open and close. With no findings, the tab SHALL say so.
+
+#### Scenario: Add a finding
+- **WHEN** a finding "Tables are used on 16 of 20 pages" is written on an exploration and "Add finding" is pressed
+- **THEN** the exploration's findings end with that finding by "You", and the editor is empty again
+
+#### Scenario: Empty finding
+- **WHEN** an empty finding is added
+- **THEN** no finding is added and the editor shows that the finding is empty
+
+#### Scenario: Delete an agent's finding
+- **WHEN** a finding by agent "builder" is deleted and the deletion is confirmed
+- **THEN** it is no longer listed
+
