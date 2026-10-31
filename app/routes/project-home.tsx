@@ -4,10 +4,12 @@ import { data, Link as RouterLink, redirect, useSearchParams } from "react-route
 
 import { Blocks } from "../blocks/block-view";
 import { MentionTargetsContext } from "../blocks/rich-text";
-import { DeleteProjectButton } from "../components/delete-project";
+import { ActionSuggestionBars } from "../components/action-suggestion-bar";
+import { DeleteProjectButton, DeleteProjectDialog } from "../components/delete-project";
 import { NotFound } from "../components/not-found";
 import { allIds, PageTree } from "../components/page-tree";
 import { PageEditor } from "../editor/page-editor";
+import { actionSuggestionItems } from "../lib/action-suggestions.server";
 import { editablePage } from "../lib/page-edit.server";
 import { useHydrated } from "../lib/use-hydrated";
 import { projectDeletion, projectHomeView, type ProjectTabId, type ProjectTabView } from "../lib/projects.server";
@@ -21,8 +23,9 @@ export function loader({ params }: Route.LoaderArgs) {
         view,
         editable: editablePage(services, "project", params.projectId) ?? null,
         deletion: projectDeletion(services, params.projectId)!,
+        actions: actionSuggestionItems(services, services.projects.get(params.projectId)!.homePageId),
       }
-    : data({ view: null, editable: null, deletion: null }, { status: 404 });
+    : data({ view: null, editable: null, deletion: null, actions: [] }, { status: 404 });
 }
 
 /** Deletes the project (`intent=delete-project`) with everything in it, and goes home. */
@@ -72,7 +75,7 @@ function TaskTab({ tab }: { tab: ProjectTabView }) {
 }
 
 export default function ProjectHome({ loaderData }: Route.ComponentProps) {
-  const { view, editable, deletion } = loaderData;
+  const { view, editable, deletion, actions } = loaderData;
   const hydrated = useHydrated();
   const [statusSlot, setStatusSlot] = useState<HTMLElement | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -107,6 +110,12 @@ export default function ProjectHome({ loaderData }: Route.ComponentProps) {
           {deletion && <DeleteProjectButton deletion={deletion} />}
         </Stack>
       </Stack>
+      {/* An agent's suggested rename or deletion of the project, under its title and delete button. */}
+      <ActionSuggestionBars
+        items={actions}
+        actions={["rename", "delete"]}
+        confirmDelete={(props) => deletion && <DeleteProjectDialog deletion={deletion} {...props} />}
+      />
       {/* Quick glance: what's to do, in progress, open and due. */}
       <Stack direction="row" spacing={1} useFlexGap wrap="wrap">
         {view.glance.map((chip) => (

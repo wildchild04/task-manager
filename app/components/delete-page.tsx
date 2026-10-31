@@ -7,6 +7,33 @@ import type { PageDeletion } from "../lib/page-edit.server";
 const insideText = (count: number) =>
   count === 0 ? "" : count === 1 ? " and the page inside it" : ` and the ${count} pages inside it`;
 
+type DialogProps = { busy: boolean; onClose: () => void; onConfirm: () => void };
+
+/** The confirmation for deleting a page, saying what goes with it. */
+export function DeletePageDialog({ deletion, busy, onClose, onConfirm }: { deletion: PageDeletion } & DialogProps) {
+  return (
+    <Dialog
+      open
+      title={`Delete "${deletion.title}"?`}
+      onClose={onClose}
+      cancelAction={{ label: "Cancel", onClick: onClose }}
+      confirmAction={{ label: busy ? "Deleting…" : "Delete", color: "error", disabled: busy, onClick: onConfirm }}
+    >
+      <Stack spacing={1.5}>
+        <Typography>{`"${deletion.title}"${insideText(deletion.nestedPages)} will be deleted for good.`}</Typography>
+        {deletion.nestedPages > 0 && (
+          <Alert severity="warning" role="status">
+            {`${deletion.nestedPages === 1 ? "1 page" : `${deletion.nestedPages} pages`} inside it will be deleted too.`}
+          </Alert>
+        )}
+        <Typography variant="body2" color="text.secondary">
+          Links and references to these pages will show them as missing.
+        </Typography>
+      </Stack>
+    </Dialog>
+  );
+}
+
 /**
  * The page's delete button, with a confirmation dialog saying what goes with
  * it. Deleting goes to the page's parent (or the library, or home).
@@ -14,36 +41,17 @@ const insideText = (count: number) =>
 export function DeletePageButton({ pageId, deletion }: { pageId: string; deletion: PageDeletion }) {
   const fetcher = useFetcher();
   const [open, setOpen] = useState(false);
-  const busy = fetcher.state !== "idle";
 
   return (
     <>
       <IconButton ariaLabel={`Delete ${deletion.title}`} icon="delete" onClick={() => setOpen(true)} />
       {open && (
-        <Dialog
-          open
-          title={`Delete "${deletion.title}"?`}
+        <DeletePageDialog
+          deletion={deletion}
+          busy={fetcher.state !== "idle"}
           onClose={() => setOpen(false)}
-          cancelAction={{ label: "Cancel", onClick: () => setOpen(false) }}
-          confirmAction={{
-            label: busy ? "Deleting…" : "Delete",
-            color: "error",
-            disabled: busy,
-            onClick: () => void fetcher.submit({ intent: "delete-page" }, { method: "post", action: `/pages/${pageId}` }),
-          }}
-        >
-          <Stack spacing={1.5}>
-            <Typography>{`"${deletion.title}"${insideText(deletion.nestedPages)} will be deleted for good.`}</Typography>
-            {deletion.nestedPages > 0 && (
-              <Alert severity="warning" role="status">
-                {`${deletion.nestedPages === 1 ? "1 page" : `${deletion.nestedPages} pages`} inside it will be deleted too.`}
-              </Alert>
-            )}
-            <Typography variant="body2" color="text.secondary">
-              Links and references to these pages will show them as missing.
-            </Typography>
-          </Stack>
-        </Dialog>
+          onConfirm={() => void fetcher.submit({ intent: "delete-page" }, { method: "post", action: `/pages/${pageId}` })}
+        />
       )}
     </>
   );

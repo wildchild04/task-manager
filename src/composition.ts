@@ -18,6 +18,7 @@ import type { ContentRepository } from "~/domain/content/content.repository";
 import { CommentService, commentProtection } from "~/domain/comments/comment.service";
 import { COMMENT_OWNER_KIND } from "~/domain/comments/types";
 import type { ReferenceableKinds } from "~/domain/tasks/referenceable";
+import { DomainSuggestedActions } from "~/domain/suggestions/suggested-actions";
 import { SuggestionService } from "~/domain/suggestions/suggestion.service";
 import { TaskService, taskProtection } from "~/domain/tasks/task.service";
 import { TASK_OWNER_KIND } from "~/domain/tasks/types";
@@ -114,10 +115,12 @@ function buildServices(store: UnitOfWork, content: ContentRepository, close: () 
       comments.addWithin(repos, { id, taskId: task.id, author: actor, blocks: [reasonBlock, ...commentBlocks] }, at);
     },
   });
-  const suggestions = new SuggestionService(uow, options.newId, options.now);
+  const chores = new ChoreService(uow, tasks, options.now);
+  // Approving an action suggestion runs it through the same services the human's own controls use.
+  const actions = new DomainSuggestedActions({ blocks, projects, tasks, chores });
+  const suggestions = new SuggestionService(uow, options.newId, options.now, actions);
   const library = new LibraryService(blocks, projects, resolvers);
   const dashboardSections = new DashboardRegistry();
-  const chores = new ChoreService(uow, tasks, options.now);
   registerCoreSections(dashboardSections, { tasks, blocks, projects });
   dashboardSections.replace(choresSection(tasks, chores));
   const dashboard = new DashboardService(dashboardSections, projects);

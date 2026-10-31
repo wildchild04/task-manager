@@ -75,7 +75,7 @@ function WaitingForReview({ items }: { items: ReviewItem[] }) {
         items={items.map((item) => ({
           id: item.id,
           primary: titleLink(item.title, item.href),
-          secondary: `${item.place} · ${item.agents.join(", ")}`,
+          secondary: [item.place, item.action, item.agents.join(", ")].filter(Boolean).join(" · "),
           action: <Chip label={count(item.count, "suggestion")} color="warning" size="small" variant="outlined" />,
         }))}
       />

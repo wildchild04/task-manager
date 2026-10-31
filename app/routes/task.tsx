@@ -6,9 +6,11 @@ import { Blocks } from "../blocks/block-view";
 import { MentionTargetsContext } from "../blocks/rich-text";
 import { Backlinks } from "../components/backlinks";
 import { ChoreControls } from "../components/chore-controls";
-import { DeleteTaskButton } from "../components/delete-task";
+import { ActionSuggestionBars } from "../components/action-suggestion-bar";
+import { DeleteTaskButton, DeleteTaskDialog } from "../components/delete-task";
 import { NotFound } from "../components/not-found";
 import { PageEditor } from "../editor/page-editor";
+import { actionSuggestionItems } from "../lib/action-suggestions.server";
 import { editablePage } from "../lib/page-edit.server";
 import { useHydrated } from "../lib/use-hydrated";
 import { TransitionBar } from "../components/task-actions";
@@ -21,9 +23,14 @@ import type { Route } from "./+types/task";
 
 export function loader({ params }: Route.LoaderArgs) {
   const view = taskOverviewView(services, params.taskId);
-  return view
-    ? { view, editable: editablePage(services, "task", params.taskId) ?? null }
-    : data({ view: null, editable: null }, { status: 404 });
+  const bodyPageId = services.tasks.get(params.taskId)?.bodyPageId;
+  return view && bodyPageId
+    ? {
+        view,
+        editable: editablePage(services, "task", params.taskId) ?? null,
+        actions: actionSuggestionItems(services, bodyPageId),
+      }
+    : data({ view: null, editable: null, actions: [] }, { status: 404 });
 }
 
 export async function action({ params, request }: Route.ActionArgs) {
@@ -61,7 +68,7 @@ function tabsFor(view: TaskOverviewView): { value: TabId; label: string }[] {
 }
 
 export default function Task({ loaderData }: Route.ComponentProps) {
-  const { view, editable } = loaderData;
+  const { view, editable, actions } = loaderData;
   const hydrated = useHydrated();
   const [statusSlot, setStatusSlot] = useState<HTMLElement | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -98,8 +105,17 @@ export default function Task({ loaderData }: Route.ComponentProps) {
     );
 
   // Between the title and the description: kind and state, a chore's urgency and schedule, the actions, the tabs.
+  const deletion = {
+    title: task.title,
+    kindLabel: task.kindLabel,
+    comments: view.comments?.length ?? 0,
+    findings: view.findings?.length ?? 0,
+  };
+  // Agents' suggested actions show by the control they'd use: a rename under the title, a schedule and
+  // an ending transition under the actions row, a deletion by the delete button.
   const header = (
     <Stack spacing={2}>
+      <ActionSuggestionBars items={actions} actions={["rename"]} />
       <Stack direction="row" spacing={1} alignItems="center" useFlexGap wrap="wrap">
         <Chip label={task.kindLabel} size="small" variant="outlined" />
         <Chip label={task.stateLabel} color={task.stateColor} size="small" />
@@ -108,6 +124,7 @@ export default function Task({ loaderData }: Route.ComponentProps) {
       </Stack>
       {/* Keyed by state so dialogs and errors reset after each transition. */}
       <TransitionBar key={`${task.id}-${task.state}`} view={view} extra={chore && <ChoreControls chore={chore} />} />
+      <ActionSuggestionBars items={actions} actions={["schedule", "transition"]} />
       <Tabs ariaLabel="Task sections" variant="scrollable" value={tab} options={tabs} onChange={openTab} />
     </Stack>
   );
@@ -137,15 +154,14 @@ export default function Task({ loaderData }: Route.ComponentProps) {
         />
         <Stack direction="row" spacing={1} alignItems="center">
           <span ref={setStatusSlot} />
-          <DeleteTaskButton
-            key={task.id}
-            title={task.title}
-            kindLabel={task.kindLabel}
-            comments={view.comments?.length ?? 0}
-            findings={view.findings?.length ?? 0}
-          />
+          <DeleteTaskButton key={task.id} {...deletion} />
         </Stack>
       </Stack>
+      <ActionSuggestionBars
+        items={actions}
+        actions={["delete"]}
+        confirmDelete={(props) => <DeleteTaskDialog deletion={deletion} {...props} />}
+      />
       {/* The title and description are edited in place; the editor stays mounted while other tabs are open. */}
       {hydrated && editable ? (
         <PageEditor

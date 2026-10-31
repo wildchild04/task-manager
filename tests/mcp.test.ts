@@ -48,7 +48,7 @@ describe("MCP server", () => {
     }
   });
 
-  it("offers the twenty-one tools, each describing its defaults", async () => {
+  it("offers the twenty-three tools, each describing its defaults", async () => {
     const client = await connect(services);
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
@@ -56,6 +56,7 @@ describe("MCP server", () => {
       "append_description",
       "comment",
       "create_page",
+      "create_project",
       "create_task",
       "delete_finding",
       "edit_finding",
@@ -71,6 +72,7 @@ describe("MCP server", () => {
       "read_page",
       "search_pages",
       "suggest",
+      "suggest_action",
       "transition",
       "withdraw_suggestion",
     ]);
@@ -151,6 +153,20 @@ describe("MCP server", () => {
     expect(listed.findings[0]).toEqual({ id: added.id, author: "builder", markdown: "It works" });
     const refused = await client.callTool({ name: "add_finding", arguments: { id: "task0001", markdown: "x" } });
     expect(text(refused)).toMatch(/^validation: /);
+  });
+
+  it("creates a project and suggests deleting a page", async () => {
+    const client = await connect(services);
+    const project = JSON.parse(text(await client.callTool({ name: "create_project", arguments: { title: "Garden" } })));
+    expect(project).toEqual({ ok: true, id: expect.any(String) });
+    const projects = JSON.parse(text(await client.callTool({ name: "list_projects", arguments: {} })));
+    expect(projects.projects).toContainEqual({ id: project.id, title: "Garden" });
+
+    const page = JSON.parse(text(await client.callTool({ name: "create_page", arguments: { title: "Scratch" } })));
+    const made = JSON.parse(text(await client.callTool({ name: "suggest_action", arguments: { action: "delete", page: page.id } })));
+    expect(made).toEqual({ ok: true, id: expect.any(String) });
+    const status = JSON.parse(text(await client.callTool({ name: "get_suggestion", arguments: { id: made.id } })));
+    expect(status).toMatchObject({ status: "pending", subject: `page:${page.id}` });
   });
 
   it("returns refusals as tool errors with the API's code", async () => {

@@ -1,13 +1,16 @@
 import type Database from "better-sqlite3";
 
 import type { SuggestionRepository } from "~/domain/suggestions/suggestion.repository";
-import type { Suggestion } from "~/domain/suggestions/types";
+import type { ActionPayload, ActionSuggestion, BlockSuggestion, SubjectKind, Suggestion } from "~/domain/suggestions/types";
 
 type SuggestionRow = {
   id: string;
   page_id: string;
   action: Suggestion["action"];
   target_id: string | null;
+  subject_kind: SubjectKind | null;
+  subject_id: string | null;
+  payload: string | null;
   note: string | null;
   actor_name: string;
   base: string | null;
@@ -17,24 +20,43 @@ type SuggestionRow = {
   resolved_at: string | null;
 };
 
-const toSuggestion = (row: SuggestionRow): Suggestion => ({
-  id: row.id,
-  pageId: row.page_id,
-  action: row.action,
-  targetId: row.target_id,
-  note: row.note,
-  author: row.actor_name,
-  base: row.base,
-  status: row.status,
-  undo: row.undo === null ? null : JSON.parse(row.undo),
-  createdAt: row.created_at,
-  resolvedAt: row.resolved_at,
-});
+function toSuggestion(row: SuggestionRow): Suggestion {
+  const common = {
+    id: row.id,
+    pageId: row.page_id,
+    note: row.note,
+    author: row.actor_name,
+    base: row.base,
+    status: row.status,
+    createdAt: row.created_at,
+    resolvedAt: row.resolved_at,
+  };
+  if (row.subject_kind !== null) {
+    return {
+      ...common,
+      subject: { kind: row.subject_kind, id: row.subject_id! },
+      action: row.action as ActionSuggestion["action"],
+      payload: JSON.parse(row.payload!) as ActionPayload,
+      targetId: null,
+      undo: null,
+    };
+  }
+  return {
+    ...common,
+    subject: null,
+    action: row.action as BlockSuggestion["action"],
+    targetId: row.target_id,
+    undo: row.undo === null ? null : JSON.parse(row.undo),
+  };
+}
 
 const values = (s: Suggestion) => [
   s.pageId,
   s.action,
   s.targetId,
+  s.subject?.kind ?? null,
+  s.subject?.id ?? null,
+  s.subject ? JSON.stringify(s.payload) : null,
   s.note,
   s.author,
   s.base,
@@ -51,11 +73,12 @@ export class SqliteSuggestionRepository implements SuggestionRepository {
   constructor(db: Database.Database) {
     this.s = {
       insert: db.prepare(
-        `INSERT INTO suggestions (page_id, action, target_id, note, actor_name, base, status, undo, created_at, resolved_at, id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO suggestions (page_id, action, target_id, subject_kind, subject_id, payload, note, actor_name, base, status,
+         undo, created_at, resolved_at, id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ),
       update: db.prepare(
-        `UPDATE suggestions SET page_id = ?, action = ?, target_id = ?, note = ?, actor_name = ?, base = ?, status = ?,
+        `UPDATE suggestions SET page_id = ?, action = ?, target_id = ?, subject_kind = ?, subject_id = ?, payload = ?, note = ?, actor_name = ?, base = ?, status = ?,
          undo = ?, created_at = ?, resolved_at = ? WHERE id = ?`,
       ),
       get: db.prepare<[string], SuggestionRow>("SELECT * FROM suggestions WHERE id = ?"),

@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { actionSuggestionItems } from "../../app/lib/action-suggestions.server";
 import { editablePage } from "../../app/lib/page-edit.server";
 import { buildPageView } from "../../app/lib/page-view.server";
 import { decideSuggestion } from "../../app/lib/suggestions.server";
 import { type AppServices, createInMemoryServices } from "~/composition";
+import type { ActionPayload, Subject } from "~/domain/suggestions/types";
 
 describe("suggestions on screens", () => {
   let services: AppServices;
@@ -87,5 +89,67 @@ describe("suggestions on screens", () => {
     });
     expect(decideSuggestion(services, { intent: "reject-all", pageId: "P" })).toEqual({ ok: true, message: "1 rejected" });
     expect(decideSuggestion(services, { intent: "explode" })).toEqual({ ok: false, message: "The decision couldn't be read" });
+  });
+});
+
+describe("action suggestions on screens", () => {
+  let services: AppServices;
+  const weekly = { type: "frequency" as const, every: "weekly" as const, weekday: 1, time: "09:00" };
+
+  beforeEach(() => {
+    services = createInMemoryServices({ timeZone: "UTC" });
+    services.projects.create({ id: "P", title: "Garden" });
+    services.blocks.apply([
+      { op: "insert", block: { id: "W", type: "page", content: [{ text: "Scratch" }] }, parentId: null },
+      { op: "insert", block: { id: "W1", type: "page", content: [{ text: "Inside" }] }, parentId: "W" },
+    ]);
+    services.tasks.create({ id: "idea", projectId: "P", kind: "exploration", title: "Login" });
+    services.tasks.create({ id: "chore", projectId: "P", kind: "chore", title: "Back up" });
+  });
+
+  it("describes each suggestion for its bar, on its subject's place page", () => {
+    const idea = services.tasks.get("idea")!.bodyPageId;
+    const chore = services.tasks.get("chore")!.bodyPageId;
+    const add = (id: string, subject: Subject, payload: ActionPayload) =>
+      services.suggestions.suggestAction({ id, subject, payload, author: "claude", note: id === "t" ? "Superseded" : undefined });
+    add("r", { kind: "task", id: "idea" }, { action: "rename", title: "Passkey login" });
+    add("t", { kind: "task", id: "idea" }, { action: "transition", name: "tombstone" });
+    add("s", { kind: "task", id: "chore" }, { action: "schedule", schedule: weekly });
+    add("n", { kind: "task", id: "chore" }, { action: "schedule", schedule: null });
+    add("d", { kind: "page", id: "W" }, { action: "delete" });
+    add("p", { kind: "project", id: "P" }, { action: "rename", title: "Allotment" });
+
+    expect(actionSuggestionItems(services, idea)).toEqual([
+      { id: "r", author: "claude", action: "rename", words: 'renaming this exploration to "Passkey login"', note: null, outdated: false },
+      { id: "t", author: "claude", action: "transition", words: "tombstoning this exploration", note: "Superseded", outdated: false },
+    ]);
+    expect(actionSuggestionItems(services, chore).map((i) => i.words)).toEqual([
+      "changing the schedule to Every Monday at 09:00",
+      "removing the schedule",
+    ]);
+    expect(actionSuggestionItems(services, "W").map((i) => i.words)).toEqual(["deleting this page"]);
+    expect(actionSuggestionItems(services, services.projects.get("P")!.homePageId).map((i) => i.words)).toEqual([
+      'renaming this project to "Allotment"',
+    ]);
+  });
+
+  it("approves a deletion, saying where to go, with no undo; rejects with no undo", () => {
+    services.suggestions.suggestAction({ id: "d", subject: { kind: "page", id: "W1" }, payload: { action: "delete" }, author: "claude" });
+    services.suggestions.suggestAction({ id: "t", subject: { kind: "task", id: "idea" }, payload: { action: "delete" }, author: "claude" });
+    services.suggestions.suggestAction({
+      id: "r",
+      subject: { kind: "task", id: "chore" },
+      payload: { action: "rename", title: "Back up the database" },
+      author: "claude",
+    });
+    expect(decideSuggestion(services, { intent: "approve", id: "d" })).toEqual({
+      ok: true,
+      message: "Suggestion approved",
+      redirectTo: "/pages/W",
+    });
+    expect(services.blocks.getBlock("W1")).toBeUndefined();
+    expect(decideSuggestion(services, { intent: "approve", id: "t" })).toMatchObject({ redirectTo: "/projects/P/explorations" });
+    expect(decideSuggestion(services, { intent: "reject", id: "r" })).toEqual({ ok: true, message: "Suggestion rejected" });
+    expect(decideSuggestion(services, { intent: "approve", id: "r" })).toMatchObject({ ok: false });
   });
 });

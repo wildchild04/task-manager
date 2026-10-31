@@ -53,6 +53,15 @@ export function createAgentServer(call: AgentCall): McpServer {
   );
 
   server.registerTool(
+    "create_project",
+    {
+      description: "Create a project, with its home page and knowledge library. Returns { ok, id }.",
+      inputSchema: { title: z.string() },
+    },
+    (input) => run(call, "POST", "projects", input),
+  );
+
+  server.registerTool(
     "list_tasks",
     {
       description:
@@ -137,15 +146,15 @@ export function createAgentServer(call: AgentCall): McpServer {
     "transition",
     {
       description:
-        "Move a task through its lifecycle; get_task lists the `transitions` you may apply now. Explorations and updates (open, promoted, tombstoned): promote (turn it into a new work task born from it; `title` defaults to the idea's), tombstone, revive. Work (todo, in_progress, done, cancelled): start (take it; you then hold it until it leaves in_progress), pause, complete, return (back to todo; needs a `reason`, posted as your comment), cancel, reopen. Chores (todo, done, cancelled): complete (`next`: create the following occurrence; defaults to yes when recurring), cancel (`scope`: occurrence (default) or series). Returns { ok, state, work? } (`work`: the new work task's ID, after promote).",
+        "Move a task through its lifecycle; get_task lists the `transitions` you may apply now. Explorations and updates (open, promoted, tombstoned): promote (turn it into a new work task born from it; `title` defaults to the idea's), revive. Work (todo, in_progress, done, cancelled): start (take it; you then hold it until it leaves in_progress), pause, complete, return (back to todo; needs a `reason`, posted as your comment), reopen. Chores (todo, done, cancelled): complete (`next`: create the following occurrence; defaults to yes when recurring), cancel (skips this occurrence). Returns { ok, state, work? } (`work`: the new work task's ID, after promote).",
       inputSchema: {
         id,
         // Not an enum: the app decides what's allowed, and says why when it isn't.
-        name: z.string().describe("The transition, e.g. promote, tombstone, start, complete, return, cancel"),
+        name: z.string().describe("The transition, e.g. promote, start, complete, return"),
         reason: z.string().optional().describe("return: why you're giving the work back (required)"),
         title: z.string().optional().describe("promote: the new work task's title (default: the idea's title)"),
         next: z.boolean().optional().describe("Chore complete: create the following occurrence"),
-        scope: z.enum(["occurrence", "series"]).optional().describe("Chore cancel: this occurrence (default) or the whole series"),
+        scope: z.literal("occurrence").optional().describe("Chore cancel: this occurrence (the default)"),
       },
     },
     ({ id, ...rest }) => run(call, "POST", `task/${enc(id)}/transition`, rest),
@@ -271,11 +280,35 @@ export function createAgentServer(call: AgentCall): McpServer {
   );
 
   server.registerTool(
+    "suggest_action",
+    {
+      description:
+        "Propose an action for a human to approve or reject; nothing changes until then. On exactly one of `project`, `page` or `task`: `rename` (with `title`) or `delete` a project, a page or a task; `schedule` a chore in to do (`schedule`, or `null` to remove it); `transition`: cancel work, tombstone an exploration or update, or cancel a recurring chore's whole series (`transition: \"cancel\"`, `scope: \"series\"`). `note` (at most 280 characters) tells the human why. If the subject changes first, the suggestion becomes outdated. Returns { ok, id }.",
+      inputSchema: {
+        action: z.enum(["rename", "delete", "schedule", "transition"]),
+        project: z.string().optional().describe("Project ID from list_projects"),
+        page: z.string().optional().describe("Page ID from search_pages"),
+        task: z.string().optional().describe("Task ID from list_tasks"),
+        title: z.string().optional().describe("rename: the new title"),
+        schedule: z
+          .record(z.string(), z.unknown())
+          .nullable()
+          .optional()
+          .describe("schedule: as for create_task, or null to remove the chore's schedule"),
+        transition: z.enum(["cancel", "tombstone"]).optional().describe("transition: cancel (work, chore series) or tombstone (ideas)"),
+        scope: z.literal("series").optional().describe("transition: a chore's cancel needs scope series"),
+        note: z.string().optional().describe("Why, for the human reviewing it"),
+      },
+    },
+    (input) => run(call, "POST", "suggest-action", input),
+  );
+
+  server.registerTool(
     "get_suggestion",
     {
       description:
-        "A suggestion's status: { id, action, status, place, resolvedAt? }. Status is pending, outdated (its target changed since; it can only be rejected, so withdraw and suggest again), approved, rejected or withdrawn.",
-      inputSchema: { id: z.string().describe("Suggestion ID from suggest") },
+        "A suggestion's status: { id, action, status, place, subject?, resolvedAt? } (`subject`: what an action from suggest_action acts on). Status is pending, outdated (its target or subject changed since; it can only be rejected, so withdraw and suggest again), approved, rejected or withdrawn.",
+      inputSchema: { id: z.string().describe("Suggestion ID from suggest or suggest_action") },
     },
     ({ id }) => run(call, "GET", `suggestion/${enc(id)}`),
   );
@@ -283,8 +316,8 @@ export function createAgentServer(call: AgentCall): McpServer {
   server.registerTool(
     "withdraw_suggestion",
     {
-      description: "Take back your own pending or outdated suggestion, removing it from the page. Returns { ok }.",
-      inputSchema: { id: z.string().describe("Suggestion ID from suggest") },
+      description: "Take back your own pending or outdated suggestion (from suggest or suggest_action). Returns { ok }.",
+      inputSchema: { id: z.string().describe("Suggestion ID from suggest or suggest_action") },
     },
     ({ id }) => run(call, "POST", `suggestion/${enc(id)}/withdraw`, {}),
   );

@@ -178,6 +178,43 @@ describe("home dashboard", () => {
     });
   });
 
+  describe("action suggestions", () => {
+    const suggestAction = (id: string, subject: { kind: "project" | "page" | "task"; id: string }, payload: never, author = "claude") =>
+      services.suggestions.suggestAction({ id, subject, payload, author });
+
+    it("names the action when it's a place's only suggestion, and links a project to its home", () => {
+      services.blocks.apply([
+        { op: "insert", block: { id: "scratch", type: "page", content: [{ text: "Scratch" }] }, parentId: null },
+      ]);
+      task("W", "A", "work", "Old migration");
+      suggestAction("d", { kind: "page", id: "scratch" }, { action: "delete" } as never);
+      clock = "2026-10-14T08:01:00.000Z";
+      suggestAction("c", { kind: "task", id: "W" }, { action: "transition", name: "cancel" } as never, "builder");
+      clock = "2026-10-14T08:02:00.000Z";
+      suggestAction("r", { kind: "project", id: "B" }, { action: "rename", title: "Pantry" } as never);
+      suggestAction("r2", { kind: "project", id: "B" }, { action: "delete" } as never);
+
+      expect(notificationsView(services, clock)).toEqual([
+        { id: "scratch", title: "Scratch", detail: "Suggests deleting this page · claude", href: "/pages/scratch" },
+        {
+          id: services.tasks.get("W")!.bodyPageId,
+          title: "Old migration",
+          detail: "Suggests cancelling this work · builder",
+          href: "/tasks/W",
+        },
+        { id: services.projects.get("B")!.homePageId, title: "Kitchen", detail: "2 suggestions · claude", href: "/projects/B" },
+      ]);
+      expect(homeView(services, clock).review[1]).toMatchObject({ action: "Suggests cancelling this work", agents: ["builder"] });
+    });
+
+    it("drops a suggestion whose subject is gone", () => {
+      task("W", "A", "work", "Old migration");
+      suggestAction("r", { kind: "task", id: "W" }, { action: "rename", title: "New" } as never);
+      services.tasks.delete("W");
+      expect(notificationsView(services, clock)).toEqual([]);
+    });
+  });
+
   it("includes the workspace page tree", () => {
     services.blocks.apply([{ op: "insert", block: { id: "wp", type: "page", content: [{ text: "Welcome" }] }, parentId: null }]);
     expect(homeView(services, clock).pages).toEqual([{ id: "wp", title: "Welcome", children: [] }]);

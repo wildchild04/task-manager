@@ -3,7 +3,16 @@ import type { Block, BlockType, NewBlock, Operation, SuggestionAction, Suggestio
 import { isLeafType } from "../blocks/types";
 import type { Repositories, UnitOfWork } from "../unit-of-work";
 import { SuggestionError } from "./errors";
-import type { Suggestion, SuggestionBlockInput, SuggestionState } from "./types";
+import type { SuggestedActions } from "./suggested-actions";
+import type {
+  ActionPayload,
+  ActionSuggestion,
+  BlockSuggestion,
+  Subject,
+  Suggestion,
+  SuggestionBlockInput,
+  SuggestionState,
+} from "./types";
 
 /** Block types a suggestion can't propose. */
 const FORBIDDEN: readonly BlockType[] = ["page", "comment", "suggestion"];
@@ -26,8 +35,18 @@ export type SuggestInput = {
   author: string;
 };
 
+export type SuggestActionInput = {
+  id?: string;
+  subject: Subject;
+  payload: ActionPayload;
+  note?: string;
+  /** The agent making it. */
+  author: string;
+};
+
 /** A suggestion's record and its state as reported (`outdated` when a pending replace or delete's target changed). */
 export type SuggestionView = Suggestion & { state: SuggestionState };
+export type ActionSuggestionView = ActionSuggestion & { state: SuggestionState };
 
 const fail = (code: SuggestionError["code"], message: string): never => {
   throw new SuggestionError(code, message);
@@ -105,7 +124,45 @@ export class SuggestionService {
     private readonly uow: UnitOfWork,
     private readonly newId: () => string = () => crypto.randomUUID(),
     private readonly now: () => string = () => new Date().toISOString(),
+    private readonly actions?: SuggestedActions,
   ) {}
+
+  private get suggested(): SuggestedActions {
+    return this.actions ?? fail("validation", "Actions can't be suggested here");
+  }
+
+  /** Records an agent's proposal to act on a project, page or task, checked as if it were applied now. */
+  suggestAction(input: SuggestActionInput): SuggestionView {
+    return this.uow.run((repos) => {
+      const { subject, payload, author } = input;
+      if (!author) fail("validation", "A suggestion needs the agent making it");
+      if (input.note && input.note.length > NOTE_MAX) fail("validation", `A note is at most ${NOTE_MAX} characters`);
+      const pageId = this.suggested.placeOf(subject) ?? fail("not_found", `The ${subject.kind} ${subject.id} does not exist`);
+      this.suggested.check(subject, payload);
+      const suggestion: ActionSuggestion = {
+        id: input.id ?? this.newId(),
+        pageId,
+        subject,
+        action: payload.action,
+        payload: payload.action === "rename" ? { ...payload, title: payload.title.trim() } : payload,
+        targetId: null,
+        note: input.note || null,
+        author,
+        base: this.suggested.baseOf(subject, payload)!,
+        status: "pending",
+        undo: null,
+        createdAt: this.now(),
+        resolvedAt: null,
+      };
+      repos.suggestions.insert(suggestion);
+      return this.view(repos, suggestion);
+    });
+  }
+
+  /** Pending action suggestions whose subject shows on this place page and still exists, oldest first. */
+  pendingActions(pageId: string): ActionSuggestionView[] {
+    return this.listPending().filter((s): s is ActionSuggestionView => s.subject !== null && s.pageId === pageId);
+  }
 
   suggest(input: SuggestInput): SuggestionView {
     return this.uow.run((repos) => {
@@ -171,9 +228,10 @@ export class SuggestionService {
         { op: "insert", block: { id, type: "suggestion", props }, parentId, afterId },
         ...insertOps(id, null, blocks),
       ]);
-      const suggestion: Suggestion = {
+      const suggestion: BlockSuggestion = {
         id,
         pageId,
+        subject: null,
         action,
         targetId,
         note: input.note || null,
@@ -199,12 +257,12 @@ export class SuggestionService {
     return this.uow.repositories.suggestions.findByPrefix(prefix).map((s) => s.id);
   }
 
-  /** Pending suggestions still on their page, oldest first. */
+  /** Pending suggestions still on their page (an action's: whose subject still exists), oldest first. */
   listPending(): SuggestionView[] {
     const repos = this.uow.repositories;
     return repos.suggestions
       .listPending()
-      .filter((s) => repos.blocks.getBlock(s.id))
+      .filter((s) => (s.subject ? this.actions?.placeOf(s.subject) : repos.blocks.getBlock(s.id)))
       .map((s) => this.view(repos, s));
   }
 
@@ -227,7 +285,7 @@ export class SuggestionService {
     return this.uow.run((repos) => {
       const suggestion = this.pending(repos, id);
       if (suggestion.author !== author) fail("forbidden", `Only ${suggestion.author}, who made it, can withdraw this suggestion`);
-      this.apply(repos, [{ op: "delete", id }]);
+      if (!suggestion.subject) this.apply(repos, [{ op: "delete", id }]);
       return this.resolve(repos, suggestion, "withdrawn", null);
     });
   }
@@ -236,7 +294,9 @@ export class SuggestionService {
   reopen(id: string): SuggestionView {
     return this.uow.run((repos) => {
       const suggestion = repos.suggestions.get(id) ?? fail("not_found", `Suggestion ${id} does not exist`);
-      if (suggestion.status === "pending" || !suggestion.undo) fail("validation", "This suggestion can't be undone");
+      if (suggestion.subject || suggestion.status === "pending" || !suggestion.undo) {
+        fail("validation", "This suggestion can't be undone");
+      }
       try {
         repos.blocks.apply(suggestion.undo!);
       } catch (error) {
@@ -276,6 +336,18 @@ export class SuggestionService {
 
   private approveWithin(repos: Repositories, id: string): SuggestionView {
     const suggestion = this.pending(repos, id);
+    if (suggestion.subject) {
+      if (this.isOutdated(repos, suggestion)) fail("outdated", `The ${suggestion.subject.kind} changed since it was suggested`);
+      try {
+        this.suggested.run(suggestion.subject, suggestion.payload);
+      } catch (error) {
+        // The owning domain refused it: the whole approval rolls back.
+        if (error instanceof SuggestionError) throw error;
+        if (error instanceof Error && "code" in error) fail("validation", error.message);
+        throw error;
+      }
+      return this.resolve(repos, suggestion, "approved", null);
+    }
     if (this.isOutdated(repos, suggestion)) fail("outdated", "The block changed since it was suggested");
     const block = repos.blocks.getBlock(id)!;
     const at = this.position(repos, block);
@@ -344,6 +416,7 @@ export class SuggestionService {
 
   private rejectWithin(repos: Repositories, id: string): SuggestionView {
     const suggestion = this.pending(repos, id);
+    if (suggestion.subject) return this.resolve(repos, suggestion, "rejected", null);
     const block = repos.blocks.getBlock(id)!;
     const at = this.position(repos, block);
     const undo = restoreOps(treeOf(repos, block), at.parentId, at.afterId);
@@ -354,12 +427,12 @@ export class SuggestionService {
   private pending(repos: Repositories, id: string): Suggestion {
     const suggestion = repos.suggestions.get(id) ?? fail("not_found", `Suggestion ${id} does not exist`);
     if (suggestion.status !== "pending") fail("resolved", `This suggestion was already ${suggestion.status}`);
-    if (!repos.blocks.getBlock(id)) fail("not_found", `Suggestion ${id} is no longer on its page`);
+    if (!suggestion.subject && !repos.blocks.getBlock(id)) fail("not_found", `Suggestion ${id} is no longer on its page`);
     return suggestion;
   }
 
   private resolve(repos: Repositories, suggestion: Suggestion, status: Suggestion["status"], undo: Operation[] | null) {
-    const resolved: Suggestion = { ...suggestion, status, undo, resolvedAt: this.now() };
+    const resolved = { ...suggestion, status, undo, resolvedAt: this.now() } as Suggestion;
     repos.suggestions.update(resolved);
     return this.view(repos, resolved);
   }
@@ -370,6 +443,7 @@ export class SuggestionService {
   }
 
   private isOutdated(repos: Repositories, suggestion: Suggestion): boolean {
+    if (suggestion.subject) return this.suggested.baseOf(suggestion.subject, suggestion.payload) !== suggestion.base;
     if (suggestion.action === "insert" || suggestion.base === null) return false;
     const target = repos.blocks.getBlock(suggestion.targetId!);
     if (!target) return true;

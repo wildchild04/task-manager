@@ -7,11 +7,13 @@ import { MentionTargetsContext } from "../blocks/rich-text";
 import { RichText } from "../blocks/rich-text";
 import { plainText } from "../blocks/view-model";
 import { Backlinks } from "../components/backlinks";
-import { DeletePageButton } from "../components/delete-page";
+import { ActionSuggestionBars } from "../components/action-suggestion-bar";
+import { DeletePageButton, DeletePageDialog } from "../components/delete-page";
 import { NotFound } from "../components/not-found";
 import { PageEditor } from "../editor/page-editor";
 import { deletePage, editablePage, pageDeletion } from "../lib/page-edit.server";
 import { buildPageView, pageTrail } from "../lib/page-view.server";
+import { actionSuggestionItems } from "../lib/action-suggestions.server";
 import { pageBacklinks } from "../lib/backlinks.server";
 import { services } from "../lib/services.server";
 import { useHydrated } from "../lib/use-hydrated";
@@ -19,13 +21,14 @@ import type { Route } from "./+types/page";
 
 export function loader({ params }: Route.LoaderArgs) {
   const page = buildPageView(services.blocks, params.pageId, services.suggestions, services.content);
-  if (!page) return data({ page: null, trail: [], editable: null, deletion: null, backlinks: [] }, { status: 404 });
+  if (!page) return data({ page: null, trail: [], editable: null, deletion: null, backlinks: [], actions: [] }, { status: 404 });
   return {
     page,
     trail: pageTrail(services.blocks, services.projects, page.id),
     editable: editablePage(services, "page", page.id) ?? null,
     deletion: pageDeletion(services, page.id) ?? null,
     backlinks: pageBacklinks(services, page.id),
+    actions: actionSuggestionItems(services, page.id),
   };
 }
 
@@ -43,12 +46,14 @@ export function meta({ data }: Route.MetaArgs) {
 }
 
 export default function Page({ loaderData }: Route.ComponentProps) {
-  const { page, trail, editable, deletion, backlinks } = loaderData;
+  const { page, trail, editable, deletion, backlinks, actions } = loaderData;
   const hydrated = useHydrated();
   const [statusSlot, setStatusSlot] = useState<HTMLElement | null>(null);
   if (!page) return <NotFound />;
   // The server renders the page read-only; the editor takes over in the browser.
   const editing = hydrated && editable;
+  // An agent's suggested rename shows under the title; a suggested deletion by the delete button.
+  const renames = <ActionSuggestionBars items={actions} actions={["rename"]} />;
 
   return (
     <article>
@@ -68,12 +73,20 @@ export default function Page({ loaderData }: Route.ComponentProps) {
             {deletion && <DeletePageButton key={page.id} pageId={page.id} deletion={deletion} />}
           </Stack>
         </Stack>
+        <ActionSuggestionBars
+          items={actions}
+          actions={["delete"]}
+          confirmDelete={(props) => deletion && <DeletePageDialog deletion={deletion} {...props} />}
+        />
         {!(editing && editable.title) && (
-          <Typography variant="h1">{page.title.length > 0 ? <RichText value={page.title} /> : "Untitled"}</Typography>
+          <>
+            <Typography variant="h1">{page.title.length > 0 ? <RichText value={page.title} /> : "Untitled"}</Typography>
+            {renames}
+          </>
         )}
       </Stack>
       {editing ? (
-        <PageEditor key={editable.id} page={editable} statusSlot={statusSlot} />
+        <PageEditor key={editable.id} page={editable} statusSlot={statusSlot} afterTitle={editable.title ? renames : undefined} />
       ) : (
         <MentionTargetsContext.Provider value={page.mentions}>
           <Blocks blocks={page.blocks} />

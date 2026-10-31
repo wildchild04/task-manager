@@ -4,6 +4,7 @@ import { choreAttributes } from "~/domain/chores/schedule";
 import type { LibraryNode } from "~/domain/library/library.service";
 import type { TaskSummary } from "~/domain/tasks/types";
 
+import { actionWords } from "./action-suggestions.server";
 import { formatDateTime } from "./format";
 import { allPages, allTasks, workspacePageTree } from "./page-search.server";
 
@@ -21,8 +22,19 @@ export type ProjectCard = { id: string; title: string; activeWork: number; openI
 
 export type RecentItem = { kind: "page" | "task"; id: string; title: string; place: string; href: string; edited: string };
 
-/** A page or task with agents' suggestions waiting for review. */
-export type ReviewItem = { id: string; title: string; place: string; href: string; count: number; agents: string[] };
+/**
+ * A project, page or task with agents' suggestions waiting for review. `action`: when its only pending
+ * suggestion is an action, what it proposes ("Suggests deleting this page").
+ */
+export type ReviewItem = {
+  id: string;
+  title: string;
+  place: string;
+  href: string;
+  count: number;
+  agents: string[];
+  action?: string;
+};
 
 export type HomeView = {
   review: ReviewItem[];
@@ -149,11 +161,16 @@ function recent(services: AppServices, now: string): RecentItem[] {
     .map(({ kind, id, title, place, href, at }) => ({ kind, id, title, place, href, edited: relativeTime(at, now, timeZone) }));
 }
 
-/** Pages and tasks with pending suggestions, the one with the oldest first, with how many and from which agents. */
+/** Projects, pages and tasks with pending suggestions, the one with the oldest first, with how many and from which agents. */
 function review(services: AppServices): ReviewItem[] {
-  const places = new Map([...allPages(services), ...allTasks(services)].map((place) => [place.id, place]));
+  // A project's home page stands for the project, and opens its home.
+  const homes = services.projects
+    .list()
+    .map((p) => ({ id: p.homePageId, title: p.title || "Untitled", place: "Project", href: `/projects/${p.id}` }));
+  const places = new Map([...homes, ...allPages(services), ...allTasks(services)].map((place) => [place.id, place]));
   const items = new Map<string, ReviewItem>();
-  for (const suggestion of services.suggestions.listPending()) {
+  const pending = services.suggestions.listPending();
+  for (const suggestion of pending) {
     const place = places.get(suggestion.pageId);
     if (!place) continue;
     const item = items.get(place.id) ?? {
@@ -167,6 +184,10 @@ function review(services: AppServices): ReviewItem[] {
     item.count += 1;
     if (!item.agents.includes(suggestion.author)) item.agents.push(suggestion.author);
     items.set(place.id, item);
+  }
+  for (const item of items.values()) {
+    const only = item.count === 1 ? pending.find((s) => s.pageId === item.id) : undefined;
+    if (only?.subject) item.action = `Suggests ${actionWords(services, only)}`;
   }
   return [...items.values()];
 }
@@ -198,7 +219,7 @@ export function notificationsView(services: AppServices, now: string = new Date(
     ...review(services).map((item) => ({
       id: item.id,
       title: item.title,
-      detail: `${plural(item.count, "suggestion")} · ${item.agents.join(", ")}`,
+      detail: `${item.action ?? plural(item.count, "suggestion")} · ${item.agents.join(", ")}`,
       href: item.href,
     })),
     ...[...urgent, ...returned].map((item) => ({ id: item.id, title: item.title, detail: item.reason, href: item.href })),

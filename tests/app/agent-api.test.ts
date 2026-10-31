@@ -115,7 +115,7 @@ describe("agent API", () => {
         state: "todo",
         title: "Add login",
         project: "proj0001",
-        transitions: ["start", "cancel"],
+        transitions: ["start"],
         counts: { comments: 1, references: 0 },
       });
     });
@@ -158,24 +158,30 @@ describe("agent API", () => {
   describe("permissions and claiming", () => {
     beforeEach(() => work("aaaa0001-0000-0000-0000-000000000000", "Add login"));
 
-    it("cancels and reopens work", async () => {
-      expect((await call("POST", "task/aaaa0001/transition", { name: "cancel" })).body).toEqual({ ok: true, state: "cancelled" });
+    it("can't cancel work, only suggest it, and reopens work the human cancelled", async () => {
+      expect(await call("POST", "task/aaaa0001/transition", { name: "cancel" })).toMatchObject({
+        status: 403,
+        body: { error: { code: "forbidden" } },
+      });
+      expect(services.tasks.get("aaaa0001-0000-0000-0000-000000000000")!.state).toBe("todo");
+      services.tasks.transition("aaaa0001-0000-0000-0000-000000000000", "cancel");
       expect((await call("GET", "task/aaaa0001")).body.transitions).toEqual(["reopen"]);
       expect((await call("POST", "task/aaaa0001/transition", { name: "reopen" })).body).toEqual({ ok: true, state: "todo" });
     });
 
     it("promotes an exploration into work born from it", async () => {
       services.tasks.create({ id: "ex000001-0000-0000-0000-000000000000", projectId: P, kind: "exploration", title: "Idea" });
-      expect((await call("GET", "task/ex000001")).body.transitions).toEqual(["promote", "tombstone"]);
+      expect((await call("GET", "task/ex000001")).body.transitions).toEqual(["promote"]);
       const promoted = await call("POST", "task/ex000001/transition", { name: "promote", title: "Build the idea" });
       expect(promoted.body).toMatchObject({ ok: true, state: "promoted" });
       expect((await call("GET", `task/${promoted.body.work}`)).body).toMatchObject({ kind: "work", state: "todo", title: "Build the idea" });
       expect(services.tasks.history("ex000001-0000-0000-0000-000000000000")[0]!.actor).toEqual({ kind: "agent", name: "builder" });
     });
 
-    it("tombstones and revives ideas, promoting with the idea's title by default", async () => {
+    it("can't tombstone ideas, but revives them, promoting with the idea's title by default", async () => {
       services.tasks.create({ id: "ex000001-0000-0000-0000-000000000000", projectId: P, kind: "exploration", title: "Idea" });
-      expect((await call("POST", "task/ex000001/transition", { name: "tombstone" })).body).toEqual({ ok: true, state: "tombstoned" });
+      expect((await call("POST", "task/ex000001/transition", { name: "tombstone" })).body.error.code).toBe("forbidden");
+      services.tasks.transition("ex000001-0000-0000-0000-000000000000", "tombstone");
       expect((await call("POST", "task/ex000001/transition", { name: "revive" })).body).toEqual({ ok: true, state: "open" });
       const promoted = await call("POST", "task/ex000001/transition", { name: "promote" });
       expect((await call("GET", `task/${promoted.body.work}`)).body.title).toBe("Idea");
@@ -188,6 +194,15 @@ describe("agent API", () => {
       chore("ch000002-0000-0000-0000-000000000000");
       expect((await call("POST", "task/ch000001/transition", { name: "complete" })).body).toEqual({ ok: true, state: "done" });
       expect((await call("POST", "task/ch000002/transition", { name: "cancel" })).body).toEqual({ ok: true, state: "cancelled" });
+    });
+
+    it("skips one occurrence of a recurring chore, but can't end its series", async () => {
+      const schedule = { type: "frequency", every: "weekly", weekday: 1, time: "09:00" };
+      services.tasks.create({ id: "ch000001-0000-0000-0000-000000000000", projectId: P, kind: "chore", title: "Water", attributes: { schedule } });
+      expect((await call("GET", "task/ch000001")).body.transitions).toEqual(["complete", "cancel"]);
+      expect((await call("POST", "task/ch000001/transition", { name: "cancel", scope: "series" })).body.error.code).toBe("forbidden");
+      expect((await call("POST", "task/ch000001/transition", { name: "cancel" })).body).toEqual({ ok: true, state: "cancelled" });
+      expect(services.chores.series("ch000001-0000-0000-0000-000000000000")).toHaveLength(2);
     });
 
     it("refuses comments on anything but work", async () => {
@@ -349,6 +364,64 @@ describe("agent API", () => {
       const response = await call("POST", "tasks", { project: P, ...fields });
       expect(response).toMatchObject({ status, body: { error: { code } } });
       expect(services.tasks.list(P)).toHaveLength(0);
+    });
+  });
+
+  describe("creating projects", () => {
+    it("creates a project with its home page and library", async () => {
+      const created = await call("POST", "projects", { title: " Garden " });
+      expect(created.body).toEqual({ ok: true, id: expect.any(String) });
+      expect((await call("GET", "projects")).body.projects).toContainEqual({ id: created.body.id, title: "Garden" });
+      expect((await call("POST", "projects", { title: " " })).body.error.code).toBe("validation");
+    });
+  });
+
+  describe("action suggestions", () => {
+    const W = "aaaa0001-0000-0000-0000-000000000000";
+    beforeEach(() => work(W, "Old migration"));
+
+    it("suggests cancelling work, which the human approves", async () => {
+      const made = await call("POST", "suggest-action", { action: "transition", task: "aaaa0001", transition: "cancel", note: "Superseded" });
+      expect(made.body).toEqual({ ok: true, id: expect.any(String) });
+      expect(services.tasks.get(W)!.state).toBe("todo");
+      const status = await call("GET", `suggestion/${made.body.id}`);
+      expect(status.body).toEqual({ id: made.body.id, action: "transition", status: "pending", place: "task:aaaa0001", subject: "task:aaaa0001" });
+      services.suggestions.approve(services.suggestions.idsStartingWith(made.body.id)[0]!);
+      expect(services.tasks.get(W)!.state).toBe("cancelled");
+      expect((await call("GET", `suggestion/${made.body.id}`)).body).toMatchObject({ status: "approved", resolvedAt: expect.any(String) });
+    });
+
+    it("suggests renaming and deleting projects, pages and tasks, and withdraws its own", async () => {
+      const page = await call("POST", "pages", { title: "Roadmap" });
+      const rename = await call("POST", "suggest-action", { action: "rename", page: page.body.id, title: "Roadmap 2027" });
+      expect((await call("GET", `suggestion/${rename.body.id}`)).body).toMatchObject({ subject: `page:${page.body.id}` });
+      const project = await call("POST", "suggest-action", { action: "delete", project: "proj0001" });
+      expect((await call("GET", `suggestion/${project.body.id}`)).body).toMatchObject({ subject: "project:proj0001", status: "pending" });
+      const task = await call("POST", "suggest-action", { action: "rename", task: "aaaa0001", title: "New migration" });
+      expect((await call("POST", `suggestion/${task.body.id}/withdraw`, {}, "reviewer")).body.error.code).toBe("forbidden");
+      expect((await call("POST", `suggestion/${task.body.id}/withdraw`, {})).body).toEqual({ ok: true });
+      expect((await call("GET", `suggestion/${task.body.id}`)).body.status).toBe("withdrawn");
+    });
+
+    it("suggests a chore's schedule", async () => {
+      services.tasks.create({ id: "ch000001-0000-0000-0000-000000000000", projectId: P, kind: "chore", title: "Back up" });
+      const schedule = { type: "frequency", every: "weekly", weekday: 1, time: "09:00" };
+      expect((await call("POST", "suggest-action", { action: "schedule", task: "ch000001", schedule })).body.ok).toBe(true);
+      expect((await call("POST", "suggest-action", { action: "schedule", task: "ch000001", schedule: null })).body.ok).toBe(true);
+      expect((await call("POST", "suggest-action", { action: "schedule", task: "aaaa0001", schedule })).body.error.code).toBe("validation");
+    });
+
+    it("refuses wrong fields, subjects and transitions, creating nothing", async () => {
+      const refused = async (body: Record<string, unknown>, code = "validation") =>
+        expect((await call("POST", "suggest-action", body)).body.error.code).toBe(code);
+      await refused({ action: "rename", task: "aaaa0001" });
+      await refused({ action: "delete", task: "aaaa0001", page: "aaaa0001" });
+      await refused({ action: "delete" });
+      await refused({ action: "delete", task: "aaaa0001", title: "x" });
+      await refused({ action: "transition", task: "aaaa0001", transition: "tombstone" });
+      await refused({ action: "schedule", task: "aaaa0001" });
+      await refused({ action: "delete", task: "zzzz0001" }, "not_found");
+      expect(services.suggestions.listPending()).toEqual([]);
     });
   });
 

@@ -11,10 +11,12 @@ import {
 } from "~/domain/blocks/markdown";
 import { plainText } from "~/domain/blocks/text";
 import type { Batch, TreeNode } from "~/domain/blocks/types";
-import { urgencySchema } from "~/domain/chores/schedule";
+import { type Schedule, urgencySchema } from "~/domain/chores/schedule";
 import type { Comment, CommentKind } from "~/domain/comments/types";
 import { SuggestionError } from "~/domain/suggestions/errors";
+import { isEndingTransition } from "~/domain/suggestions/suggested-actions";
 import { NOTE_MAX } from "~/domain/suggestions/suggestion.service";
+import type { ActionPayload } from "~/domain/suggestions/types";
 import { TaskError } from "~/domain/tasks/errors";
 import { kinds } from "~/domain/tasks/kinds";
 import { TASK_KINDS, TASK_OWNER_KIND, type Actor, type TaskSummary } from "~/domain/tasks/types";
@@ -170,6 +172,14 @@ export function listProjects(services: AppServices) {
   return { projects: services.projects.list().map((p) => ({ id: short(p.id), title: p.title })) };
 }
 
+/** Creates a project, with its home page and library, as the app's form does. */
+export function createProject(services: AppServices, input: unknown) {
+  const title = parse(z.object({ title: z.string() }), input).title.trim();
+  if (!title) throw new AgentError(422, "validation", "A project needs a title");
+  const project = services.projects.create({ id: crypto.randomUUID(), title });
+  return { ok: true as const, id: short(project.id) };
+}
+
 const tasksQuery = z.object({
   project: z.string().optional(),
   kind: z.enum(TASK_KINDS).optional(),
@@ -206,11 +216,19 @@ export function listTasks(services: AppServices, input: unknown) {
 }
 
 /** The transitions this agent may apply to the task now: any its kind allows from its state, unless another agent holds it. */
+/**
+ * The ending transitions, which agents only suggest: cancelling work, tombstoning an idea. A chore's
+ * `cancel` is one only with scope `series`, so it stays listed for skipping one occurrence.
+ */
+function agentsOnlySuggest(task: TaskSummary, name: string, scope?: string): boolean {
+  return task.kind === "chore" ? isEndingTransition("chore", name, scope) : isEndingTransition(task.kind, name);
+}
+
 function allowedTransitions(services: AppServices, task: TaskSummary, actor: AgentActor): string[] {
   const heldBy = holder(services, task);
   if (heldBy && heldBy !== actor.name) return [];
   return Object.entries(kinds[task.kind].transitions)
-    .filter(([, transition]) => transition.from.includes(task.state))
+    .filter(([name, transition]) => transition.from.includes(task.state) && !agentsOnlySuggest(task, name))
     .map(([name]) => name);
 }
 
@@ -448,6 +466,9 @@ export function transition(services: AppServices, actor: AgentActor, id: string,
   const task = findTask(services, id);
   if (body.name !== "start") checkHeld(services, task, actor);
   const given = transitionInput(task, body);
+  if (agentsOnlySuggest(task, body.name, (given as { scope?: string } | undefined)?.scope)) {
+    throw new AgentError(403, "forbidden", `Agents can't ${body.name} this ${task.kind}`);
+  }
   try {
     const result = services.tasks.transition(task.id, body.name, { actor, ...(given ? { input: given } : {}) });
     const work = body.name === "promote" ? { work: short((given as { workId: string }).workId) } : {};
@@ -604,6 +625,66 @@ export function suggest(services: AppServices, actor: AgentActor, input: unknown
   }
 }
 
+const suggestActionBody = z
+  .object({
+    action: z.enum(["rename", "delete", "schedule", "transition"]),
+    project: z.string().optional(),
+    page: z.string().optional(),
+    task: z.string().optional(),
+    title: z.string().optional(),
+    schedule: z.unknown().optional(),
+    transition: z.enum(["cancel", "tombstone"]).optional(),
+    scope: z.literal("series").optional(),
+    note: z.string().max(NOTE_MAX).optional(),
+  })
+  .strict();
+
+/** The fields each action takes besides its subject and note. */
+const ACTION_FIELDS = { rename: ["title"], delete: [], schedule: ["schedule"], transition: ["transition", "scope"] } as const;
+
+/** Proposes renaming or deleting a project, page or task, a chore's schedule, or an ending transition. */
+export function suggestAction(services: AppServices, actor: AgentActor, input: unknown) {
+  const body = parse(suggestActionBody, input);
+  const given = (["project", "page", "task"] as const).filter((kind) => body[kind] !== undefined);
+  if (given.length !== 1) throw new AgentError(422, "validation", "Give exactly one of `project`, `page` or `task`");
+  const allowed: readonly string[] = ACTION_FIELDS[body.action];
+  const extra = (["title", "schedule", "transition", "scope"] as const).filter((f) => body[f] !== undefined && !allowed.includes(f));
+  if (extra.length) throw new AgentError(422, "validation", `A ${body.action} doesn't take \`${extra.join("`, `")}\``);
+
+  const kind = given[0]!;
+  const id =
+    kind === "task"
+      ? findTask(services, body.task!).id
+      : kind === "project"
+        ? resolveId(body.project!, services.projects.list().map((p) => p.id), "project")
+        : resolveId(body.page!, allPages(services).map((p) => p.id), "page");
+
+  let payload: ActionPayload;
+  switch (body.action) {
+    case "rename":
+      if (body.title === undefined) throw new AgentError(422, "validation", "A rename needs a `title`");
+      payload = { action: "rename", title: body.title };
+      break;
+    case "delete":
+      payload = { action: "delete" };
+      break;
+    case "schedule":
+      if (body.schedule === undefined) throw new AgentError(422, "validation", "Give `schedule`, or `null` to remove it");
+      payload = { action: "schedule", schedule: body.schedule as Schedule | null };
+      break;
+    case "transition":
+      if (!body.transition) throw new AgentError(422, "validation", "A transition needs `transition`: cancel or tombstone");
+      payload = { action: "transition", name: body.transition, ...(body.scope ? { scope: body.scope } : {}) };
+      break;
+  }
+  try {
+    const suggestion = services.suggestions.suggestAction({ subject: { kind, id }, payload, note: body.note, author: actor.name });
+    return { ok: true as const, id: short(suggestion.id) };
+  } catch (error) {
+    return fromSuggestionError(error);
+  }
+}
+
 const findSuggestion = (services: AppServices, id: string) =>
   services.suggestions.get(resolveId(id, services.suggestions.idsStartingWith(id), "suggestion"))!;
 
@@ -614,6 +695,7 @@ export function getSuggestion(services: AppServices, id: string) {
     action: suggestion.action,
     status: suggestion.state,
     place: placeOf(services, suggestion.pageId),
+    ...(suggestion.subject ? { subject: `${suggestion.subject.kind}:${short(suggestion.subject.id)}` } : {}),
     ...(suggestion.resolvedAt ? { resolvedAt: suggestion.resolvedAt } : {}),
   };
 }

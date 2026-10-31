@@ -68,9 +68,10 @@ export const resourceName = (testInfo: TestInfo, title: string) =>
 const AGENT_HEADERS = { authorization: "Bearer playwright-agent-token", "x-agent-name": "builder" };
 
 /** Calls the agent API, as the MCP server does, and expects it to succeed. */
-export async function agent(request: APIRequestContext, path: string, body: unknown) {
+export async function agent(request: APIRequestContext, path: string, body: unknown): Promise<Record<string, any>> {
   const response = await request.post(`/api/agent/${path}`, { headers: AGENT_HEADERS, data: body });
   expect(response.ok(), await response.text()).toBe(true);
+  return (await response.json()) as Record<string, any>;
 }
 
 /** Creates a project with one work task (or exploration), opens the task and returns its short ID for the agent API. */
