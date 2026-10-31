@@ -1,10 +1,22 @@
 import type { ThemeMode } from "@wildchild/design-system";
-import { createContext, isRouteErrorResponse, Links, Meta, Outlet, redirect, Scripts, ScrollRestoration } from "react-router";
+import { useState } from "react";
+import {
+  createContext,
+  isRouteErrorResponse,
+  Links,
+  Meta,
+  Outlet,
+  redirect,
+  Scripts,
+  ScrollRestoration,
+  useRouteLoaderData,
+} from "react-router";
 
 import type { Route } from "./+types/root";
 import "./app.css";
 import { ErrorPage } from "./components/error-page";
 import { gate, type SignedIn } from "./lib/auth.server";
+import { useHydrated } from "./lib/use-hydrated";
 import { services } from "./lib/services.server";
 import { AppThemeProvider, readThemeCookie } from "./theme-mode";
 
@@ -63,17 +75,31 @@ export default function App({ loaderData }: Route.ComponentProps) {
   );
 }
 
+/**
+ * The theme for an error page: the root loader's when it ran (it does when a page's loader fails).
+ * When it didn't (a failed action), the server can't know the mode, so it renders light and the browser
+ * switches to the cookie's mode once hydrated, rendering the same as the server until then.
+ */
+function useErrorThemeMode(): ThemeMode {
+  const data = useRouteLoaderData<typeof loader>("root");
+  // Read before any effect runs, in the browser only.
+  const [cookieMode] = useState(() => (typeof document === "undefined" ? null : readThemeCookie(document.cookie)));
+  const hydrated = useHydrated();
+  return data?.themeMode ?? (hydrated ? cookieMode : null) ?? "light";
+}
+
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  const mode = useErrorThemeMode();
   if (isRouteErrorResponse(error) && error.status === 404) {
     return (
-      <AppThemeProvider initialMode="light">
+      <AppThemeProvider key={mode} initialMode={mode} persist={false}>
         <ErrorPage title="Not found" message="This page does not exist." />
       </AppThemeProvider>
     );
   }
   const details = import.meta.env.DEV && error instanceof Error ? error.stack : undefined;
   return (
-    <AppThemeProvider initialMode="light">
+    <AppThemeProvider key={mode} initialMode={mode} persist={false}>
       <ErrorPage title="Something went wrong" message="An unexpected error occurred." details={details} />
     </AppThemeProvider>
   );
