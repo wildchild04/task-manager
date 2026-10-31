@@ -27,6 +27,7 @@ function surfaceVariables(mode: ThemeMode): CSSProperties {
   return {
     "--ds-surface-lowest": color.surfaceContainerLowest,
     "--ds-outline-variant": color.outlineVariant,
+    "--ds-on-surface-variant": color.onSurfaceVariant,
     "--ds-primary": color.primary,
     "--ds-secondary": color.secondary,
     "--ds-secondary-container": color.secondaryContainer,
@@ -42,12 +43,24 @@ function surfaceVariables(mode: ThemeMode): CSSProperties {
   } as CSSProperties;
 }
 
-export function AppThemeProvider({ children, initialMode }: { children: React.ReactNode; initialMode: ThemeMode }) {
+/**
+ * `persist`: remember the mode in the theme cookie (default). Error pages pass `false`: they show the
+ * mode, they never choose it.
+ */
+export function AppThemeProvider({
+  children,
+  initialMode,
+  persist = true,
+}: {
+  children: React.ReactNode;
+  initialMode: ThemeMode;
+  persist?: boolean;
+}) {
   const [mode, setMode] = useState<ThemeMode>(initialMode);
 
   useEffect(() => {
-    document.cookie = `${COOKIE_KEY}=${mode}; Path=/; Max-Age=31536000; SameSite=Lax`;
-  }, [mode]);
+    if (persist) document.cookie = `${COOKIE_KEY}=${mode}; Path=/; Max-Age=31536000; SameSite=Lax`;
+  }, [mode, persist]);
 
   const value = useMemo(() => ({ mode, setMode }), [mode]);
 

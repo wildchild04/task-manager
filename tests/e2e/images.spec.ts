@@ -115,7 +115,7 @@ test("the Image slash command uploads a picked PNG in place of the paragraph", a
   expect(served.headers()["cache-control"]).toBe("public, max-age=31536000, immutable");
 
   // Saved: a reload shows it, read-only first and then in the editor.
-  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(page.getByRole("status", { name: "Saved" })).toBeVisible();
   await page.reload();
   await expect(images(page).locator("img")).toHaveAttribute("src", url);
 });

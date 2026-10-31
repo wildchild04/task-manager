@@ -5,6 +5,7 @@ import {
   createAppTheme,
   Dialog,
   HoverCard,
+  Icon,
   InlineCommandMenu,
   Stack,
   TextField,
@@ -2043,7 +2044,19 @@ export function PageEditor({
     () => ({ selected: new Set(selectedKey ? selectedKey.split(" ") : []), handles: draft || page.surface === "comment" ? null : handleActions }),
     [selectedKey, draft === undefined, page.surface, handleActions],
   );
-  const statusText = (
+  // Uploads and failures are said in words; otherwise an icon, green once everything is saved.
+  const saveIcon = uploading === 0 && (status === "saved" || status === "pending" || status === "saving");
+  const statusText = saveIcon ? (
+    <span
+      role="status"
+      aria-label={STATUS_TEXT[status]}
+      title={STATUS_TEXT[status]}
+      className={status === "saved" ? "save-status is-saved" : "save-status"}
+    >
+      {/* `check` until the design system has a `save` icon (feature request save-icon.md). */}
+      <Icon name="check" size="small" />
+    </span>
+  ) : (
     <span aria-live="polite">
       <Typography variant="caption" color={status === "failed" || status === "retrying" ? "error" : "text.secondary"}>
         {uploading > 0 ? (uploading === 1 ? "Uploading image…" : `Uploading ${uploading} images…`) : STATUS_TEXT[status]}

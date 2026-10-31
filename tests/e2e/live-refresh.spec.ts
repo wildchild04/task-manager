@@ -11,7 +11,7 @@ test.describe.configure({ mode: "serial" });
  */
 
 /** Waits until the editor's edits are all saved. */
-const saved = (page: Page) => expect(page.getByText("Saved", { exact: true })).toBeVisible();
+const saved = (page: Page) => expect(page.getByRole("status", { name: "Saved" })).toBeVisible();
 
 /** The paragraph block holding the DOM caret, by its text. */
 const caretParagraph = (page: Page) =>
@@ -81,7 +81,7 @@ test("unsaved edits survive a change made elsewhere, which appears once they're 
     await route.continue();
   });
   await page.keyboard.type(" and more");
-  await expect(page.getByText("Saving…", { exact: true })).toBeVisible();
+  await expect(page.getByRole("status", { name: "Saving…" })).toBeVisible();
   const reread = page.waitForResponse((response) => response.url().includes(".data"));
   await agent(request, `task/${id}/description`, { markdown: "Theirs" });
   await reread;

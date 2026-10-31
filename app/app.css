@@ -521,3 +521,14 @@ body {
   white-space: nowrap;
   text-transform: none;
 }
+
+/* The editor's save status: an icon in the secondary text color while saving, green once saved. */
+.save-status {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ds-on-surface-variant);
+  transition: color 150ms ease;
+}
+.save-status.is-saved {
+  color: var(--ds-success);
+}
