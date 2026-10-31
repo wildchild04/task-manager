@@ -53,7 +53,7 @@ Blocks SHALL be read as Markdown: paragraphs, headings (`#`–`######`), bullete
 - **THEN** the page has a code block with language "sh" holding that line and a warning callout with the emoji ⚠️, and reading it gives the same Markdown
 
 ### Requirement: Agent permissions and claiming
-Agents SHALL be able to read projects, tasks, descriptions, comments, references, pages and suggestions; create tasks of any kind in existing projects; create pages; suggest changes to any page or task description and withdraw their own suggestions; apply any transition a task's kind allows from its state (promoting an exploration or update into work, tombstoning and reviving ideas, every work transition, completing and cancelling chores); comment on work tasks; append to a work task's description; add findings to explorations in any state, and edit and delete their own findings. Approving or rejecting a suggestion, editing or deleting another author's finding, and any other change, SHALL be refused with status 403 (code `forbidden`). A work task an agent started SHALL be held by that agent while it is in progress: its transitions, comments and description additions by another agent SHALL be refused with status 409 (code `claimed`, naming the holder); suggestions on its description SHALL be allowed. Transitions not allowed from the current state SHALL be refused with status 409 (code `invalid_transition`).
+Agents SHALL be able to read projects, tasks, descriptions, comments, references, pages and suggestions; create tasks of any kind in existing projects; create pages; suggest changes to any page or task description and withdraw their own suggestions; create projects; apply the transitions a task's kind allows from its state except the ending ones (promoting an exploration or update into work, reviving ideas, starting, pausing, completing, returning and reopening work, completing chores and cancelling one chore occurrence); suggest actions (see Agents suggest actions), including the ending transitions (cancelling work, tombstoning an exploration or update, cancelling a chore series); comment on work tasks; append to a work task's description; add findings to explorations in any state, and edit and delete their own findings. Applying an ending transition directly, approving or rejecting a suggestion, editing or deleting another author's finding, and any other change, SHALL be refused with status 403 (code `forbidden`). A work task an agent started SHALL be held by that agent while it is in progress: its transitions, comments and description additions by another agent SHALL be refused with status 409 (code `claimed`, naming the holder); suggestions on its description SHALL be allowed. Transitions not allowed from the current state SHALL be refused with status 409 (code `invalid_transition`).
 
 #### Scenario: Promote an exploration
 - **WHEN** an agent applies `promote` to an open exploration, with or without a `title`
@@ -83,15 +83,24 @@ Agents SHALL be able to read projects, tasks, descriptions, comments, references
 - **WHEN** agent "reviewer" tries to edit or delete a finding by "builder", or one written by the human
 - **THEN** it is refused with code `forbidden` and the finding is unchanged
 
+#### Scenario: Ending transitions are suggested
+- **WHEN** an agent applies `cancel` to a work task in to do
+- **THEN** it is refused with code `forbidden`, the task stays in to do, and `GET task/:id` never listed `cancel` in its `transitions`
+
+#### Scenario: Skipping one chore occurrence stays direct
+- **WHEN** an agent cancels a weekly chore with scope `occurrence`
+- **THEN** it is cancelled and the next occurrence exists
+
 ### Requirement: Agent functions
 The API SHALL offer exactly these functions, each returning only the listed fields. Functions that take Markdown (`POST tasks` `description`, `POST task/:id/comment`, `POST task/:id/finding`, `POST finding/:id`, `POST task/:id/description`, `POST pages`, `POST suggest`) SHALL also return `warnings` when the Markdown held unsupported constructs (see Markdown guide and warnings), and only then:
 
 | Function | Request | Response |
 |---|---|---|
 | `GET projects` | | `{ projects: [{ id, title }] }` |
+| `POST projects` | `{ title }` | `{ ok: true, id }` |
 | `GET tasks` | `project?`, `kind?`, `state?`, `query?` (title contains), `limit?`, `cursor?` | `{ tasks: [{ id, kind, state, title }], more, cursor? }`, most recently updated first |
 | `POST tasks` | `{ project, kind, title, description?, urgency?, schedule?, iteratesOn? }` | `{ ok: true, id, state }` |
-| `GET task/:id` | | `{ id, kind, state, title, project, heldBy?, transitions, counts: { comments, references, findings? } }` (`transitions`: those this agent may apply now; `findings` for explorations only) |
+| `GET task/:id` | | `{ id, kind, state, title, project, heldBy?, transitions, counts: { comments, references, findings? } }` (`transitions`: those this agent may apply now, never the ending ones; `findings` for explorations only) |
 | `GET task/:id/description` | `maxChars?`, `offset?`, `anchors?` | `{ markdown, more, offset? }` |
 | `GET task/:id/comments` | `limit?` (default 5), `cursor?`, `maxChars?` (per comment, default 1000) | `{ comments: [{ id, author, markdown }], more, cursor? }`, newest first |
 | `GET task/:id/references` | `limit?` | `{ references: [{ kind, id, title }], more }` (missing targets as `{ kind, id, missing: true }`) |
@@ -106,7 +115,8 @@ The API SHALL offer exactly these functions, each returning only the listed fiel
 | `POST pages` | `{ title, project?, parent?, markdown? }` | `{ ok: true, id }` |
 | `GET page/:id` | `maxChars?`, `offset?`, `anchors?` | `{ title, markdown, more, offset? }` |
 | `POST suggest` | `{ page? , task?, action, after?, inside?, target?, markdown?, note? }` | `{ ok: true, id }` |
-| `GET suggestion/:id` | | `{ id, action, status, place, resolvedAt? }` (`place`: `page:<id>` or `task:<id>`) |
+| `POST suggest-action` | `{ action, project? , page? , task?, title?, schedule?, transition?, scope?, note? }` | `{ ok: true, id }` |
+| `GET suggestion/:id` | | `{ id, action, status, place, subject?, resolvedAt? }` (`place`: `page:<id>` or `task:<id>`; `subject`, for action suggestions: `project:<id>`, `page:<id>` or `task:<id>`) |
 | `POST suggestion/:id/withdraw` | | `{ ok: true }` |
 | `GET markdown` | | `{ blocks: [{ type, markdown, example }], inline: [{ name, markdown }], unsupported: [{ name, markdown, kept }] }` |
 
@@ -207,4 +217,30 @@ A line that is only `![alt](src)` SHALL become an image block: a `src` naming an
 #### Scenario: Reading an uploaded image
 - **WHEN** an agent reads a page holding an uploaded screenshot with alt text "Error dialog"
 - **THEN** the Markdown has `![Error dialog](https://<host>/task-manager/content/<id>.png)` on its own line
+
+### Requirement: Agents create projects
+`POST projects` SHALL create a project titled `title`, with its home page and library, as creating one in the app does, and return its ID. A missing or empty title SHALL be refused with status 422 (code `validation`) and nothing SHALL be created.
+
+#### Scenario: Create a project
+- **WHEN** "planner" creates the project "Garden"
+- **THEN** the answer is `{ ok: true, id }`, and `GET projects` lists "Garden" with that ID
+
+### Requirement: Agents suggest actions
+`POST suggest-action` SHALL create an action suggestion (see action-suggestions) by the calling agent, on exactly one subject: `project`, `page` or `task` (IDs or 8-character prefixes). `action` SHALL be `rename` (with `title`), `delete`, `schedule` (with `schedule`, a `chore-scheduling` schedule as for `POST tasks`, or `null` to remove it) or `transition` (with `transition`: `cancel` or `tombstone`, and `scope: "series"` for a chore's `cancel`). Fields that don't belong to the action SHALL be refused. `note` SHALL be at most 280 characters. A request that breaks these rules or the rules of action-suggestions SHALL be refused with status 422 (code `validation`); an unknown subject with status 404 (code `not_found`); nothing SHALL be created when a request is refused. `GET suggestion/:id` and `POST suggestion/:id/withdraw` SHALL work for action suggestions as for block suggestions.
+
+#### Scenario: Suggest cancelling work
+- **WHEN** "builder" suggests `transition` `cancel` on a work task in to do, with the note "Superseded by the new importer"
+- **THEN** the answer is `{ ok: true, id }`, the task stays in to do, and `GET suggestion/:id` reports `pending` with `subject` `task:<id>`
+
+#### Scenario: Title missing
+- **WHEN** an agent suggests `rename` without a `title`
+- **THEN** it is refused with code `validation` and nothing is created
+
+#### Scenario: Two subjects
+- **WHEN** an agent suggests `delete` with both a `page` and a `task`
+- **THEN** it is refused with code `validation` and nothing is created
+
+#### Scenario: Status after approval
+- **WHEN** the human approves an agent's rename suggestion and the agent asks for its status
+- **THEN** the answer reports `approved` with `resolvedAt`
 
