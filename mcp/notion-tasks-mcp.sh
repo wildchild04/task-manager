@@ -4,7 +4,7 @@
 #   notion-tasks-mcp [profile]
 #
 # A profile is ~/.config/notion-tasks-mcp/<profile>.env: KEY=value lines for
-# APP_URL, AGENT_TOKEN and AGENT_NAME (and e.g. NODE_EXTRA_CA_CERTS).
+# APP_URL and AGENT_TOKEN, the agent's own token (and e.g. NODE_EXTRA_CA_CERTS).
 # Variables already set in the environment win over the profile.
 set -eu
 

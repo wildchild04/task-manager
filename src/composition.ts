@@ -3,6 +3,10 @@ import { dirname, join } from "node:path";
 
 import Database from "better-sqlite3";
 
+import type { AccountRepository, AgentTokenRepository } from "~/domain/accounts/account.repository";
+import { AccountService } from "~/domain/accounts/account.service";
+import { AgentTokenService } from "~/domain/accounts/agent-token.service";
+import type { RandomBytes } from "~/domain/accounts/secrets";
 import { BlockService } from "~/domain/blocks/block.service";
 import type { ProtectionHooks } from "~/domain/blocks/validate";
 import type { ProjectResolvers } from "~/domain/library/library.service";
@@ -24,6 +28,7 @@ import { TaskService, taskProtection } from "~/domain/tasks/task.service";
 import { TASK_OWNER_KIND } from "~/domain/tasks/types";
 import type { UnitOfWork } from "~/domain/unit-of-work";
 import { FsContentRepository } from "~/infra/fs/fs-content.repository";
+import { MemoryAccountRepository, MemoryAgentTokenRepository } from "~/infra/memory/memory-account.repository";
 import { MemoryBlockRepository } from "~/infra/memory/memory-block.repository";
 import { MemoryCommentRepository } from "~/infra/memory/memory-comment.repository";
 import { MemoryContentRepository } from "~/infra/memory/memory-content.repository";
@@ -32,6 +37,7 @@ import { MemorySuggestionRepository } from "~/infra/memory/memory-suggestion.rep
 import { MemoryTaskRepository } from "~/infra/memory/memory-task.repository";
 import { MemoryUnitOfWork } from "~/infra/memory/memory-unit-of-work";
 import { migrate } from "~/infra/sqlite/migrate";
+import { SqliteAccountRepository, SqliteAgentTokenRepository } from "~/infra/sqlite/sqlite-account.repository";
 import { SqliteBlockRepository } from "~/infra/sqlite/sqlite-block.repository";
 import { SqliteCommentRepository } from "~/infra/sqlite/sqlite-comment.repository";
 import { SqliteProjectRepository } from "~/infra/sqlite/sqlite-project.repository";
@@ -61,6 +67,10 @@ export type AppServices = {
   dashboardSections: DashboardRegistry;
   /** Advances after every committed write, whoever made it. */
   changes: ChangeFeed;
+  /** The owner's account and sessions; outside the change feed, since signing in isn't a content change. */
+  accounts: AccountService;
+  /** Registered agents and their tokens. */
+  agentTokens: AgentTokenService;
   close(): void;
 };
 
@@ -68,7 +78,16 @@ export type AppServices = {
  * Overrides for tests (deterministic IDs and clock), the workspace time zone,
  * and the path the app is served under (for content URLs).
  */
-export type ServiceOptions = { newId?: () => string; now?: () => string; timeZone?: string; basePath?: string };
+export type ServiceOptions = {
+  newId?: () => string;
+  now?: () => string;
+  timeZone?: string;
+  basePath?: string;
+  /** Randomness for passwords' salts and tokens. */
+  randomBytes?: RandomBytes;
+};
+
+type AccessRepositories = { accounts: AccountRepository; agentTokens: AgentTokenRepository };
 
 /**
  * Wraps the two write doors, the unit of work and block batches, so the
@@ -94,7 +113,13 @@ function countWrites(store: UnitOfWork, blocks: BlockService): { uow: UnitOfWork
   return { uow, changes: feed };
 }
 
-function buildServices(store: UnitOfWork, content: ContentRepository, close: () => void, options: ServiceOptions): AppServices {
+function buildServices(
+  store: UnitOfWork,
+  content: ContentRepository,
+  access: AccessRepositories,
+  close: () => void,
+  options: ServiceOptions,
+): AppServices {
   const blocks = new BlockService(store.repositories.blocks);
   const { uow, changes } = countWrites(store, blocks);
   const projects = new ProjectService(uow, options.newId, options.now);
@@ -124,7 +149,24 @@ function buildServices(store: UnitOfWork, content: ContentRepository, close: () 
   registerCoreSections(dashboardSections, { tasks, blocks, projects });
   dashboardSections.replace(choresSection(tasks, chores));
   const dashboard = new DashboardService(dashboardSections, projects);
-  return { blocks, projects, library, tasks, comments, suggestions, chores, dashboard, content, dashboardSections, changes, close };
+  const accounts = new AccountService(access.accounts, options.newId, options.now, options.randomBytes);
+  const agentTokens = new AgentTokenService(access.agentTokens, options.newId, options.now, options.randomBytes);
+  return {
+    blocks,
+    projects,
+    library,
+    tasks,
+    comments,
+    suggestions,
+    chores,
+    dashboard,
+    content,
+    dashboardSections,
+    changes,
+    accounts,
+    agentTokens,
+    close,
+  };
 
   /** Entity kinds a task can reference. Later domains (comments, subtasks) add theirs. */
   function referenceable(): ReferenceableKinds {
@@ -165,7 +207,8 @@ export function createServices(
   });
   const content =
     dbPath === ":memory:" ? new MemoryContentRepository(options.basePath) : new FsContentRepository(contentPath, options.basePath);
-  return buildServices(uow, content, () => db.close(), options);
+  const access = { accounts: new SqliteAccountRepository(db), agentTokens: new SqliteAgentTokenRepository(db) };
+  return buildServices(uow, content, access, () => db.close(), options);
 }
 
 /** The same services backed by memory, for tests and spikes. */
@@ -176,5 +219,6 @@ export function createInMemoryServices(options: ServiceOptions = {}): AppService
   const comments = new MemoryCommentRepository();
   const suggestions = new MemorySuggestionRepository();
   const uow = new MemoryUnitOfWork({ blocks, projects, tasks, comments, suggestions }, [blocks, projects, tasks, comments, suggestions]);
-  return buildServices(uow, new MemoryContentRepository(options.basePath), () => {}, options);
+  const access = { accounts: new MemoryAccountRepository(), agentTokens: new MemoryAgentTokenRepository() };
+  return buildServices(uow, new MemoryContentRepository(options.basePath), access, () => {}, options);
 }

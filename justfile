@@ -55,24 +55,18 @@ install-mcp:
   git rev-parse --short HEAD > "$data/VERSION"
   install -m 755 mcp/notion-tasks-mcp.sh "$bin/notion-tasks-mcp"
   echo "Installed $bin/notion-tasks-mcp, server $(cat "$data/VERSION") in $data"
-  echo "Profiles: ${XDG_CONFIG_HOME:-$HOME/.config}/notion-tasks-mcp/<name>.env (APP_URL, AGENT_TOKEN, AGENT_NAME)"
+  echo "Profiles: ${XDG_CONFIG_HOME:-$HOME/.config}/notion-tasks-mcp/<name>.env (APP_URL, AGENT_TOKEN: the agent's own token, from Settings)"
 
-# Ensure an AGENT_TOKEN exists in .env (generates one on first run; never overwrites).
-# Run it where `just docker-redeploy` runs: compose reads .env for interpolation.
-agent-token:
+# The owner's account and the agents: `just account password`, `just account agent <name>`, `just account agents`,
+# `just account revoke <name>`. Runs inside the app's container when it's up (the homelab), else against the local database.
+account *args:
   #!/usr/bin/env bash
   set -euo pipefail
-  touch .env
-  if grep -q '^AGENT_TOKEN=.' .env; then
-    echo "AGENT_TOKEN is already set in .env — leaving it alone."
+  if {{docker_compose}} ps --status running -q app 2>/dev/null | grep -q .; then
+    {{docker_compose}} exec app node build/account.mjs {{args}}
   else
-    token="$(openssl rand -hex 32)"
-    sed -i.bak '/^AGENT_TOKEN=$/d' .env && rm -f .env.bak
-    echo "AGENT_TOKEN=${token}" >> .env
-    echo "Generated a new AGENT_TOKEN and appended it to .env."
+    npm run --silent account -- {{args}}
   fi
-  echo
-  echo "Give the MCP server the same value (AGENT_TOKEN), with APP_URL pointing at this app."
 
 # Make the homelab checkout a push target that deploys: `git push homelab main` updates it and rebuilds the app.
 # Needs `ssh homelab` to work (see README); run once.

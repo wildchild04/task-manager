@@ -499,3 +499,25 @@ body {
   font-size: 0.85em;
   line-height: 1.6;
 }
+
+/* The sign-in screens stand alone, without the shell: room above and below. */
+.auth-screen {
+  padding-block: 4rem;
+}
+
+/* A token to copy: whole, on its own line, breaking anywhere. */
+.agent-token {
+  display: block;
+  font-family: var(--font-mono, monospace);
+  overflow-wrap: anywhere;
+}
+
+/* The account button stays one line, shortening a long email. */
+.account-email {
+  display: inline-block;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: none;
+}

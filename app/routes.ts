@@ -10,6 +10,9 @@ export default [
   route("api/suggestions", "routes/api.suggestions.ts"),
   route("api/comments/:commentId/editable", "routes/api.comment-editable.ts"),
   route("new", "routes/create.ts"),
+  route("setup", "routes/setup.tsx"),
+  route("login", "routes/login.tsx"),
+  route("logout", "routes/logout.ts"),
   layout("routes/shell.tsx", [
     index("routes/home.tsx"),
     route("projects/:projectId", "routes/project-home.tsx"),
@@ -17,6 +20,7 @@ export default [
     route("projects/:projectId/:list", "routes/task-list.tsx"),
     route("tasks/:taskId", "routes/task.tsx"),
     route("pages/:pageId", "routes/page.tsx"),
+    route("settings", "routes/settings.tsx"),
     route("*", "routes/not-found.tsx"),
   ]),
 ] satisfies RouteConfig;

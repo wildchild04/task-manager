@@ -4,13 +4,7 @@ A stdio [MCP](https://modelcontextprotocol.io) server that lets AI agents work t
 
 ## Setup
 
-1. Give the app a token. In the app's `.env` (see `.env.example`):
-
-   ```sh
-   AGENT_TOKEN=<a long random secret>
-   ```
-
-   Generate one with `node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"`, then restart the app. The agent API is off while `AGENT_TOKEN` is unset.
+1. Register the agent in the app: **Settings → Agents → Register agent**, with the name it should appear under (e.g. `claude`). The app shows its token once. The token decides the agent's name: it appears under that name in task history and comments, and a task it starts is held by it until it's completed, paused or returned. Give each agent its own name and token, and revoke a token in Settings to stop that agent. From the command line: `just account agent claude` prints a new token.
 
 2. Install the server: from the repo, `just install-mcp`. It bundles the server into one file, `~/.local/share/notion-tasks-mcp/server.mjs` (no `node_modules` needed), and installs the launcher `~/.local/bin/notion-tasks-mcp`. Run it again after changing `mcp/`.
 
@@ -18,13 +12,12 @@ A stdio [MCP](https://modelcontextprotocol.io) server that lets AI agents work t
 
    ```sh
    APP_URL=https://home.example/task-manager
-   AGENT_TOKEN=<the same secret>
-   AGENT_NAME=claude
+   AGENT_TOKEN=<the agent's token from Settings>
    # Only for a self-signed certificate:
    NODE_EXTRA_CA_CERTS=/home/me/.config/homelab/caddy-root.crt
    ```
 
-   `APP_URL` is the app's address including its base path when it's served under one. `AGENT_NAME` is how the agent appears in task history and comments. Give each agent its own name; a task an agent starts is held by that agent until it's completed, paused or returned. Variables already set in the environment win over the profile. Without a profile name the launcher uses `default`, so `ln -s homelab.env default.env` makes the homelab the default.
+   `APP_URL` is the app's address including its base path when it's served under one. An `AGENT_NAME` left from older profiles is ignored. Variables already set in the environment win over the profile. Without a profile name the launcher uses `default`, so `ln -s homelab.env default.env` makes the homelab the default.
 
 4. Register it with the agent. For Claude Code, from any directory:
 
@@ -35,7 +28,7 @@ A stdio [MCP](https://modelcontextprotocol.io) server that lets AI agents work t
 
    No secrets end up in the agent's configuration. Reconnect the server (`/mcp`) after reinstalling.
 
-To run from the source instead (while working on `mcp/`): `npm run mcp`, with the three variables set.
+To run from the source instead (while working on `mcp/`): `npm run mcp`, with the two variables set.
 
 ## Tools
 

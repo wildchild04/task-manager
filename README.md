@@ -10,7 +10,11 @@ npm run db:seed   # optional sample project
 npm run dev       # http://localhost:5173
 ```
 
-Settings come from the environment or `.env` (see `.env.example`): `DATABASE_PATH`, `CONTENT_PATH` (uploaded images, default `content` beside the database), `TIME_ZONE`, `AGENT_TOKEN`. `just` lists the shortcuts.
+Settings come from the environment or `.env` (see `.env.example`): `DATABASE_PATH`, `CONTENT_PATH` (uploaded images, default `content` beside the database), `TIME_ZONE`. `just` lists the shortcuts.
+
+## Account
+
+Everything needs signing in. The first visit, while there's no account, offers **Create your account** (an email and a password of at least 12 characters); that account owns everything in the app. Settings (the account menu at the top right) changes the password and registers agents. Locked out: `just account password` sets a new password from the command line (inside the container when it's running) and signs out every browser.
 
 ## Vim mode
 
@@ -34,11 +38,10 @@ The design system is installed from GitHub over SSH, so the build needs an SSH a
 ```bash
 eval "$(ssh-agent -s)"
 ssh-add ~/.ssh/<your-private-key>
-just agent-token      # optional: enables the agent API, stored in .env
 just docker-redeploy  # build and (re)start
 ```
 
-The app is at `http://localhost:3002/task-manager/`. Its SQLite database lives in `./data` (mounted at `/app/data`), with uploaded images in `./data/content`; migrations run on startup. Back up both: `sqlite3 data/app.sqlite ".backup 'backup.sqlite'"` for the database, and a copy of `data/content/` (its files never change once written). Compose reads `TIME_ZONE` (default `America/Mexico_City`) and `AGENT_TOKEN` from `.env`; see `.env.docker.example`.
+The app is at `http://localhost:3002/task-manager/`. Its SQLite database lives in `./data` (mounted at `/app/data`), with uploaded images in `./data/content`; migrations run on startup. Back up both: `sqlite3 data/app.sqlite ".backup 'backup.sqlite'"` for the database, and a copy of `data/content/` (its files never change once written). Compose reads `TIME_ZONE` (default `America/Mexico_City`) from `.env`; see `.env.docker.example`.
 
 ### Deploying by push
 
@@ -72,4 +75,4 @@ For local development `npm run dev` stays at the root; `APP_BASE_PATH=/task-mana
 
 ## Agents
 
-See [`mcp/README.md`](mcp/README.md). Point `APP_URL` at the running app including its base path (for Docker, `http://localhost:3002/task-manager`, or the proxy's URL).
+Each agent has its own token, which decides its name: register it in **Settings → Agents** (or `just account agent <name>`), then see [`mcp/README.md`](mcp/README.md). Point `APP_URL` at the running app including its base path (for Docker, `http://localhost:3002/task-manager`, or the proxy's URL).

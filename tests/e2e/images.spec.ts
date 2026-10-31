@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 
 import { expect, type Page, test } from "@playwright/test";
 
+import { agentHeaders } from "./accounts";
 import { createWorkspacePage, paragraphs, resourceName, writeParagraphs } from "./helpers";
 
 test.describe.configure({ mode: "serial" });
@@ -262,7 +263,7 @@ test("an external image from pasted Markdown shows its error state when broken, 
   const pageId = new URL(page.url()).pathname.split("/").at(-1)!;
   const readAsAgent = async () => {
     const read = await page.request.get(`/api/agent/page/${pageId}`, {
-      headers: { authorization: "Bearer playwright-agent-token", "x-agent-name": "playwright" },
+      headers: agentHeaders("playwright"),
     });
     return ((await read.json()) as { markdown: string }).markdown;
   };

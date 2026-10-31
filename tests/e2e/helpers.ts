@@ -1,5 +1,7 @@
 import { type APIRequestContext, expect, type Page, type TestInfo } from "@playwright/test";
 
+import { agentHeaders } from "./accounts";
+
 export async function openHomeDialog(page: Page, name: "New page" | "New project") {
   const button = page.getByRole("heading", { name: "Home" }).locator("xpath=..").getByRole("button", { name, exact: true });
   const dialog = page.getByRole("dialog", { name });
@@ -65,11 +67,10 @@ export const paragraphs = (page: Page) => page.locator('.editor-body .editable[d
 export const resourceName = (testInfo: TestInfo, title: string) =>
   `${title} (${testInfo.project.name} repeat ${testInfo.repeatEachIndex} retry ${testInfo.retry})`;
 
-const AGENT_HEADERS = { authorization: "Bearer playwright-agent-token", "x-agent-name": "builder" };
 
 /** Calls the agent API, as the MCP server does, and expects it to succeed. */
 export async function agent(request: APIRequestContext, path: string, body: unknown): Promise<Record<string, any>> {
-  const response = await request.post(`/api/agent/${path}`, { headers: AGENT_HEADERS, data: body });
+  const response = await request.post(`/api/agent/${path}`, { headers: agentHeaders("builder"), data: body });
   expect(response.ok(), await response.text()).toBe(true);
   return (await response.json()) as Record<string, any>;
 }

@@ -1,13 +1,37 @@
 import type { ThemeMode } from "@wildchild/design-system";
-import { isRouteErrorResponse, Links, Meta, Outlet, Scripts, ScrollRestoration } from "react-router";
+import { createContext, isRouteErrorResponse, Links, Meta, Outlet, redirect, Scripts, ScrollRestoration } from "react-router";
 
 import type { Route } from "./+types/root";
 import "./app.css";
 import { ErrorPage } from "./components/error-page";
+import { gate, type SignedIn } from "./lib/auth.server";
+import { services } from "./lib/services.server";
 import { AppThemeProvider, readThemeCookie } from "./theme-mode";
 
 /** The favicon, under the base path (`/task-manager/favicon.svg`) so it's served behind the proxy too. */
 export const links: Route.LinksFunction = () => [{ rel: "icon", type: "image/svg+xml", href: `${import.meta.env.BASE_URL}favicon.svg` }];
+
+/** Who is signed in, for the loaders that show it (the shell's account menu). */
+export const signedInContext = createContext<SignedIn | null>(null);
+
+/**
+ * Everything needs signing in, except the sign-in screens and the agent API
+ * (which has its own tokens); see `gate`. A renewed session's cookie is sent
+ * back with whatever the route answers.
+ */
+export const middleware: Route.MiddlewareFunction[] = [
+  async ({ request, context }, next) => {
+    const decision = gate(services, request);
+    if (!decision.pass) {
+      if ("redirect" in decision) throw redirect(decision.redirect);
+      return decision.response;
+    }
+    context.set(signedInContext, decision.signedIn ?? null);
+    const response = await next();
+    if (decision.setCookie) response.headers.append("Set-Cookie", decision.setCookie);
+    return response;
+  },
+];
 
 export async function loader({ request }: Route.LoaderArgs) {
   return { themeMode: readThemeCookie(request.headers.get("cookie")) ?? ("light" as ThemeMode) };

@@ -15,8 +15,6 @@ services:
       DATABASE_PATH: /app/data/app.sqlite
       # Chore schedules are computed in this time zone (the container's own is UTC).
       TIME_ZONE: ${TIME_ZONE:-America/Mexico_City}
-      # The agent API (/api/agent/*, used by mcp/server.ts) is off while this is empty.
-      AGENT_TOKEN: ${AGENT_TOKEN:-}
     ports:
       - "3002:3000"
     volumes:

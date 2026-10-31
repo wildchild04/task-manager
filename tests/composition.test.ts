@@ -73,10 +73,10 @@ describe.each([
     services.changes.subscribe((seq) => numbers.push(seq));
     const request = new Request("http://app/api/agent/task/aaaa0001/comment", {
       method: "POST",
-      headers: { authorization: "Bearer t", "x-agent-name": "builder", "content-type": "application/json" },
+      headers: { authorization: `Bearer ${services.agentTokens.register("builder").token}`, "content-type": "application/json" },
       body: JSON.stringify({ markdown: "Looks good" }),
     });
-    const response = await handleAgentRequest(services, request, "task/aaaa0001/comment", "t");
+    const response = await handleAgentRequest(services, request, "task/aaaa0001/comment");
     expect(response.status).toBe(200);
     expect(numbers).toEqual([before + 1]);
     services.close();

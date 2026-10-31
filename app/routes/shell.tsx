@@ -2,6 +2,7 @@ import { Container, Icon, IconButton, Link, PageNavigation, PageShell, Stack, Th
 import { type MouseEvent, useEffect, useState } from "react";
 import { Link as RouterLink, Outlet, type ShouldRevalidateFunctionArgs, useLocation, useNavigate } from "react-router";
 
+import { AccountMenu } from "../components/account-menu";
 import { NewPageDialog } from "../components/new-page-dialog";
 import { NotificationBell } from "../components/notification-bell";
 import { NewProjectDialog } from "../components/new-project-dialog";
@@ -13,9 +14,10 @@ import { useVimSetting } from "../vim-setting";
 import type { Route } from "./+types/shell";
 import { withBase } from "../lib/base-path";
 import { useLiveRefresh } from "../lib/live-refresh";
+import { signedInContext } from "../root";
 
-export function loader({ request }: Route.LoaderArgs) {
-  return shellView(services, new URL(request.url).pathname);
+export function loader({ request, context }: Route.LoaderArgs) {
+  return { ...shellView(services, new URL(request.url).pathname), account: context.get(signedInContext) };
 }
 
 /** The current project and section come from the URL, so recompute on every navigation. */
@@ -67,7 +69,7 @@ function Group({
 }
 
 export default function Shell({ loaderData }: Route.ComponentProps) {
-  const { projects, current, pages, notifications } = loaderData;
+  const { projects, current, pages, notifications, account } = loaderData;
   const { mode, setMode } = useThemeMode();
   const vim = useVimSetting();
   // Every screen is inside the shell: one subscription per tab keeps them all current.
@@ -158,6 +160,7 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
             />
           )}
           <ThemeToggle mode={mode} onModeChange={setMode} ariaLabel="Toggle dark mode" />
+          {account && <AccountMenu email={account.email} />}
         </Stack>
       }
     >

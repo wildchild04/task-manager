@@ -1,5 +1,3 @@
-import { timingSafeEqual } from "node:crypto";
-
 import type { AppServices } from "~/composition";
 
 import * as api from "./functions.server";
@@ -54,11 +52,6 @@ function match(method: string, path: string) {
   return undefined;
 }
 
-const sameSecret = (a: string, b: string) => {
-  const left = Buffer.from(a);
-  const right = Buffer.from(b);
-  return left.length === right.length && timingSafeEqual(left, right);
-};
 
 const json = (status: number, body: unknown) => Response.json(body, { status });
 const refuse = (status: number, code: string, message: string) => json(status, { error: { code, message } });
@@ -78,22 +71,14 @@ function withOrigin(services: AppServices, origin: string): AppServices {
 }
 
 /**
- * Answers one agent request: checks the token and the agent's name, then runs
- * the function for `path` (the part after `/api/agent/`) as that agent.
+ * Answers one agent request: the agent's own token decides who it is (any
+ * `X-Agent-Name` is ignored), then the function for `path` (the part after
+ * `/api/agent/`) runs as that agent.
  */
-export async function handleAgentRequest(
-  services: AppServices,
-  request: Request,
-  path: string,
-  /** The app's `AGENT_TOKEN`; the API is off without one. */
-  token: string | undefined,
-): Promise<Response> {
-  if (!token) return refuse(403, "disabled", "The agent API is off: set AGENT_TOKEN in the app's environment");
+export async function handleAgentRequest(services: AppServices, request: Request, path: string): Promise<Response> {
   const auth = request.headers.get("authorization") ?? "";
-  if (!auth.startsWith("Bearer ") || !sameSecret(auth.slice(7), token))
-    return refuse(401, "unauthorized", "Missing or wrong token");
-  const name = request.headers.get("x-agent-name")?.trim();
-  if (!name) return refuse(400, "bad_request", "Name the agent in the X-Agent-Name header");
+  const name = auth.startsWith("Bearer ") ? services.agentTokens.authenticate(auth.slice(7).trim()) : undefined;
+  if (!name) return refuse(401, "unauthorized", "Missing, unknown or revoked token: register this agent in Settings and use its token");
 
   const found = match(request.method, path);
   if (!found) return refuse(404, "not_found", `No agent function ${request.method} ${path}`);

@@ -5,8 +5,6 @@ import { workspacePageTree } from "../../app/lib/page-search.server";
 import { type AppServices, createInMemoryServices } from "~/composition";
 import { fromMarkdown } from "~/domain/blocks/markdown";
 
-const TOKEN = "secret-token";
-
 describe("agent API", () => {
   let services: AppServices;
   let clock: number;
@@ -23,33 +21,63 @@ describe("agent API", () => {
   const P = "proj0001-0000-0000-0000-000000000000";
   const work = (id: string, title = id) => services.tasks.create({ id, projectId: P, kind: "work", title });
 
-  /** Calls the API as `agent` and returns status and body. */
-  const call = async (method: "GET" | "POST", path: string, body?: unknown, agent = "builder", token: string | null = TOKEN) => {
-    const headers: Record<string, string> = { authorization: `Bearer ${TOKEN}`, ...(agent ? { "x-agent-name": agent } : {}) };
+  /** Each agent's token, registered the first time it calls. */
+  let tokens: Map<string, string>;
+  beforeEach(() => (tokens = new Map()));
+  const tokenFor = (agent: string) => {
+    if (!tokens.has(agent)) tokens.set(agent, services.agentTokens.register(agent).token);
+    return tokens.get(agent)!;
+  };
+
+  /** Calls the API as `agent` (with its own token) and returns status and body. */
+  const call = async (method: "GET" | "POST", path: string, body?: unknown, agent = "builder") => {
+    const headers: Record<string, string> = { authorization: `Bearer ${tokenFor(agent)}` };
     if (body !== undefined) headers["content-type"] = "application/json";
     const request = new Request(`http://app/api/agent/${path}`, {
       method,
       headers,
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
-    const response = await handleAgentRequest(services, request, path.split("?")[0]!, token ?? undefined);
+    const response = await handleAgentRequest(services, request, path.split("?")[0]!);
     return { status: response.status, body: (await response.json()) as Record<string, any> };
   };
 
   describe("authentication", () => {
-    it("refuses a wrong token, a missing name, and everything when the API is off", async () => {
-      work("aaaa0001-0000-0000-0000-000000000000");
-      const wrong = await handleAgentRequest(
-        services,
-        new Request("http://app/api/agent/projects", { headers: { authorization: "Bearer nope", "x-agent-name": "builder" } }),
-        "projects",
-        TOKEN,
-      );
-      expect(wrong.status).toBe(401);
-      expect((await call("GET", "projects", undefined, "")).status).toBe(400);
-      expect((await call("GET", "projects", undefined, "builder", null)).body).toEqual({
-        error: { code: "disabled", message: "The agent API is off: set AGENT_TOKEN in the app's environment" },
+    it("refuses a missing, unknown or revoked token", async () => {
+      const raw = (authorization?: string) =>
+        handleAgentRequest(
+          services,
+          new Request("http://app/api/agent/projects", { headers: authorization ? { authorization } : {} }),
+          "projects",
+        );
+      expect((await raw()).status).toBe(401);
+      const unknown = await raw("Bearer ntm_nope");
+      expect(unknown.status).toBe(401);
+      expect(await unknown.json()).toEqual({
+        error: {
+          code: "unauthorized",
+          message: "Missing, unknown or revoked token: register this agent in Settings and use its token",
+        },
       });
+      const token = tokenFor("builder");
+      expect((await raw(`Bearer ${token}`)).status).toBe(200);
+      services.agentTokens.revokeByName("builder");
+      expect((await raw(`Bearer ${token}`)).status).toBe(401);
+    });
+
+    it("takes the agent's name from its token, not from X-Agent-Name", async () => {
+      work("aaaa0001-0000-0000-0000-000000000000");
+      const response = await handleAgentRequest(
+        services,
+        new Request("http://app/api/agent/task/aaaa0001/transition", {
+          method: "POST",
+          headers: { authorization: `Bearer ${tokenFor("builder")}`, "x-agent-name": "reviewer", "content-type": "application/json" },
+          body: JSON.stringify({ name: "start" }),
+        }),
+        "task/aaaa0001/transition",
+      );
+      expect(response.status).toBe(200);
+      expect(services.tasks.history("aaaa0001-0000-0000-0000-000000000000")[0]!.actor).toEqual({ kind: "agent", name: "builder" });
     });
 
     it("acts as the agent", async () => {

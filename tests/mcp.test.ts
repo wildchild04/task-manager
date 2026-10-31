@@ -7,20 +7,29 @@ import { type AgentCall, createAgentServer } from "../mcp/tools";
 import { type AppServices, createInMemoryServices } from "~/composition";
 
 /** A real MCP client talking to the agent server, which calls the app in-process. */
+/** Agents' tokens, registered the first time each one connects. */
+const tokens = new WeakMap<AppServices, Map<string, string>>();
+function tokenFor(services: AppServices, agent: string): string {
+  const known = tokens.get(services) ?? new Map<string, string>();
+  tokens.set(services, known);
+  if (!known.has(agent)) known.set(agent, services.agentTokens.register(agent).token);
+  return known.get(agent)!;
+}
+
 async function connect(services: AppServices, agent = "builder") {
+  const token = tokenFor(services, agent);
   const call: AgentCall = async (method, path, input) => {
     const url = new URL(`http://app/api/agent/${path}`);
     if (method === "GET") for (const [key, value] of Object.entries(input ?? {})) url.searchParams.set(key, String(value));
     const request = new Request(url, {
       method,
       headers: {
-        authorization: "Bearer t",
-        "x-agent-name": agent,
+        authorization: `Bearer ${token}`,
         ...(method === "POST" ? { "content-type": "application/json" } : {}),
       },
       ...(method === "POST" ? { body: JSON.stringify(input ?? {}) } : {}),
     });
-    const response = await handleAgentRequest(services, request, path, "t");
+    const response = await handleAgentRequest(services, request, path);
     return { status: response.status, body: await response.json() };
   };
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();

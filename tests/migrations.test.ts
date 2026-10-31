@@ -33,7 +33,7 @@ describe("007_action_suggestions", () => {
     insert.run("a", "insert", null, "From the audit", null, "pending", null, "2026-10-19T08:00:00.000Z", null);
     insert.run("b", "delete", "T", null, '{"type":"paragraph"}', "rejected", "[]", "2026-10-19T08:00:01.000Z", "2026-10-19T09:00:00.000Z");
 
-    expect(migrate(db)).toEqual(["007_action_suggestions.sql"]);
+    expect(migrate(db)[0]).toBe("007_action_suggestions.sql");
     const repo = new SqliteSuggestionRepository(db);
     expect(repo.get("a")).toMatchObject({ subject: null, action: "insert", targetId: null, note: "From the audit", status: "pending" });
     expect(repo.get("b")).toMatchObject({ subject: null, action: "delete", targetId: "T", status: "rejected", undo: [] });
@@ -67,5 +67,19 @@ describe("007_action_suggestions", () => {
     );
     expect(() => raw.run("x", "rename", null, null)).toThrow(/CHECK/);
     expect(() => raw.run("y", "delete", "task", null)).toThrow(/CHECK/);
+  });
+});
+
+describe("008_accounts", () => {
+  it("allows one working token per agent name, freeing it on revoke", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const insert = db.prepare(
+      `INSERT INTO agent_tokens (id, name, token_hash, prefix, created_at, revoked_at) VALUES (?, 'claude', ?, 'ntm_abcd', '2026-11-01', ?)`,
+    );
+    insert.run("a", "h1", null);
+    expect(() => insert.run("b", "h2", null)).toThrow(/UNIQUE/);
+    db.prepare("UPDATE agent_tokens SET revoked_at = '2026-11-02' WHERE id = 'a'").run();
+    expect(() => insert.run("b", "h2", null)).not.toThrow();
   });
 });
