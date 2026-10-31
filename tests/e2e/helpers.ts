@@ -73,15 +73,20 @@ export async function agent(request: APIRequestContext, path: string, body: unkn
   expect(response.ok(), await response.text()).toBe(true);
 }
 
-/** Creates a project with one work task, opens the task and returns its short ID for the agent API. */
-export async function openNewTask(page: Page, project: string, title: string): Promise<string> {
+/** Creates a project with one work task (or exploration), opens the task and returns its short ID for the agent API. */
+export async function openNewTask(
+  page: Page,
+  project: string,
+  title: string,
+  kind: "work" | "exploration" = "work",
+): Promise<string> {
   await page.goto("/");
   const dialog = await openHomeDialog(page, "New project");
   await dialog.getByRole("textbox", { name: "Title" }).fill(project);
   await dialog.getByRole("button", { name: "Create", exact: true }).click();
   await expect(page).toHaveURL(/\/projects\/[^/]+$/);
-  await page.goto(`${new URL(page.url()).pathname}/work`);
-  const quickAdd = page.getByRole("textbox", { name: "New work title" });
+  await page.goto(`${new URL(page.url()).pathname}/${kind === "work" ? "work" : "explorations"}`);
+  const quickAdd = page.getByRole("textbox", { name: `New ${kind} title` });
   await quickAdd.fill(title);
   await quickAdd.press("Enter");
   await page.getByRole("link", { name: title }).click();

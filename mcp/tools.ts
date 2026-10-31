@@ -97,7 +97,7 @@ export function createAgentServer(call: AgentCall): McpServer {
     "get_task",
     {
       description:
-        "A task's summary: { id, kind, state, title, project, heldBy?, transitions, counts: { comments, references } }. `transitions` are the ones you may apply now. Read the description, comments and references with their own tools.",
+        "A task's summary: { id, kind, state, title, project, heldBy?, transitions, counts: { comments, references, findings? } } (`findings` for explorations). `transitions` are the ones you may apply now. Read the description, comments, findings and references with their own tools.",
       inputSchema: { id },
     },
     ({ id }) => run(call, "GET", `task/${enc(id)}`),
@@ -160,6 +160,47 @@ export function createAgentServer(call: AgentCall): McpServer {
       inputSchema: { id, markdown: z.string() },
     },
     ({ id, markdown }) => run(call, "POST", `task/${enc(id)}/comment`, { markdown }),
+  );
+
+  server.registerTool(
+    "list_findings",
+    {
+      description:
+        "An exploration's findings (its recorded results), newest first: at most `limit` (default 5) as { id, author, markdown }, each cut at `maxChars` (default 1000). `author` is \"human\" or an agent's name. Pass `cursor` for older ones.",
+      inputSchema: { id, limit: limit(5), cursor, maxChars: maxChars(1000) },
+    },
+    ({ id, ...rest }) => run(call, "GET", `task/${enc(id)}/findings`, rest),
+  );
+
+  server.registerTool(
+    "add_finding",
+    {
+      description:
+        "Record a finding on an exploration (in any state): what you learned, decided or ruled out, in Markdown (same as `comment`). Findings are an exploration's results, kept apart from its description; they're added without approval, and you can edit and delete only your own. Returns { ok, id, warnings? }." +
+        MARKDOWN_NOTE,
+      inputSchema: { id, markdown: z.string() },
+    },
+    ({ id, markdown }) => run(call, "POST", `task/${enc(id)}/finding`, { markdown }),
+  );
+
+  server.registerTool(
+    "edit_finding",
+    {
+      description:
+        "Replace the whole content of one of your own findings with `markdown` (same as `comment`); `id` is the finding's ID from add_finding or list_findings. Returns { ok, warnings? }." +
+        MARKDOWN_NOTE,
+      inputSchema: { id: z.string().describe("The finding's ID"), markdown: z.string() },
+    },
+    ({ id, markdown }) => run(call, "POST", `finding/${enc(id)}`, { markdown }),
+  );
+
+  server.registerTool(
+    "delete_finding",
+    {
+      description: "Delete one of your own findings for good. Returns { ok }.",
+      inputSchema: { id: z.string().describe("The finding's ID") },
+    },
+    ({ id }) => run(call, "POST", `finding/${enc(id)}/delete`, {}),
   );
 
   server.registerTool(

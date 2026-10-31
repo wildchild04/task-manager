@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useFetcher, useRevalidator } from "react-router";
 
 import type { TreeNode } from "~/domain/blocks/types";
-import type { CommentBlockInput } from "~/domain/comments/types";
+import type { CommentBlockInput, CommentKind } from "~/domain/comments/types";
 
 import { Blocks, TodoToggleContext } from "../blocks/block-view";
 import { MentionTargetsContext } from "../blocks/rich-text";
@@ -15,6 +15,12 @@ import { useHydrated } from "../lib/use-hydrated";
 import { FormDialog } from "./form-dialog";
 import { Hidden, StartDialog } from "./task-actions";
 import { withBase } from "../lib/base-path";
+
+/** What differs between comments and findings on the page. */
+const LABELS: Record<CommentKind, { placeholder: string; post: string; none: string; noun: string }> = {
+  comment: { placeholder: "Write a comment…", post: "Comment", none: "No comments yet.", noun: "comment" },
+  finding: { placeholder: "Write a finding…", post: "Add finding", none: "No findings yet.", noun: "finding" },
+};
 
 /** A fresh draft: a comment root with one empty paragraph, ready to type in. */
 function draftPage(): EditablePage {
@@ -43,7 +49,8 @@ function draftPage(): EditablePage {
  * The new-comment editor. The draft stays in the browser until it's posted
  * (button or Cmd/Ctrl+Enter); then a fresh draft takes its place.
  */
-function AddComment() {
+function AddComment({ kind }: { kind: CommentKind }) {
+  const labels = LABELS[kind];
   const fetcher = useFetcher<ActionResult>();
   const hydrated = useHydrated();
   const [draft, setDraft] = useState<EditablePage | null>(null);
@@ -58,7 +65,7 @@ function AddComment() {
 
   const post = () => {
     if (fetcher.state !== "idle") return;
-    void fetcher.submit({ intent: "comment-add", blocks: JSON.stringify(blocks.current) }, { method: "post" });
+    void fetcher.submit({ intent: `${kind}-add`, blocks: JSON.stringify(blocks.current) }, { method: "post" });
   };
   const error = fetcher.data && !fetcher.data.ok ? (fetcher.data.fieldErrors.text ?? fetcher.data.formError) : undefined;
 
@@ -69,11 +76,11 @@ function AddComment() {
           <PageEditor
             key={draft.tree.block.id}
             page={draft}
-            emptyText="Write a comment…"
+            emptyText={labels.placeholder}
             draft={{ onChange: (next) => (blocks.current = next), onSubmit: post }}
           />
         ) : (
-          <Typography color="text.secondary">Write a comment…</Typography>
+          <Typography color="text.secondary">{labels.placeholder}</Typography>
         )}
       </div>
       {error && (
@@ -83,7 +90,7 @@ function AddComment() {
       )}
       <Stack direction="row" spacing={1} alignItems="center">
         <Button onClick={post} disabled={fetcher.state !== "idle"}>
-          Comment
+          {labels.post}
         </Button>
         <Typography variant="caption" color="text.secondary">
           Cmd/Ctrl+Enter to post · type / for blocks, @ to mention
@@ -94,7 +101,8 @@ function AddComment() {
 }
 
 /** Edits a comment in place, saving as it changes; "Done" shows it read-only again. */
-function EditComment({ comment, onDone }: { comment: CommentView; onDone: () => void }) {
+function EditComment({ kind, comment, onDone }: { kind: CommentKind; comment: CommentView; onDone: () => void }) {
+  const labels = LABELS[kind];
   const [editable, setEditable] = useState<EditablePage | null>(null);
   const [failed, setFailed] = useState(false);
   const [statusSlot, setStatusSlot] = useState<HTMLElement | null>(null);
@@ -105,12 +113,12 @@ function EditComment({ comment, onDone }: { comment: CommentView; onDone: () => 
       .catch(() => setFailed(true));
   }, [comment.id]);
 
-  if (failed) return <Alert severity="error">This comment can't be edited any more.</Alert>;
+  if (failed) return <Alert severity="error">This {labels.noun} can't be edited any more.</Alert>;
   return (
     <Stack spacing={1}>
       <div className="comment-composer">
         {editable ? (
-          <PageEditor page={editable} statusSlot={statusSlot} emptyText="Write a comment…" />
+          <PageEditor page={editable} statusSlot={statusSlot} emptyText={labels.placeholder} />
         ) : (
           <Typography color="text.secondary">Loading…</Typography>
         )}
@@ -125,13 +133,14 @@ function EditComment({ comment, onDone }: { comment: CommentView; onDone: () => 
   );
 }
 
-function DeleteCommentDialog({ comment, onClose }: { comment: CommentView; onClose: () => void }) {
+function DeleteCommentDialog({ kind, comment, onClose }: { kind: CommentKind; comment: CommentView; onClose: () => void }) {
   const fetcher = useFetcher<ActionResult>();
+  const labels = LABELS[kind];
   return (
-    <FormDialog open title="Delete comment?" confirmLabel="Delete" fetcher={fetcher} onClose={onClose}>
-      <Hidden name="intent" value="comment-delete" />
+    <FormDialog open title={`Delete ${labels.noun}?`} confirmLabel="Delete" fetcher={fetcher} onClose={onClose}>
+      <Hidden name="intent" value={`${kind}-delete`} />
       <Hidden name="commentId" value={comment.id} />
-      <Typography variant="body2">The comment is removed for good. References to it will show as missing.</Typography>
+      <Typography variant="body2">The {labels.noun} is removed for good. References to it will show as missing.</Typography>
     </FormDialog>
   );
 }
@@ -139,6 +148,7 @@ function DeleteCommentDialog({ comment, onClose }: { comment: CommentView; onClo
 type CommentDialog = { kind: "delete" | "start"; comment: CommentView } | null;
 
 function Comment({
+  kind,
   comment,
   editing,
   onEdit,
@@ -146,6 +156,7 @@ function Comment({
   onOpen,
   toggleTodo,
 }: {
+  kind: CommentKind;
   comment: CommentView;
   editing: boolean;
   onEdit: () => void;
@@ -154,7 +165,7 @@ function Comment({
   toggleTodo: (commentId: string, blockId: string, checked: boolean) => void;
 }) {
   return (
-    <div id={`comment-${comment.id}`}>
+    <div id={`${kind}-${comment.id}`}>
       <Stack spacing={0.5}>
         <Stack direction="row" spacing={1} alignItems="baseline" useFlexGap wrap="wrap">
           <Typography variant="body2">
@@ -165,7 +176,7 @@ function Comment({
           </Typography>
         </Stack>
         {editing ? (
-          <EditComment comment={comment} onDone={onDoneEditing} />
+          <EditComment kind={kind} comment={comment} onDone={onDoneEditing} />
         ) : (
           <>
             <MentionTargetsContext.Provider value={comment.mentions}>
@@ -182,9 +193,11 @@ function Comment({
               <Button size="small" variant="text" color="error" onClick={() => onOpen({ kind: "delete", comment })}>
                 Delete
               </Button>
-              <Button size="small" variant="text" onClick={() => onOpen({ kind: "start", comment })}>
-                Start exploration…
-              </Button>
+              {kind === "comment" && (
+                <Button size="small" variant="text" onClick={() => onOpen({ kind: "start", comment })}>
+                  Start exploration…
+                </Button>
+              )}
             </Stack>
           </>
         )}
@@ -193,8 +206,11 @@ function Comment({
   );
 }
 
-/** The task's comments, oldest first, with writing, editing in place, deleting and starting an exploration from one. */
-export function TaskComments({ comments }: { comments: CommentView[] }) {
+/**
+ * The task's comments, or an exploration's findings, oldest first, with writing, editing in place,
+ * deleting and (comments only) starting an exploration from one.
+ */
+export function TaskComments({ comments, kind = "comment" }: { comments: CommentView[]; kind?: CommentKind }) {
   const [dialog, setDialog] = useState<CommentDialog>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const revalidator = useRevalidator();
@@ -212,13 +228,14 @@ export function TaskComments({ comments }: { comments: CommentView[] }) {
     <Stack spacing={2}>
       {comments.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
-          No comments yet.
+          {LABELS[kind].none}
         </Typography>
       ) : (
         <Stack spacing={2} divider={<Divider />}>
           {comments.map((comment) => (
             <Comment
               key={comment.id}
+              kind={kind}
               comment={comment}
               editing={editingId === comment.id}
               onEdit={() => setEditingId(comment.id)}
@@ -233,9 +250,9 @@ export function TaskComments({ comments }: { comments: CommentView[] }) {
           ))}
         </Stack>
       )}
-      <AddComment />
+      <AddComment key={kind} kind={kind} />
 
-      {dialog?.kind === "delete" && <DeleteCommentDialog comment={dialog.comment} onClose={close} />}
+      {dialog?.kind === "delete" && <DeleteCommentDialog kind={kind} comment={dialog.comment} onClose={close} />}
       {dialog?.kind === "start" && (
         <StartDialog
           open

@@ -2,8 +2,21 @@ import { Dialog, IconButton, Stack, Typography } from "@wildchild/design-system"
 import { useState } from "react";
 import { useFetcher } from "react-router";
 
+/** "comment", "3 comments", or nothing for none. */
+const count = (n: number, noun: string) => (n === 0 ? "" : n === 1 ? noun : `${n} ${noun}s`);
+
 /** The task's delete button, with a confirmation. Deleting goes to the project's list for the task's kind. */
-export function DeleteTaskButton({ title, kindLabel, comments }: { title: string; kindLabel: string; comments: number }) {
+export function DeleteTaskButton({
+  title,
+  kindLabel,
+  comments,
+  findings = 0,
+}: {
+  title: string;
+  kindLabel: string;
+  comments: number;
+  findings?: number;
+}) {
   const fetcher = useFetcher();
   const [open, setOpen] = useState(false);
   const busy = fetcher.state !== "idle";
@@ -26,9 +39,13 @@ export function DeleteTaskButton({ title, kindLabel, comments }: { title: string
         >
           <Stack spacing={1.5}>
             <Typography>
-              {comments > 0
-                ? `The ${kindLabel} will be deleted for good, with its ${comments === 1 ? "comment" : `${comments} comments`} and history.`
-                : `The ${kindLabel} will be deleted for good, with its history.`}
+              {`The ${kindLabel} will be deleted for good, with its ${[
+                count(comments, "comment"),
+                count(findings, "finding"),
+              ]
+                .filter(Boolean)
+                .map((items) => `${items} and `)
+                .join("")}history.`}
             </Typography>
             <Typography variant="body2" color="text.secondary">
               References, mentions and lineage elsewhere that point to it will show it as missing.

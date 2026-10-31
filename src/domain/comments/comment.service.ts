@@ -5,7 +5,7 @@ import { TaskError } from "../tasks/errors";
 import type { Actor } from "../tasks/types";
 import { HUMAN } from "../tasks/types";
 import type { Repositories, UnitOfWork } from "../unit-of-work";
-import type { Comment, CommentBlockInput } from "./types";
+import type { Comment, CommentBlockInput, CommentKind } from "./types";
 import { COMMENT_OWNER_KIND } from "./types";
 
 /** Comment bodies change only through the comment service. */
@@ -16,11 +16,14 @@ const BYPASS = { bypassProtectionFor: [COMMENT_OWNER_KIND] } as const;
 /** Block types a comment body cannot contain. */
 const FORBIDDEN: readonly BlockType[] = ["page", "comment"];
 
-const COMMENTABLE_KINDS = ["work", "chore"];
+/** Which task kinds take which records: comments discuss work and chores, findings record an exploration's results. */
+const TASK_KINDS_FOR: Record<CommentKind, readonly string[]> = { comment: ["work", "chore"], finding: ["exploration"] };
 
 export type AddCommentInput = {
   id: string;
   taskId: string;
+  /** `comment` by default. */
+  kind?: CommentKind;
   author?: Actor;
   blocks: CommentBlockInput[];
 };
@@ -64,16 +67,19 @@ export class CommentService {
   }
 
   /** Creates a comment and its body inside an existing unit of work (used by `return`). */
-  addWithin(repos: Repositories, { id, taskId, author = HUMAN, blocks }: AddCommentInput, at: string): Comment {
+  addWithin(repos: Repositories, { id, taskId, kind = "comment", author = HUMAN, blocks }: AddCommentInput, at: string): Comment {
     if (!id) fail("validation", "A comment needs an ID");
     if (repos.comments.get(id)) fail("duplicate_id", `Comment ${id} already exists`);
     const task = repos.tasks.get(taskId) ?? fail("not_found", `Task ${taskId} does not exist`);
-    if (!COMMENTABLE_KINDS.includes(task.kind)) {
-      fail("validation", `A ${task.kind} is a document itself and cannot have comments`);
+    if (!TASK_KINDS_FOR[kind].includes(task.kind)) {
+      fail(
+        "validation",
+        kind === "finding" ? "Only explorations have findings" : `A ${task.kind} is a document itself and cannot have comments`,
+      );
     }
     if (author.kind === "agent" && !author.name) fail("validation", "An agent author needs a name");
 
-    const comment: Comment = { id, taskId, bodyBlockId: this.newId(), author, createdAt: at, editedAt: null };
+    const comment: Comment = { id, taskId, kind, bodyBlockId: this.newId(), author, createdAt: at, editedAt: null };
     repos.blocks.apply(
       [
         { op: "insert", block: { id: comment.bodyBlockId, type: "comment" }, owner: { kind: COMMENT_OWNER_KIND, id } },
@@ -89,9 +95,9 @@ export class CommentService {
     return this.uow.repositories.comments.get(id);
   }
 
-  /** A task's comments, oldest first. */
-  list(taskId: string): Comment[] {
-    return this.uow.repositories.comments.listByTask(taskId);
+  /** A task's comments (or findings, with `kind`), oldest first. */
+  list(taskId: string, kind: CommentKind = "comment"): Comment[] {
+    return this.uow.repositories.comments.listByTask(taskId, kind);
   }
 
   /** The comment's body as a tree; its children are the content. */
@@ -116,6 +122,21 @@ export class CommentService {
       }
 
       repos.blocks.apply(batch, BYPASS);
+      const editedAt = this.now();
+      repos.comments.setEdited(id, editedAt);
+      return { ...comment, editedAt };
+    });
+  }
+
+  /** Replaces the whole content of a comment (or finding) with `blocks`, and marks it edited. */
+  replace(id: string, blocks: CommentBlockInput[]): Comment {
+    return this.uow.run((repos) => {
+      const comment = repos.comments.get(id) ?? fail("not_found", `Comment ${id} does not exist`);
+      const children = repos.blocks.loadTree(comment.bodyBlockId)?.children ?? [];
+      repos.blocks.apply(
+        [...children.map((child): Operation => ({ op: "delete", id: child.block.id })), ...insertOps(comment.bodyBlockId, blocks)],
+        BYPASS,
+      );
       const editedAt = this.now();
       repos.comments.setEdited(id, editedAt);
       return { ...comment, editedAt };

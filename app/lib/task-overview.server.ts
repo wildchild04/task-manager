@@ -1,4 +1,5 @@
 import type { AppServices } from "~/composition";
+import type { CommentKind } from "~/domain/comments/types";
 import { choreAttributes, isRecurring, type Schedule } from "~/domain/chores/schedule";
 import { kinds } from "~/domain/tasks/kinds";
 import type { Actor, LineageNode, TaskSummary } from "~/domain/tasks/types";
@@ -58,6 +59,8 @@ export type TaskOverviewView = {
   history: HistoryEntryView[];
   /** Only work and chores have comments. */
   comments?: CommentView[];
+  /** Only explorations have findings. */
+  findings?: CommentView[];
   /** Omitted for chores and for a task alone in its lineage. */
   lineage?: LineageView;
   references: ReferenceView[];
@@ -142,15 +145,16 @@ export function taskOverviewView(services: AppServices, taskId: string): TaskOve
       at: formatDateTime(record.at, timeZone),
     }));
 
-  const comments = COMMENTABLE.includes(task.kind)
-    ? services.comments.list(task.id).map((comment) => ({
-        id: comment.id,
-        author: actorName(comment.author),
-        at: formatDateTime(comment.createdAt, timeZone),
-        edited: comment.editedAt !== null,
-        ...commentContent(services, comment.bodyBlockId),
-      }))
-    : undefined;
+  const records = (kind: CommentKind): CommentView[] =>
+    services.comments.list(task.id, kind).map((comment) => ({
+      id: comment.id,
+      author: actorName(comment.author),
+      at: formatDateTime(comment.createdAt, timeZone),
+      edited: comment.editedAt !== null,
+      ...commentContent(services, comment.bodyBlockId),
+    }));
+  const comments = COMMENTABLE.includes(task.kind) ? records("comment") : undefined;
+  const findings = task.kind === "exploration" ? records("finding") : undefined;
 
   const lineage = services.tasks.lineage(task.id);
   const references = services.tasks
@@ -189,6 +193,7 @@ export function taskOverviewView(services: AppServices, taskId: string): TaskOve
     canStartUpdate: task.kind === "work" && task.state === "done",
     history,
     ...(comments ? { comments } : {}),
+    ...(findings ? { findings } : {}),
     ...(lineage && lineage.children.length > 0 ? { lineage: lineageView(lineage, task.id) } : {}),
     references,
     mentionedIn: pageBacklinks(services, task.bodyPageId),

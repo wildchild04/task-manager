@@ -1,5 +1,5 @@
 import type { CommentRepository } from "~/domain/comments/comment.repository";
-import type { Comment } from "~/domain/comments/types";
+import type { Comment, CommentKind } from "~/domain/comments/types";
 
 /** Writes replace the map, so unit-of-work snapshots are never mutated. Insertion order is creation order. */
 export class MemoryCommentRepository implements CommentRepository {
@@ -13,8 +13,8 @@ export class MemoryCommentRepository implements CommentRepository {
     return this.comments.get(id);
   }
 
-  listByTask(taskId: string): Comment[] {
-    return [...this.comments.values()].filter((comment) => comment.taskId === taskId);
+  listByTask(taskId: string, kind?: CommentKind): Comment[] {
+    return [...this.comments.values()].filter((comment) => comment.taskId === taskId && (!kind || comment.kind === kind));
   }
 
   setEdited(id: string, editedAt: string): void {

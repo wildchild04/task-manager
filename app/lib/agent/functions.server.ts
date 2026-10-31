@@ -12,6 +12,7 @@ import {
 import { plainText } from "~/domain/blocks/text";
 import type { Batch, TreeNode } from "~/domain/blocks/types";
 import { urgencySchema } from "~/domain/chores/schedule";
+import type { Comment, CommentKind } from "~/domain/comments/types";
 import { SuggestionError } from "~/domain/suggestions/errors";
 import { NOTE_MAX } from "~/domain/suggestions/suggestion.service";
 import { TaskError } from "~/domain/tasks/errors";
@@ -227,6 +228,7 @@ export function getTask(services: AppServices, actor: AgentActor, id: string) {
     counts: {
       comments: services.comments.list(task.id).length,
       references: services.tasks.relations(task.id, "references").length,
+      ...(task.kind === "exploration" ? { findings: services.comments.list(task.id, "finding").length } : {}),
     },
   };
 }
@@ -242,16 +244,17 @@ export function readDescription(services: AppServices, id: string, input: unknow
 
 const commentsQuery = z.object({ limit: limitSchema(5), cursor: z.string().optional(), maxChars: maxCharsSchema(1000) });
 
-export function listComments(services: AppServices, id: string, input: unknown) {
+/** A task's comments or findings, newest first, paged. */
+function listRecords(services: AppServices, id: string, input: unknown, kind: CommentKind) {
   const q = parse(commentsQuery, input);
   const task = findTask(services, id);
-  const comments = services.comments
-    .list(task.id)
+  const records = services.comments
+    .list(task.id, kind)
     .slice()
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id));
-  const page = pageOf(comments, (c) => c.id, q.limit, q.cursor);
+  const page = pageOf(records, (c) => c.id, q.limit, q.cursor);
   return {
-    comments: page.items.map((c) => ({
+    items: page.items.map((c) => ({
       id: short(c.id),
       author: c.author.kind === "agent" ? c.author.name : "human",
       markdown: cut(markdownOf(services, services.comments.body(c.id)), q.maxChars).markdown,
@@ -259,6 +262,16 @@ export function listComments(services: AppServices, id: string, input: unknown) 
     more: page.more,
     ...(page.cursor ? { cursor: page.cursor } : {}),
   };
+}
+
+export function listComments(services: AppServices, id: string, input: unknown) {
+  const { items, ...rest } = listRecords(services, id, input, "comment");
+  return { comments: items, ...rest };
+}
+
+export function listFindings(services: AppServices, id: string, input: unknown) {
+  const { items, ...rest } = listRecords(services, id, input, "finding");
+  return { findings: items, ...rest };
 }
 
 export function listReferences(services: AppServices, id: string, input: unknown) {
@@ -459,6 +472,59 @@ export function comment(services: AppServices, actor: AgentActor, id: string, in
   } catch (error) {
     return toAgentError(error);
   }
+}
+
+// ----- Findings -----
+
+/** A finding by ID or 8-character prefix; comments are never found here. */
+function findFinding(services: AppServices, id: string) {
+  const ids = allTasks(services)
+    .filter((t) => t.kind === "exploration")
+    .flatMap((t) => services.comments.list(t.id, "finding").map((f) => f.id));
+  return services.comments.get(resolveId(id, ids, "finding"))!;
+}
+
+/** Refuses changes to a finding the calling agent didn't write. */
+function checkOwnFinding(finding: Comment, actor: AgentActor) {
+  if (finding.author.kind !== "agent" || finding.author.name !== actor.name) {
+    throw new AgentError(403, "forbidden", "Agents can only change their own findings");
+  }
+}
+
+/** Adds a finding to an exploration, in any state: the one write agents may make on an idea. */
+export function addFinding(services: AppServices, actor: AgentActor, id: string, input: unknown) {
+  const { markdown } = parse(markdownBody, input);
+  const task = findTask(services, id);
+  const { blocks, warnings } = blocksOf(services, markdown);
+  if (blocks.length === 0) throw new AgentError(422, "validation", "The finding is empty");
+  try {
+    const added = services.comments.add({ id: crypto.randomUUID(), taskId: task.id, kind: "finding", author: actor, blocks });
+    return withWarnings({ ok: true as const, id: short(added.id) }, warnings);
+  } catch (error) {
+    return toAgentError(error);
+  }
+}
+
+/** Replaces the content of the calling agent's own finding. */
+export function editFinding(services: AppServices, actor: AgentActor, id: string, input: unknown) {
+  const { markdown } = parse(markdownBody, input);
+  const finding = findFinding(services, id);
+  checkOwnFinding(finding, actor);
+  const { blocks, warnings } = blocksOf(services, markdown);
+  if (blocks.length === 0) throw new AgentError(422, "validation", "The finding is empty");
+  try {
+    services.comments.replace(finding.id, blocks);
+    return withWarnings({ ok: true as const }, warnings);
+  } catch (error) {
+    return toAgentError(error);
+  }
+}
+
+export function deleteFinding(services: AppServices, actor: AgentActor, id: string) {
+  const finding = findFinding(services, id);
+  checkOwnFinding(finding, actor);
+  services.comments.delete(finding.id);
+  return { ok: true as const };
 }
 
 export function appendDescription(services: AppServices, actor: AgentActor, id: string, input: unknown) {

@@ -249,5 +249,63 @@ export function commentContract(name: string, factory: ServicesFactory) {
         expect(services.tasks.history("W").map((r) => r.name)).toEqual(["start"]);
       });
     });
+
+    describe("findings", () => {
+      beforeEach(() => {
+        services.tasks.create({ id: "E", projectId: "P", kind: "exploration", title: "Idea" });
+      });
+
+      it("adds findings to an exploration, oldest first, apart from comments", () => {
+        const finding = services.comments.add({ id: "F1", taskId: "E", kind: "finding", author: builder, blocks: [para("p", "Result")] });
+        services.comments.add({ id: "F2", taskId: "E", kind: "finding", blocks: [] });
+        expect(finding).toMatchObject({ id: "F1", taskId: "E", kind: "finding", author: builder, editedAt: null });
+        expect(firstText("F1")).toBe("Result");
+        expect(services.comments.list("E", "finding").map((c) => c.id)).toEqual(["F1", "F2"]);
+        expect(services.comments.list("E")).toEqual([]);
+      });
+
+      it("keeps a task's comments and findings apart in storage", () => {
+        services.comments.add({ id: "C", taskId: "W", blocks: [] });
+        services.comments.add({ id: "F", taskId: "E", kind: "finding", blocks: [] });
+        expect(services.comments.list("W", "finding")).toEqual([]);
+        expect(services.comments.list("W").map((c) => c.kind)).toEqual(["comment"]);
+        expect(services.comments.get("F")?.kind).toBe("finding");
+      });
+
+      it("rejects findings on work, chores and updates", () => {
+        services.tasks.create({ id: "CH", projectId: "P", kind: "chore", title: "Chore" });
+        for (const taskId of ["W", "CH"]) {
+          expectTaskError(() => services.comments.add({ id: `F-${taskId}`, taskId, kind: "finding", blocks: [] }), "validation");
+        }
+        expect(services.comments.list("W", "finding")).toEqual([]);
+      });
+
+      it("edits and deletes findings like comments", () => {
+        services.comments.add({ id: "F", taskId: "E", kind: "finding", blocks: [para("p", "before")] });
+        const edited = services.comments.edit("F", [{ op: "update", id: "p", content: [{ text: "after" }] }]);
+        expect(edited.editedAt).not.toBeNull();
+        expect(firstText("F")).toBe("after");
+        const body = services.comments.get("F")!.bodyBlockId;
+        services.comments.delete("F");
+        expect(services.comments.list("E", "finding")).toEqual([]);
+        expect(services.blocks.getBlock(body)).toBeUndefined();
+      });
+
+      it("allows findings on a promoted exploration, which keeps them", () => {
+        services.comments.add({ id: "F1", taskId: "E", kind: "finding", blocks: [] });
+        services.tasks.transition("E", "promote", { input: { workId: "W2", title: "Build it" } });
+        services.comments.add({ id: "F2", taskId: "E", kind: "finding", blocks: [] });
+        expect(services.comments.list("E", "finding").map((c) => c.id)).toEqual(["F1", "F2"]);
+        expect(services.comments.list("W2")).toEqual([]);
+        expect(services.comments.list("W2", "finding")).toEqual([]);
+      });
+
+      it("deletes findings with their exploration", () => {
+        const finding = services.comments.add({ id: "F", taskId: "E", kind: "finding", blocks: [para("p", "x")] });
+        services.tasks.delete("E");
+        expect(services.comments.get("F")).toBeUndefined();
+        expect(services.blocks.getBlock(finding.bodyBlockId)).toBeUndefined();
+      });
+    });
   });
 }

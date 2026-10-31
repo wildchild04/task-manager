@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { AppServices } from "~/composition";
 import { richTextSchema } from "~/domain/blocks/schema";
 import { type Batch, isTextType } from "~/domain/blocks/types";
-import type { CommentBlockInput } from "~/domain/comments/types";
+import type { CommentBlockInput, CommentKind } from "~/domain/comments/types";
 import { choreAttributes, isRecurring, urgencySchema } from "~/domain/chores/schedule";
 import type { TaskKind, TaskSummary } from "~/domain/tasks/types";
 
@@ -137,35 +137,40 @@ function setSchedule(services: AppServices, task: TaskSummary, values: Record<st
   }
 }
 
-function addComment(services: AppServices, task: TaskSummary, values: Record<string, string>): ActionResult {
-  let raw: unknown;
-  try {
-    raw = JSON.parse(values.blocks ?? "[]");
-  } catch {
-    return invalid(values, {}, "The comment couldn't be read");
-  }
-  const parsed = commentBlocksSchema.safeParse(raw);
-  if (!parsed.success) return invalid(values, {}, "The comment couldn't be read");
-  if (isEmptyComment(parsed.data)) return invalid(values, { text: "The comment is empty" });
-  try {
-    return success(services.comments.add({ id: crypto.randomUUID(), taskId: task.id, blocks: parsed.data }).id);
-  } catch (error) {
-    return domainError(error, values, "text");
-  }
-}
+/** Adds a comment, or a finding, written in the editor. */
+const addRecord =
+  (kind: CommentKind) =>
+  (services: AppServices, task: TaskSummary, values: Record<string, string>): ActionResult => {
+    let raw: unknown;
+    try {
+      raw = JSON.parse(values.blocks ?? "[]");
+    } catch {
+      return invalid(values, {}, `The ${kind} couldn't be read`);
+    }
+    const parsed = commentBlocksSchema.safeParse(raw);
+    if (!parsed.success) return invalid(values, {}, `The ${kind} couldn't be read`);
+    if (isEmptyComment(parsed.data)) return invalid(values, { text: `The ${kind} is empty` });
+    try {
+      return success(services.comments.add({ id: crypto.randomUUID(), taskId: task.id, kind, blocks: parsed.data }).id);
+    } catch (error) {
+      return domainError(error, values, "text");
+    }
+  };
 
-/** The comment named in the form, if it belongs to this task. */
-function commentOf(services: AppServices, task: TaskSummary, values: Record<string, string>) {
+/** The comment (or finding, with `kind`) named in the form, if it belongs to this task. */
+function commentOf(services: AppServices, task: TaskSummary, values: Record<string, string>, kind: CommentKind = "comment") {
   const comment = values.commentId ? services.comments.get(values.commentId) : undefined;
-  return comment?.taskId === task.id ? comment : undefined;
+  return comment?.taskId === task.id && comment.kind === kind ? comment : undefined;
 }
 
-function deleteComment(services: AppServices, task: TaskSummary, values: Record<string, string>): ActionResult {
-  const comment = commentOf(services, task, values);
-  if (!comment) return invalid(values, {}, "This comment no longer exists");
-  services.comments.delete(comment.id);
-  return success(comment.id);
-}
+const deleteRecord =
+  (kind: CommentKind) =>
+  (services: AppServices, task: TaskSummary, values: Record<string, string>): ActionResult => {
+    const comment = commentOf(services, task, values, kind);
+    if (!comment) return invalid(values, {}, `This ${kind} no longer exists`);
+    services.comments.delete(comment.id);
+    return success(comment.id);
+  };
 
 function addReference(services: AppServices, task: TaskSummary, values: Record<string, string>): ActionResult {
   const target = values.targetId ? services.tasks.get(values.targetId) : undefined;
@@ -242,8 +247,10 @@ const HANDLERS = {
   transition: applyTransition,
   urgency: setUrgency,
   schedule: setSchedule,
-  "comment-add": addComment,
-  "comment-delete": deleteComment,
+  "comment-add": addRecord("comment"),
+  "comment-delete": deleteRecord("comment"),
+  "finding-add": addRecord("finding"),
+  "finding-delete": deleteRecord("finding"),
   "reference-add": addReference,
   "reference-remove": removeReference,
   "start-exploration": startExploration,

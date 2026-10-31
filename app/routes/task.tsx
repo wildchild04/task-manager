@@ -1,6 +1,6 @@
 import { Breadcrumbs, Card, Chip, Stack, Tabs, Typography } from "@wildchild/design-system";
 import { useEffect, useState } from "react";
-import { data, Link as RouterLink, redirect, useLocation, useSearchParams } from "react-router";
+import { data, Link as RouterLink, redirect, useLocation, useNavigate, useSearchParams } from "react-router";
 
 import { Blocks } from "../blocks/block-view";
 import { MentionTargetsContext } from "../blocks/rich-text";
@@ -44,7 +44,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-type TabId = "description" | "comments" | "lineage" | "references" | "history";
+type TabId = "description" | "comments" | "findings" | "lineage" | "references" | "history";
 
 /** The tabs of a task's page, by kind. */
 function tabsFor(view: TaskOverviewView): { value: TabId; label: string }[] {
@@ -52,6 +52,8 @@ function tabsFor(view: TaskOverviewView): { value: TabId; label: string }[] {
   const tabs: { value: TabId; label: string }[] = [{ value: "description", label: "Description" }];
   if (view.comments)
     tabs.push({ value: "comments", label: view.comments.length ? `Comments (${view.comments.length})` : "Comments" });
+  if (view.findings)
+    tabs.push({ value: "findings", label: view.findings.length ? `Findings (${view.findings.length})` : "Findings" });
   if (view.task.kind !== "chore") tabs.push({ value: "lineage", label: "Lineage" });
   tabs.push({ value: "references", label: references ? `References (${references})` : "References" });
   tabs.push({ value: "history", label: "History" });
@@ -64,16 +66,21 @@ export default function Task({ loaderData }: Route.ComponentProps) {
   const [statusSlot, setStatusSlot] = useState<HTMLElement | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const { hash } = useLocation();
+  const navigate = useNavigate();
 
-  // A link to a comment opens the Comments tab and shows the comment.
+  // A link to a comment or finding opens its tab and shows it.
   useEffect(() => {
-    if (!hash.startsWith("#comment-")) return;
-    if (searchParams.get("tab") !== "comments") {
-      setSearchParams((params) => (params.set("tab", "comments"), params), { replace: true, preventScrollReset: true });
+    const linked = hash.startsWith("#comment-") ? "comments" : hash.startsWith("#finding-") ? "findings" : undefined;
+    if (!linked) return;
+    if (searchParams.get("tab") !== linked) {
+      // Keep the hash, so the item is shown once its tab is open.
+      const params = new URLSearchParams(searchParams);
+      params.set("tab", linked);
+      navigate({ search: `?${params}`, hash }, { replace: true, preventScrollReset: true });
       return;
     }
     document.getElementById(hash.slice(1))?.scrollIntoView({ block: "center" });
-  }, [hash, searchParams, setSearchParams]);
+  }, [hash, searchParams, navigate]);
 
   if (!view) return <NotFound />;
   const { task, project, chore, body } = view;
@@ -135,6 +142,7 @@ export default function Task({ loaderData }: Route.ComponentProps) {
             title={task.title}
             kindLabel={task.kindLabel}
             comments={view.comments?.length ?? 0}
+            findings={view.findings?.length ?? 0}
           />
         </Stack>
       </Stack>
@@ -158,6 +166,9 @@ export default function Task({ loaderData }: Route.ComponentProps) {
         </>
       )}
       {tab === "comments" && view.comments && <TaskComments key={`comments-${task.id}`} comments={view.comments} />}
+      {tab === "findings" && view.findings && (
+        <TaskComments key={`findings-${task.id}`} kind="finding" comments={view.findings} />
+      )}
       {tab === "lineage" &&
         (view.lineage ? (
           <Lineage lineage={view.lineage} />

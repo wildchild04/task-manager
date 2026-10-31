@@ -48,18 +48,22 @@ describe("MCP server", () => {
     }
   });
 
-  it("offers the seventeen tools, each describing its defaults", async () => {
+  it("offers the twenty-one tools, each describing its defaults", async () => {
     const client = await connect(services);
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
+      "add_finding",
       "append_description",
       "comment",
       "create_page",
       "create_task",
+      "delete_finding",
+      "edit_finding",
       "get_markdown_guide",
       "get_suggestion",
       "get_task",
       "list_comments",
+      "list_findings",
       "list_projects",
       "list_references",
       "list_tasks",
@@ -71,7 +75,7 @@ describe("MCP server", () => {
       "withdraw_suggestion",
     ]);
     expect(tools.find((t) => t.name === "list_tasks")!.description).toContain("default 10");
-    for (const name of ["comment", "append_description", "create_task", "create_page", "suggest"]) {
+    for (const name of ["comment", "append_description", "add_finding", "edit_finding", "create_task", "create_page", "suggest"]) {
       expect(tools.find((t) => t.name === name)!.description).toContain("get_markdown_guide");
     }
   });
@@ -136,6 +140,17 @@ describe("MCP server", () => {
     await client.callTool({ name: "comment", arguments: { id: "task0001", markdown: "Done with **step one**" } });
     const comments = JSON.parse(text(await client.callTool({ name: "list_comments", arguments: { id: "task0001" } })));
     expect(comments.comments[0]).toMatchObject({ author: "builder", markdown: "Done with **step one**" });
+  });
+
+  it("records findings on an exploration", async () => {
+    services.tasks.create({ id: "expl0001-0000-0000-0000-000000000000", projectId: services.projects.list()[0]!.id, kind: "exploration", title: "Idea" });
+    const client = await connect(services);
+    const added = JSON.parse(text(await client.callTool({ name: "add_finding", arguments: { id: "expl0001", markdown: "It works" } })));
+    expect(added).toEqual({ ok: true, id: expect.any(String) });
+    const listed = JSON.parse(text(await client.callTool({ name: "list_findings", arguments: { id: "expl0001" } })));
+    expect(listed.findings[0]).toEqual({ id: added.id, author: "builder", markdown: "It works" });
+    const refused = await client.callTool({ name: "add_finding", arguments: { id: "task0001", markdown: "x" } });
+    expect(text(refused)).toMatch(/^validation: /);
   });
 
   it("returns refusals as tool errors with the API's code", async () => {

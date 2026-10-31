@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { ActionResult } from "../../app/lib/forms.server";
 import { taskAction } from "../../app/lib/task-actions.server";
-import { taskOverviewView } from "../../app/lib/task-overview.server";
+import { type CommentView, taskOverviewView } from "../../app/lib/task-overview.server";
 import { applyEdit } from "../../app/lib/page-edit.server";
 import { paragraphsFromText } from "../../app/lib/text.server";
 import { type AppServices, createInMemoryServices } from "~/composition";
@@ -321,6 +321,57 @@ describe("task screen", () => {
     it("shows no comments for explorations", () => {
       create("E", "exploration");
       expect(view("E").comments).toBeUndefined();
+    });
+  });
+
+  describe("findings", () => {
+    const text = (record: CommentView) => record.blocks.map((b) => (b.kind === "content" ? b.content[0]?.text : b.kind));
+
+    beforeEach(() => create("E", "exploration"));
+
+    it("adds a finding to an exploration, apart from comments", () => {
+      expect(post("E", { intent: "finding-add", blocks: blocksOf("Tables are used on 16 of 20 pages") })).toMatchObject({
+        ok: true,
+      });
+      const finding = view("E").findings!.at(-1)!;
+      expect(finding).toMatchObject({ author: "You", edited: false });
+      expect(text(finding)).toEqual(["Tables are used on 16 of 20 pages"]);
+      expect(view("E").comments).toBeUndefined();
+    });
+
+    it("rejects an empty finding", () => {
+      expect(post("E", { intent: "finding-add", blocks: blocksOf("  ") })).toMatchObject({
+        ok: false,
+        fieldErrors: { text: "The finding is empty" },
+      });
+      expect(view("E").findings).toEqual([]);
+    });
+
+    it("edits a finding through the comment surface, marking it edited", () => {
+      const added = post("E", { intent: "finding-add", blocks: blocksOf("Old") });
+      const id = added.ok ? added.id : "";
+      const first = services.comments.body(id)!.children![0]!.block.id;
+      expect(
+        applyEdit(services, { surface: "comment", id, batch: [{ op: "update", id: first, content: [{ text: "New" }] }] }),
+      ).toMatchObject({ ok: true });
+      expect(view("E").findings![0]).toMatchObject({ id, edited: true });
+      expect(text(view("E").findings![0]!)).toEqual(["New"]);
+    });
+
+    it("deletes any finding, including an agent's", () => {
+      services.comments.add({ id: "F", taskId: "E", kind: "finding", author: { kind: "agent", name: "builder" }, blocks: [] });
+      expect(view("E").findings![0]).toMatchObject({ author: "builder" });
+      expect(post("E", { intent: "finding-delete", commentId: "F" })).toMatchObject({ ok: true });
+      expect(view("E").findings).toEqual([]);
+    });
+
+    it("keeps comment and finding intents apart", () => {
+      create("W", "work");
+      const comment = post("W", { intent: "comment-add", blocks: blocksOf("A comment") });
+      expect(post("W", { intent: "finding-add", blocks: blocksOf("Not here") })).toMatchObject({ ok: false });
+      expect(post("W", { intent: "finding-delete", commentId: comment.ok ? comment.id : "" })).toMatchObject({ ok: false });
+      expect(view("W").comments).toHaveLength(1);
+      expect(view("W").findings).toBeUndefined();
     });
   });
 

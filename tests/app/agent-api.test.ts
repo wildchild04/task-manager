@@ -230,6 +230,73 @@ describe("agent API", () => {
     });
   });
 
+  describe("findings", () => {
+    const EX = "ex000001-0000-0000-0000-000000000000";
+    beforeEach(() => {
+      services.tasks.create({ id: EX, projectId: P, kind: "exploration", title: "Idea" });
+      work("aaaa0001-0000-0000-0000-000000000000");
+    });
+
+    it("records an exploration's results, newest first, and counts them", async () => {
+      const first = await call("POST", "task/ex000001/finding", { markdown: "Tables are used on **16** pages" });
+      expect(first.body).toEqual({ ok: true, id: expect.any(String) });
+      await call("POST", "task/ex000001/finding", { markdown: "Images can wait" });
+      expect((await call("POST", `finding/${first.body.id}`, { markdown: "Tables are used on 16 of 20 pages" })).body).toEqual({
+        ok: true,
+      });
+      const list = await call("GET", "task/ex000001/findings");
+      expect(list.body).toEqual({
+        findings: [
+          { id: expect.any(String), author: "builder", markdown: "Images can wait" },
+          { id: first.body.id, author: "builder", markdown: "Tables are used on 16 of 20 pages" },
+        ],
+        more: false,
+      });
+      expect((await call("GET", "task/ex000001")).body.counts).toEqual({ comments: 0, references: 0, findings: 2 });
+      expect((await call("GET", "task/ex000001/comments")).body.comments).toEqual([]);
+      expect(services.tasks.get(EX)!.state).toBe("open");
+      expect(services.comments.get(services.comments.list(EX, "finding")[0]!.id)!.editedAt).not.toBeNull();
+    });
+
+    it("adds findings to a promoted exploration", async () => {
+      services.tasks.transition(EX, "promote", { input: { workId: "wk000001-0000-0000-0000-000000000000", title: "Build" } });
+      expect((await call("POST", "task/ex000001/finding", { markdown: "Shipped in 514a7c0" })).body.ok).toBe(true);
+    });
+
+    it("refuses findings on anything but explorations, and empty ones", async () => {
+      expect(await call("POST", "task/aaaa0001/finding", { markdown: "x" })).toMatchObject({
+        status: 422,
+        body: { error: { code: "validation" } },
+      });
+      expect((await call("POST", "task/ex000001/finding", { markdown: "  " })).body.error.code).toBe("validation");
+      expect((await call("GET", "task/aaaa0001")).body.counts).toEqual({ comments: 0, references: 0 });
+    });
+
+    it("lets an agent change only its own findings", async () => {
+      const { body } = await call("POST", "task/ex000001/finding", { markdown: "Mine" });
+      services.comments.add({ id: "hu000001-0000-0000-0000-000000000000", taskId: EX, kind: "finding", blocks: [] });
+      for (const [path, input, agent] of [
+        [`finding/${body.id}`, { markdown: "Theirs" }, "reviewer"],
+        [`finding/${body.id}/delete`, {}, "reviewer"],
+        ["finding/hu000001", { markdown: "x" }, "builder"],
+        ["finding/hu000001/delete", {}, "builder"],
+      ] as const) {
+        expect(await call("POST", path, input, agent)).toMatchObject({ status: 403, body: { error: { code: "forbidden" } } });
+      }
+      expect((await call("POST", `finding/${body.id}/delete`, {})).body).toEqual({ ok: true });
+      expect(services.comments.list(EX, "finding").map((f) => f.id)).toEqual(["hu000001-0000-0000-0000-000000000000"]);
+    });
+
+    it("never mixes comment and finding IDs", async () => {
+      const { body } = await call("POST", "task/aaaa0001/comment", { markdown: "A comment" });
+      expect(await call("POST", `finding/${body.id}`, { markdown: "x" })).toMatchObject({
+        status: 404,
+        body: { error: { code: "not_found" } },
+      });
+      expect((await call("POST", `finding/${body.id}/delete`, {})).status).toBe(404);
+    });
+  });
+
   describe("creating tasks", () => {
     it("creates work with a description, as the web forms do", async () => {
       const { status, body } = await call(
