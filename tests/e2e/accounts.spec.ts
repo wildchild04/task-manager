@@ -7,7 +7,7 @@ import { resourceName } from "./helpers";
  * Spec coverage:
  * - accounts: Signing in and out (back to where I was; wrong password; sign out)
  * - accounts: Everything requires signing in
- * - agent-tokens: Registering agents, Revoking agents, The settings page
+ * - agent-tokens: Registering agents, Showing a token again, Revoking agents, The settings page
  * - app-shell: Account menu
  *
  * These tests sign in with their own session: signing out ends it, and the shared one must survive.
@@ -47,7 +47,7 @@ test("an agent registered in Settings works with its token until revoked", async
   await page.getByRole("textbox", { name: "Agent name" }).fill(name);
   await page.getByRole("button", { name: "Register agent" }).click();
   const dialog = page.getByRole("dialog", { name: `${name}'s token` });
-  await expect(dialog).toContainText("It won't be shown again.");
+  await expect(dialog).toContainText("You can show it again here, after your password.");
   const line = (await dialog.locator("code").textContent())!;
   expect(line).toMatch(/^AGENT_TOKEN=ntm_/);
   await dialog.getByRole("button", { name: "Done" }).click();
@@ -56,6 +56,19 @@ test("an agent registered in Settings works with its token until revoked", async
   const asAgent = () => request.get("/api/agent/projects", { headers: { authorization } });
   expect((await asAgent()).status()).toBe(200);
   await expect(page.getByText(name, { exact: true })).toBeVisible();
+
+  // Shown again, after the password.
+  const row = page.getByText(name, { exact: true }).locator("xpath=ancestor::li");
+  await row.getByRole("button", { name: "Show token…" }).click();
+  const ask = page.getByRole("dialog", { name: `Show ${name}'s token` });
+  await ask.getByLabel("Password").fill("not the password");
+  await ask.getByRole("button", { name: "Show" }).click();
+  await expect(ask.getByText("Wrong password")).toBeVisible();
+  await ask.getByLabel("Password").fill(OWNER.password);
+  await ask.getByRole("button", { name: "Show" }).click();
+  const again = page.getByRole("dialog", { name: `${name}'s token` });
+  await expect(again.locator("code")).toHaveText(line);
+  await again.getByRole("button", { name: "Done" }).click();
 
   await page.getByText(name, { exact: true }).locator("xpath=ancestor::li").getByRole("button", { name: "Revoke" }).click();
   await page.getByRole("dialog", { name: `Revoke ${name}'s token?` }).getByRole("button", { name: "Revoke" }).click();

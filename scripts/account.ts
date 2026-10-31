@@ -6,15 +6,23 @@
  *   account agent <name>    register an agent and print its token
  *   account agents          list the registered agents
  *   account revoke <name>   revoke an agent's token
+ *   account token <name>    print an agent's kept token (needs the SECRET_KEY it was kept under)
  *
  * From the repo: `npm run account -- <command>`, or `just account <command>`
  * (inside the container when it's running). The production image runs the
- * bundled `build/account.mjs`.
+ * bundled `build/account.mjs`. Reads `.env` in the working directory, when
+ * there is one, for DATABASE_PATH and SECRET_KEY (set variables win).
  */
 import { createInterface } from "node:readline";
 import { Writable } from "node:stream";
 
 import { createServices } from "~/composition";
+
+try {
+  process.loadEnvFile(".env");
+} catch {
+  // No .env (the container gets its settings from compose).
+}
 import { AccountError } from "~/domain/accounts/errors";
 
 /** One reader for every question, so piped answers aren't lost between them; typing is hidden while `muted`. */
@@ -42,7 +50,7 @@ async function ask(question: string, hidden = false): Promise<string> {
 }
 
 const usage = () => {
-  console.error("Usage: account password | agent <name> | agents | revoke <name>");
+  console.error("Usage: account password | agent <name> | agents | revoke <name> | token <name>");
   process.exit(2);
 };
 
@@ -64,7 +72,8 @@ async function main() {
       case "agent": {
         if (!name) usage();
         const { token, agent } = services.agentTokens.register(name!);
-        console.log(`Registered ${agent.name}. Its token (shown once), for its MCP profile:\n\nAGENT_TOKEN=${token}`);
+        const again = services.agentTokens.keepsTokens ? "kept; `account token " + agent.name + "` shows it again" : "shown once";
+        console.log(`Registered ${agent.name}. Its token (${again}), for its MCP profile:\n\nAGENT_TOKEN=${token}`);
         break;
       }
       case "agents": {
@@ -73,6 +82,11 @@ async function main() {
         for (const agent of agents) {
           console.log(`${agent.name}\t${agent.prefix}…\tregistered ${agent.createdAt}\t${agent.lastUsedAt ? `last used ${agent.lastUsedAt}` : "never used"}`);
         }
+        break;
+      }
+      case "token": {
+        if (!name) usage();
+        console.log(`AGENT_TOKEN=${services.agentTokens.revealByName(name!)}`);
         break;
       }
       case "revoke": {

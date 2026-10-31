@@ -68,6 +68,21 @@ account *args:
     npm run --silent account -- {{args}}
   fi
 
+# Add a SECRET_KEY to .env when there's none (never overwrites); agents' tokens are kept encrypted under it.
+# On the homelab, then restart the app (`just docker-up`) so the container gets it.
+secret-key:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  touch .env
+  if grep -q '^SECRET_KEY=.' .env; then
+    echo "SECRET_KEY is already set in .env; leaving it alone."
+  else
+    sed -i.bak '/^SECRET_KEY=$/d' .env && rm -f .env.bak
+    echo "SECRET_KEY=$(openssl rand -base64 48 | tr -d '\n')" >> .env
+    chmod 600 .env
+    echo "Added a SECRET_KEY to .env."
+  fi
+
 # Make the homelab checkout a push target that deploys: `git push homelab main` updates it and rebuilds the app.
 # Needs `ssh homelab` to work (see README); run once.
 homelab-setup:

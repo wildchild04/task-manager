@@ -10,6 +10,7 @@ type AgentRow = {
   name: string;
   token_hash: string;
   prefix: string;
+  token_encrypted: string | null;
   created_at: string;
   last_used_at: string | null;
   revoked_at: string | null;
@@ -34,6 +35,7 @@ const toAgent = (r: AgentRow): AgentToken => ({
   name: r.name,
   tokenHash: r.token_hash,
   prefix: r.prefix,
+  tokenEncrypted: r.token_encrypted,
   createdAt: r.created_at,
   lastUsedAt: r.last_used_at,
   revokedAt: r.revoked_at,
@@ -96,8 +98,8 @@ export class SqliteAgentTokenRepository implements AgentTokenRepository {
   constructor(db: Database.Database) {
     this.s = {
       insert: db.prepare(
-        `INSERT INTO agent_tokens (id, name, token_hash, prefix, created_at, last_used_at, revoked_at)
-         VALUES (@id, @name, @tokenHash, @prefix, @createdAt, @lastUsedAt, @revokedAt)`,
+        `INSERT INTO agent_tokens (id, name, token_hash, prefix, token_encrypted, created_at, last_used_at, revoked_at)
+         VALUES (@id, @name, @tokenHash, @prefix, @tokenEncrypted, @createdAt, @lastUsedAt, @revokedAt)`,
       ),
       update: db.prepare("UPDATE agent_tokens SET last_used_at = @lastUsedAt, revoked_at = @revokedAt WHERE id = @id"),
       get: db.prepare<[string], AgentRow>("SELECT * FROM agent_tokens WHERE id = ?"),

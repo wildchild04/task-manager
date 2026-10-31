@@ -6,7 +6,7 @@ import Database from "better-sqlite3";
 import type { AccountRepository, AgentTokenRepository } from "~/domain/accounts/account.repository";
 import { AccountService } from "~/domain/accounts/account.service";
 import { AgentTokenService } from "~/domain/accounts/agent-token.service";
-import type { RandomBytes } from "~/domain/accounts/secrets";
+import { AesTokenCipher, type RandomBytes } from "~/domain/accounts/secrets";
 import { BlockService } from "~/domain/blocks/block.service";
 import type { ProtectionHooks } from "~/domain/blocks/validate";
 import type { ProjectResolvers } from "~/domain/library/library.service";
@@ -85,6 +85,8 @@ export type ServiceOptions = {
   basePath?: string;
   /** Randomness for passwords' salts and tokens. */
   randomBytes?: RandomBytes;
+  /** The key agents' tokens are kept encrypted under (`SECRET_KEY`, at least 32 characters); without one they're shown once. */
+  secretKey?: string;
 };
 
 type AccessRepositories = { accounts: AccountRepository; agentTokens: AgentTokenRepository };
@@ -150,7 +152,8 @@ function buildServices(
   dashboardSections.replace(choresSection(tasks, chores));
   const dashboard = new DashboardService(dashboardSections, projects);
   const accounts = new AccountService(access.accounts, options.newId, options.now, options.randomBytes);
-  const agentTokens = new AgentTokenService(access.agentTokens, options.newId, options.now, options.randomBytes);
+  const cipher = options.secretKey ? new AesTokenCipher(options.secretKey, options.randomBytes) : undefined;
+  const agentTokens = new AgentTokenService(access.agentTokens, options.newId, options.now, options.randomBytes, cipher);
   return {
     blocks,
     projects,
@@ -191,7 +194,7 @@ function buildServices(
  */
 export function createServices(
   dbPath = process.env.DATABASE_PATH ?? "data/app.sqlite",
-  options: ServiceOptions = { timeZone: process.env.TIME_ZONE || undefined },
+  options: ServiceOptions = { timeZone: process.env.TIME_ZONE || undefined, secretKey: process.env.SECRET_KEY || undefined },
   contentPath = process.env.CONTENT_PATH || join(dirname(dbPath), "content"),
 ): AppServices {
   if (dbPath !== ":memory:") mkdirSync(dirname(dbPath), { recursive: true });

@@ -1,4 +1,4 @@
-export type AccountErrorCode = "validation" | "exists" | "not_found" | "wrong_password";
+export type AccountErrorCode = "validation" | "exists" | "not_found" | "wrong_password" | "unavailable";
 
 export class AccountError extends Error {
   constructor(

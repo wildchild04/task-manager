@@ -14,7 +14,7 @@ Settings come from the environment or `.env` (see `.env.example`): `DATABASE_PAT
 
 ## Account
 
-Everything needs signing in. The first visit, while there's no account, offers **Create your account** (an email and a password of at least 12 characters); that account owns everything in the app. Settings (the account menu at the top right) changes the password and registers agents. Locked out: `just account password` sets a new password from the command line (inside the container when it's running) and signs out every browser.
+Everything needs signing in. The first visit, while there's no account, offers **Create your account** (an email and a password of at least 12 characters); that account owns everything in the app. Settings (the account menu at the top right) changes the password and registers agents. With `SECRET_KEY` set (`just secret-key` adds one to `.env`; at least 32 characters), agents' tokens are kept encrypted so Settings can show one again after your password, and `just account token <name>` prints it; keep the key out of backups of `data/`. Locked out: `just account password` sets a new password from the command line (inside the container when it's running) and signs out every browser.
 
 ## Vim mode
 

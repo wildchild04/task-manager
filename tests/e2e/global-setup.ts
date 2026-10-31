@@ -21,7 +21,7 @@ export default async function globalSetup() {
   const tokens: Record<string, string> = {};
   for (const name of ["builder", "playwright"]) {
     const output = execFileSync("npx", ["tsx", "scripts/account.ts", "agent", name], {
-      env: { ...process.env, DATABASE_PATH },
+      env: { ...process.env, DATABASE_PATH, SECRET_KEY: "playwright-secret-key-of-32-characters" },
       encoding: "utf8",
     });
     tokens[name] = /AGENT_TOKEN=(\S+)/.exec(output)![1]!;

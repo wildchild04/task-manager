@@ -13,10 +13,12 @@ import { useFetcher } from "react-router";
 
 import {
   type AgentRow,
+  revealAgentAction,
   settingsAction,
   type SettingsResult,
   settingsView,
 } from "../lib/account.server";
+import { signInThrottle } from "../lib/auth.server";
 import { services } from "../lib/services.server";
 import type { Route } from "./+types/settings";
 
@@ -29,7 +31,9 @@ export function loader() {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  return settingsAction(services, request, await request.formData());
+  const form = await request.formData();
+  if (form.get("intent") === "reveal-agent") return revealAgentAction(services, form, signInThrottle);
+  return settingsAction(services, request, form);
 }
 
 /** A field's error from a settings form, when it's the one that was sent. */
@@ -101,10 +105,13 @@ function ChangePassword() {
 function TokenDialog({
   name,
   token,
+  kept,
   onClose,
 }: {
   name: string;
   token: string;
+  /** Whether it can be shown again later. */
+  kept: boolean;
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
@@ -123,11 +130,66 @@ function TokenDialog({
     >
       <Stack spacing={1.5}>
         <Typography>
-          Put this line in the agent's MCP profile. It won't be shown again.
+          {kept
+            ? "Put this line in the agent's MCP profile. You can show it again here, after your password."
+            : "Put this line in the agent's MCP profile. It won't be shown again."}
         </Typography>
         <code className="agent-token">{line}</code>
       </Stack>
     </Dialog>
+  );
+}
+
+/** Asks for the owner's password, then shows the agent's kept token. */
+function ShowTokenButton({ agent }: { agent: AgentRow }) {
+  const fetcher = useFetcher<SettingsResult>();
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const result = fetcher.state === "idle" ? fetcher.data : undefined;
+  const revealed = result?.ok && result.intent === "reveal-agent" && result.token ? result.token : null;
+  const close = () => {
+    setOpen(false);
+    setPassword("");
+    fetcher.reset?.();
+  };
+  return (
+    <>
+      <Button size="small" variant="outlined" onClick={() => setOpen(true)}>
+        Show token…
+      </Button>
+      {open && revealed && <TokenDialog name={agent.name} token={revealed} kept onClose={close} />}
+      {open && !revealed && (
+        <Dialog
+          open
+          title={`Show ${agent.name}'s token`}
+          onClose={close}
+          cancelAction={{ label: "Cancel", onClick: close }}
+          confirmAction={{
+            label: "Show",
+            disabled: fetcher.state !== "idle" || !password,
+            onClick: () => void fetcher.submit({ intent: "reveal-agent", id: agent.id, password }, { method: "post" }),
+          }}
+        >
+          <Stack spacing={1.5}>
+            <Typography>Enter your password to show it.</Typography>
+            <TextField
+              label="Password"
+              type="password"
+              autoComplete="current-password"
+              fullWidth
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              {...fieldError(result, "reveal-agent", "password")}
+            />
+            {result && !result.ok && result.formError && (
+              <Alert severity="error" role="alert">
+                {result.formError}
+              </Alert>
+            )}
+          </Stack>
+        </Dialog>
+      )}
+    </>
   );
 }
 
@@ -168,7 +230,7 @@ function RevokeButton({ agent }: { agent: AgentRow }) {
   );
 }
 
-function Agents({ agents }: { agents: AgentRow[] }) {
+function Agents({ agents, keepsTokens }: { agents: AgentRow[]; keepsTokens: boolean }) {
   const fetcher = useFetcher<SettingsResult>();
   const form = useRef<HTMLFormElement>(null);
   const [shown, setShown] = useState<{ name: string; token: string } | null>(
@@ -198,8 +260,18 @@ function Agents({ agents }: { agents: AgentRow[] }) {
           items={agents.map((agent) => ({
             id: agent.id,
             primary: agent.name,
-            secondary: `${agent.prefix}… · registered ${agent.registered} · ${agent.lastUsed}`,
-            action: <RevokeButton agent={agent} />,
+            secondary: [
+              `${agent.prefix}…`,
+              `registered ${agent.registered}`,
+              agent.lastUsed,
+              ...(keepsTokens && !agent.kept ? ["registered before tokens were kept: register it again to be able to show it"] : []),
+            ].join(" · "),
+            action: (
+              <Stack direction="row" spacing={1}>
+                {agent.kept && <ShowTokenButton agent={agent} />}
+                <RevokeButton agent={agent} />
+              </Stack>
+            ),
           }))}
         />
       )}
@@ -226,6 +298,7 @@ function Agents({ agents }: { agents: AgentRow[] }) {
         <TokenDialog
           name={shown.name}
           token={shown.token}
+          kept={keepsTokens}
           onClose={() => setShown(null)}
         />
       )}
@@ -234,7 +307,7 @@ function Agents({ agents }: { agents: AgentRow[] }) {
 }
 
 export default function Settings({ loaderData }: Route.ComponentProps) {
-  const { email, agents } = loaderData;
+  const { email, agents, keepsTokens } = loaderData;
   return (
     <Stack spacing={3}>
       <Typography variant="h1">Settings</Typography>
@@ -245,7 +318,7 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
         </Stack>
       </Card>
       <Card variant="outlined" title="Agents">
-        <Agents agents={agents} />
+        <Agents agents={agents} keepsTokens={keepsTokens} />
       </Card>
     </Stack>
   );

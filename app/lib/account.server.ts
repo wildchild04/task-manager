@@ -118,9 +118,12 @@ export type AgentRow = {
   prefix: string;
   registered: string;
   lastUsed: string;
+  /** Whether its token was kept, so it can be shown again. */
+  kept: boolean;
 };
 
-export type SettingsView = { email: string; agents: AgentRow[] };
+/** `keepsTokens`: whether newly registered tokens are kept (encrypted), so they can be shown again. */
+export type SettingsView = { email: string; agents: AgentRow[]; keepsTokens: boolean };
 
 export function settingsView(
   services: AppServices,
@@ -129,6 +132,7 @@ export function settingsView(
   const { timeZone } = services.tasks;
   return {
     email: services.accounts.account()?.email ?? "",
+    keepsTokens: services.agentTokens.keepsTokens,
     agents: services.agentTokens.list().map((agent) => ({
       id: agent.id,
       name: agent.name,
@@ -137,11 +141,12 @@ export function settingsView(
       lastUsed: agent.lastUsedAt
         ? `used ${relativeTime(agent.lastUsedAt, now, timeZone)}`
         : "never used",
+      kept: agent.kept,
     })),
   };
 }
 
-/** What a settings form did: a message, a newly registered agent's token (shown once), or errors. */
+/** What a settings form did: a message, an agent's token (just registered, or shown again), or errors. */
 export type SettingsResult =
   | { ok: true; intent: string; message: string; token?: string; name?: string }
   | (FormResult & { intent: string });
@@ -202,5 +207,34 @@ export function settingsAction(
     }
   } catch (error) {
     return failed(accountError(error, values));
+  }
+}
+
+/**
+ * Shows a registered agent's token again, once the owner's password is given. Wrong passwords count
+ * toward the sign-in throttle, and wait as sign-in does.
+ */
+export async function revealAgentAction(
+  services: AppServices,
+  form: FormData,
+  throttle: SignInThrottle,
+  wait: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+): Promise<SettingsResult> {
+  const intent = "reveal-agent";
+  const values = formValues(form);
+  const delay = throttle.delay();
+  if (delay > 0) await wait(delay);
+  const email = services.accounts.account()?.email ?? "";
+  if (!services.accounts.verify(email, raw(form, "password"))) {
+    throttle.failed();
+    return { ...invalid(values, { password: "Wrong password" }), intent };
+  }
+  throttle.succeeded();
+  try {
+    const agent = services.agentTokens.list().find((a) => a.id === values.id);
+    const token = services.agentTokens.reveal(values.id ?? "");
+    return { ok: true, intent, message: `${agent?.name ?? "The agent"}'s token`, token, name: agent?.name ?? "" };
+  } catch (error) {
+    return { ...accountError(error, values), intent };
   }
 }

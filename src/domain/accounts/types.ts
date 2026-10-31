@@ -26,6 +26,8 @@ export type AgentToken = {
   tokenHash: string;
   /** The token's first 8 characters, to tell tokens apart. */
   prefix: string;
+  /** The token encrypted under `SECRET_KEY` (`v1.<iv>.<ciphertext>`), to show it again; null when it wasn't kept. */
+  tokenEncrypted: string | null;
   createdAt: string;
   lastUsedAt: string | null;
   revokedAt: string | null;

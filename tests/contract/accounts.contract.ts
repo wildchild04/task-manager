@@ -134,6 +134,12 @@ export function accountsContract(name: string, factory: ServicesFactory) {
         expect(services.agentTokens.list()[0]!.lastUsedAt).toBe("2026-11-01T08:01:00.000Z");
       });
 
+      it("keeps no copy of a token without a SECRET_KEY", () => {
+        const { agent } = services.agentTokens.register("claude");
+        expect(agent.kept).toBe(false);
+        expectError(() => services.agentTokens.reveal(agent.id), "unavailable");
+      });
+
       it("revokes at once, freeing the name", () => {
         const first = services.agentTokens.register("builder");
         services.agentTokens.revoke(first.agent.id);
@@ -145,6 +151,25 @@ export function accountsContract(name: string, factory: ServicesFactory) {
         expect(services.agentTokens.authenticate(second.token)).toBeUndefined();
         expectError(() => services.agentTokens.revoke(first.agent.id), "not_found");
       });
+    });
+  });
+
+  describe(`${name}: agent tokens kept under SECRET_KEY`, () => {
+    const KEY = "k".repeat(32);
+
+    it("keeps the token encrypted, shows it again, and only with the same key", () => {
+      const db = factory({ secretKey: KEY });
+      const { token, agent } = db.agentTokens.register("claude");
+      expect(agent.kept).toBe(true);
+      expect(db.agentTokens.list()[0]!.kept).toBe(true);
+      expect(db.agentTokens.reveal(agent.id)).toBe(token);
+      expect(db.agentTokens.revealByName("claude")).toBe(token);
+      db.agentTokens.revoke(agent.id);
+      expectError(() => db.agentTokens.reveal(agent.id), "not_found");
+    });
+
+    it("refuses a short key", () => {
+      expect(() => factory({ secretKey: "too short" })).toThrow(/SECRET_KEY must be at least 32 characters/);
     });
   });
 }

@@ -11,6 +11,10 @@ declare global {
  * development it survives hot reloads so there is a single SQLite connection.
  */
 export const services: AppServices = globalThis.__services ??
-  createServices(undefined, { timeZone: process.env.TIME_ZONE || undefined, basePath: BASE_PATH });
+  createServices(undefined, {
+    timeZone: process.env.TIME_ZONE || undefined,
+    basePath: BASE_PATH,
+    secretKey: process.env.SECRET_KEY || undefined,
+  });
 
 if (process.env.NODE_ENV !== "production") globalThis.__services = services;

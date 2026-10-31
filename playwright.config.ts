@@ -30,6 +30,7 @@ export default defineConfig({
     // Each invocation must run against a fresh SQLite database. Reusing a
     // developer's server would retain prior fixtures and hide retry failures.
     reuseExistingServer: false,
-    env: { ...process.env, DATABASE_PATH, TIME_ZONE: "UTC" },
+    // A fixed SECRET_KEY, so agents' tokens are kept and Settings can show them again.
+    env: { ...process.env, DATABASE_PATH, TIME_ZONE: "UTC", SECRET_KEY: "playwright-secret-key-of-32-characters" },
   },
 });

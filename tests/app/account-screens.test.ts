@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   loginAction,
   logoutAction,
+  revealAgentAction,
   settingsAction,
   settingsView,
   setupAction,
@@ -221,6 +222,7 @@ describe("account screens", () => {
       const view = settingsView(services, "2026-11-01T08:00:00.000Z");
       expect(view).toEqual({
         email: "owner@example.com",
+        keepsTokens: false,
         agents: [
           {
             id: expect.any(String),
@@ -228,6 +230,7 @@ describe("account screens", () => {
             prefix: (registered as { token: string }).token.slice(0, 8),
             registered: "1 Nov 2026, 08:00",
             lastUsed: "never used",
+            kept: false,
           },
         ],
       });
@@ -246,6 +249,34 @@ describe("account screens", () => {
           (registered as { token: string }).token,
         ),
       ).toBeUndefined();
+    });
+  });
+});
+
+describe("showing an agent's token again", () => {
+  it("shows a kept token after the owner's password, and nothing on a wrong one", async () => {
+    const services = createInMemoryServices({ secretKey: "s".repeat(32), timeZone: "UTC" });
+    services.accounts.createOwner("owner@example.com", PASSWORD);
+    const { token, agent } = services.agentTokens.register("claude");
+    expect(settingsView(services)).toMatchObject({ keepsTokens: true, agents: [{ name: "claude", kept: true }] });
+    const throttle = new SignInThrottle();
+    const noWait = async () => {};
+
+    const wrong = await revealAgentAction(services, form({ id: agent.id, password: "nope" }), throttle, noWait);
+    expect(wrong).toEqual({ ok: false, intent: "reveal-agent", fieldErrors: { password: "Wrong password" }, values: { id: agent.id } });
+    const right = await revealAgentAction(services, form({ id: agent.id, password: PASSWORD }), throttle, noWait);
+    expect(right).toEqual({ ok: true, intent: "reveal-agent", message: "claude's token", token, name: "claude" });
+  });
+
+  it("says when a token wasn't kept", async () => {
+    const services = createInMemoryServices({ timeZone: "UTC" });
+    services.accounts.createOwner("owner@example.com", PASSWORD);
+    const { agent } = services.agentTokens.register("claude");
+    expect(settingsView(services)).toMatchObject({ keepsTokens: false, agents: [{ kept: false }] });
+    const result = await revealAgentAction(services, form({ id: agent.id, password: PASSWORD }), new SignInThrottle(), async () => {});
+    expect(result).toMatchObject({
+      ok: false,
+      formError: "This token wasn't kept: revoke it and register the agent again to be able to show it",
     });
   });
 });
