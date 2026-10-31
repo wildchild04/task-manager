@@ -11,6 +11,10 @@ The owner SHALL register an agent by name (1 to 40 letters, digits, `-` or `_`) 
 - **WHEN** "claude" is registered with `SECRET_KEY` set
 - **THEN** the database holds the token's hash and an encrypted copy, and not the token itself
 
+#### Scenario: Name taken
+- **WHEN** "claude" is registered again while its token is active
+- **THEN** it is refused, saying "claude" already has a token
+
 ## ADDED Requirements
 
 ### Requirement: Showing a token again
