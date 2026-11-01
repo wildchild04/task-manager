@@ -2051,10 +2051,9 @@ export function PageEditor({
       role="status"
       aria-label={STATUS_TEXT[status]}
       title={STATUS_TEXT[status]}
-      className={status === "saved" ? "save-status is-saved" : "save-status"}
+      className="save-status"
     >
-      {/* `check` until the design system has a `save` icon (feature request save-icon.md). */}
-      <Icon name="check" size="small" />
+      <Icon name="save" color={status === "saved" ? "success" : "inherit"} />
     </span>
   ) : (
     <span aria-live="polite">

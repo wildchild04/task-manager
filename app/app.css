@@ -393,11 +393,6 @@ body {
   margin: -5px 0 -5px -6px;
 }
 
-/* Tables have square corners; DocumentTable has no prop for it yet (design-system feature request document-table-corners). */
-[data-document-table] > .MuiTableContainer-root {
-  border-radius: 0;
-}
-
 /* While the table menu is open: the cell whose row and column its commands change. */
 [data-menu-target] {
   outline: 2px solid var(--ds-secondary);
@@ -522,13 +517,10 @@ body {
   text-transform: none;
 }
 
-/* The editor's save status: an icon in the secondary text color while saving, green once saved. */
+/* The editor's save status: the icon takes this secondary text color while saving (it's green, `success`, once saved). */
 .save-status {
-  display: inline-flex;
+  /* A flex box, not inline: the icon is centred beside the delete button rather than sitting on the text baseline. */
+  display: flex;
   align-items: center;
   color: var(--ds-on-surface-variant);
-  transition: color 150ms ease;
-}
-.save-status.is-saved {
-  color: var(--ds-success);
 }

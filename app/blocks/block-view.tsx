@@ -101,7 +101,9 @@ export function TableFrame({
   /** In the editor: the table's controls (adding rows and columns, its menu), shown under it. */
   tableActions?: ReactNode;
 }) {
-  return <DocumentTable headerRow={headerRow} headerColumn={headerColumn} rows={rows} ariaLabel="Table" {...editing} />;
+  return (
+    <DocumentTable corners="square" headerRow={headerRow} headerColumn={headerColumn} rows={rows} ariaLabel="Table" {...editing} />
+  );
 }
 
 /** A callout's frame: the design system's `Callout` (content, not an announcement) of its tone, its emoji as the icon. */
