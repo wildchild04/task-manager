@@ -16,6 +16,7 @@ import type { Route } from "./+types/root";
 import "./app.css";
 import { ErrorPage } from "./components/error-page";
 import { gate, type SignedIn } from "./lib/auth.server";
+import { withBase } from "./lib/base-path";
 import { useHydrated } from "./lib/use-hydrated";
 import { services } from "./lib/services.server";
 import { AppThemeProvider, readThemeCookie } from "./theme-mode";
@@ -35,7 +36,8 @@ export const middleware: Route.MiddlewareFunction[] = [
   async ({ request, context }, next) => {
     const decision = gate(services, request);
     if (!decision.pass) {
-      if ("redirect" in decision) throw redirect(decision.redirect);
+      // Unlike a loader's, a middleware's redirect doesn't get the base path from React Router: add it here.
+      if ("redirect" in decision) throw redirect(withBase(decision.redirect));
       return decision.response;
     }
     context.set(signedInContext, decision.signedIn ?? null);
