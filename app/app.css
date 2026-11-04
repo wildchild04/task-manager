@@ -524,3 +524,13 @@ body {
   align-items: center;
   color: var(--ds-on-surface-variant);
 }
+
+/* The design system's code surfaces announce "Copied" from a span sized `width: 1, height: 1` through `sx`,
+   which MUI reads as 100%: the span is as tall as the code block and hangs below it, so a code block at the end
+   of a page gives the page's scroll area an inner scroll bar. Shrink it to the 1px it means.
+   Remove once ~/dev/design-system/bugs/code-copy-status-full-size.md is fixed. */
+.MuiPaper-root > span[role="status"][aria-live="polite"] {
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+}
