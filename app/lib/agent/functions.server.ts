@@ -15,7 +15,7 @@ import { type Schedule, urgencySchema } from "~/domain/chores/schedule";
 import type { Comment, CommentKind } from "~/domain/comments/types";
 import { SuggestionError } from "~/domain/suggestions/errors";
 import { isEndingTransition } from "~/domain/suggestions/suggested-actions";
-import { NOTE_MAX } from "~/domain/suggestions/suggestion.service";
+import { NOTE_MAX, type SuggestionView } from "~/domain/suggestions/suggestion.service";
 import type { ActionPayload } from "~/domain/suggestions/types";
 import { TaskError } from "~/domain/tasks/errors";
 import { kinds } from "~/domain/tasks/kinds";
@@ -688,16 +688,90 @@ export function suggestAction(services: AppServices, actor: AgentActor, input: u
 const findSuggestion = (services: AppServices, id: string) =>
   services.suggestions.get(resolveId(id, services.suggestions.idsStartingWith(id), "suggestion"))!;
 
+/** A suggestion as lists show it. */
+const suggestionSummary = (services: AppServices, suggestion: SuggestionView) => ({
+  id: short(suggestion.id),
+  action: suggestion.action,
+  status: suggestion.state,
+  place: placeOf(services, suggestion.pageId),
+  ...(suggestion.subject ? { subject: `${suggestion.subject.kind}:${short(suggestion.subject.id)}` } : {}),
+});
+
 export function getSuggestion(services: AppServices, id: string) {
   const suggestion = findSuggestion(services, id);
   return {
-    id: short(suggestion.id),
-    action: suggestion.action,
-    status: suggestion.state,
-    place: placeOf(services, suggestion.pageId),
-    ...(suggestion.subject ? { subject: `${suggestion.subject.kind}:${short(suggestion.subject.id)}` } : {}),
+    ...suggestionSummary(services, suggestion),
+    revision: suggestion.revision,
+    ...(suggestion.note ? { note: suggestion.note } : {}),
+    ...(suggestion.state === "changes_requested"
+      ? { feedback: suggestion.feedback.map((f) => ({ text: f.text, at: f.createdAt })) }
+      : {}),
     ...(suggestion.resolvedAt ? { resolvedAt: suggestion.resolvedAt } : {}),
   };
+}
+
+const suggestionsQuery = z.object({
+  state: z.enum(["pending", "outdated", "changes_requested"]).optional(),
+  limit: limitSchema(10),
+  cursor: z.string().optional(),
+});
+
+/** The calling agent's own open suggestions, oldest first: the ones with `changes_requested` have feedback to read. */
+export function listSuggestions(services: AppServices, actor: AgentActor, input: unknown) {
+  const q = parse(suggestionsQuery, input);
+  const page = pageOf(services.suggestions.listByAuthor(actor.name, q.state), (s) => s.id, q.limit, q.cursor);
+  return {
+    suggestions: page.items.map((s) => suggestionSummary(services, s)),
+    more: page.more,
+    ...(page.cursor ? { cursor: page.cursor } : {}),
+  };
+}
+
+const reviseBody = z
+  .object({
+    markdown: z.string().optional(),
+    title: z.string().optional(),
+    schedule: z.unknown().optional(),
+    note: z.string().max(NOTE_MAX).optional(),
+  })
+  .strict();
+
+/** What each action can change when revised, besides its note. */
+const REVISE_FIELDS: Record<string, readonly string[]> = {
+  insert: ["markdown"],
+  replace: ["markdown"],
+  delete: [],
+  rename: ["title"],
+  schedule: ["schedule"],
+  transition: [],
+};
+
+/** Revises the agent's own open suggestion in place, after the human's feedback or of its own accord. */
+export function reviseSuggestion(services: AppServices, actor: AgentActor, id: string, input: unknown) {
+  const body = parse(reviseBody, input);
+  const suggestion = findSuggestion(services, id);
+  const allowed = REVISE_FIELDS[suggestion.action] ?? [];
+  const extra = (["markdown", "title", "schedule"] as const).filter((f) => body[f] !== undefined && !allowed.includes(f));
+  if (extra.length) {
+    throw new AgentError(422, "validation", `A ${suggestion.action} suggestion can't be revised with \`${extra.join("`, `")}\``);
+  }
+  if (Object.values(body).every((v) => v === undefined)) {
+    throw new AgentError(422, "validation", `Give something to change: ${[...allowed, "note"].map((f) => `\`${f}\``).join(", ")}`);
+  }
+  const { blocks, warnings } = body.markdown !== undefined ? blocksOf(services, body.markdown) : { blocks: undefined, warnings: [] };
+  try {
+    const revised = services.suggestions.revise({
+      id: suggestion.id,
+      author: actor.name,
+      blocks,
+      title: body.title,
+      schedule: body.schedule as Schedule | null | undefined,
+      note: body.note,
+    });
+    return withWarnings({ ok: true as const, revision: revised.revision }, warnings);
+  } catch (error) {
+    return fromSuggestionError(error);
+  }
 }
 
 /** Takes back the agent's own pending suggestion. */

@@ -1,6 +1,7 @@
 import { BatchError } from "../blocks/errors";
 import type { Block, BlockType, NewBlock, Operation, SuggestionAction, SuggestionProps, TreeNode } from "../blocks/types";
 import { isLeafType } from "../blocks/types";
+import type { Schedule } from "../chores/schedule";
 import type { Repositories, UnitOfWork } from "../unit-of-work";
 import { SuggestionError } from "./errors";
 import type { SuggestedActions } from "./suggested-actions";
@@ -11,6 +12,7 @@ import type {
   Subject,
   Suggestion,
   SuggestionBlockInput,
+  SuggestionFeedback,
   SuggestionState,
 } from "./types";
 
@@ -18,6 +20,8 @@ import type {
 const FORBIDDEN: readonly BlockType[] = ["page", "comment", "suggestion"];
 
 export const NOTE_MAX = 280;
+/** The longest feedback the human can give on a suggestion. */
+export const FEEDBACK_MAX = 2000;
 
 export type SuggestInput = {
   id?: string;
@@ -44,9 +48,33 @@ export type SuggestActionInput = {
   author: string;
 };
 
-/** A suggestion's record and its state as reported (`outdated` when a pending replace or delete's target changed). */
-export type SuggestionView = Suggestion & { state: SuggestionState };
-export type ActionSuggestionView = ActionSuggestion & { state: SuggestionState };
+/** What a suggestion's view adds to its record. */
+type ViewFields = {
+  /** As reported: `changes_requested` while it has open feedback, else `outdated` when its target or subject changed. */
+  state: SuggestionState;
+  /** Pending, and its target or subject changed since it was made or last revised: it can't be approved. */
+  outdated: boolean;
+  /** The human's open feedback (given on the current revision), oldest first; empty unless pending. */
+  feedback: SuggestionFeedback[];
+  /** After a revision with no feedback since: the latest feedback it answered. */
+  answered: SuggestionFeedback | null;
+};
+export type SuggestionView = Suggestion & ViewFields;
+export type ActionSuggestionView = ActionSuggestion & ViewFields;
+
+export type ReviseInput = {
+  id: string;
+  /** The agent revising; only the suggestion's author can. */
+  author: string;
+  /** A block insert or replace: the new proposed blocks. */
+  blocks?: SuggestionBlockInput[];
+  /** A rename: the new title. */
+  title?: string;
+  /** A schedule suggestion: the new schedule, or `null` to remove it. */
+  schedule?: Schedule | null;
+  /** The agent's new note (its reply); `""` clears it, omitted keeps it. */
+  note?: string;
+};
 
 const fail = (code: SuggestionError["code"], message: string): never => {
   throw new SuggestionError(code, message);
@@ -153,6 +181,8 @@ export class SuggestionService {
         undo: null,
         createdAt: this.now(),
         resolvedAt: null,
+        revision: 1,
+        revisedAt: null,
       };
       repos.suggestions.insert(suggestion);
       return this.view(repos, suggestion);
@@ -241,6 +271,8 @@ export class SuggestionService {
         undo: null,
         createdAt: this.now(),
         resolvedAt: null,
+        revision: 1,
+        revisedAt: null,
       };
       repos.suggestions.insert(suggestion);
       return this.view(repos, suggestion);
@@ -290,6 +322,92 @@ export class SuggestionService {
     });
   }
 
+  /** The human asks the suggestion's agent for changes; nothing else changes. */
+  requestChanges(id: string, text: string): SuggestionView {
+    return this.uow.run((repos) => {
+      const suggestion = this.pending(repos, id);
+      const trimmed = text.trim();
+      if (!trimmed) fail("validation", "Say what should change");
+      if (trimmed.length > FEEDBACK_MAX) fail("validation", `Feedback is at most ${FEEDBACK_MAX} characters`);
+      repos.suggestions.addFeedback({
+        id: this.newId(),
+        suggestionId: suggestion.id,
+        text: trimmed,
+        revision: suggestion.revision,
+        createdAt: this.now(),
+      });
+      return this.view(repos, suggestion);
+    });
+  }
+
+  /**
+   * The author changes its own pending suggestion in place: new proposed blocks, a new title or schedule, a new
+   * note. It's checked against its target or subject as they are now, so it's no longer outdated, and its
+   * feedback so far is answered.
+   */
+  revise(input: ReviseInput): SuggestionView {
+    return this.uow.run((repos) => {
+      const suggestion = this.pending(repos, input.id);
+      if (suggestion.author !== input.author) {
+        fail("forbidden", `Only ${suggestion.author}, who made it, can revise this suggestion`);
+      }
+      const { blocks, title, schedule, note } = input;
+      if (blocks === undefined && title === undefined && schedule === undefined && note === undefined) {
+        fail("validation", "A revision needs something to change");
+      }
+      if (note !== undefined && note.length > NOTE_MAX) fail("validation", `A note is at most ${NOTE_MAX} characters`);
+      const common = {
+        note: note === undefined ? suggestion.note : note || null,
+        revision: suggestion.revision + 1,
+        revisedAt: this.now(),
+      };
+      let revised: Suggestion;
+      if (suggestion.subject) {
+        if (blocks !== undefined) fail("validation", `A ${suggestion.action} suggestion has no blocks`);
+        let payload = suggestion.payload;
+        if (title !== undefined) {
+          if (payload.action !== "rename") fail("validation", `Only a rename takes a title, not a ${suggestion.action}`);
+          payload = { action: "rename", title: title.trim() };
+        }
+        if (schedule !== undefined) {
+          if (payload.action !== "schedule") fail("validation", `Only a schedule suggestion takes a schedule, not a ${suggestion.action}`);
+          payload = { action: "schedule", schedule };
+        }
+        const subject = suggestion.subject;
+        if (!this.suggested.placeOf(subject)) fail("not_found", `The ${subject.kind} ${subject.id} no longer exists`);
+        this.suggested.check(subject, payload);
+        revised = { ...suggestion, ...common, payload, base: this.suggested.baseOf(subject, payload)! };
+      } else {
+        if (title !== undefined || schedule !== undefined) fail("validation", "A block suggestion takes blocks, not a title or schedule");
+        let base = suggestion.base;
+        if (suggestion.targetId) {
+          const target = repos.blocks.getBlock(suggestion.targetId);
+          if (!target) fail("validation", "Its target is gone, so it can't be revised; withdraw it and suggest again");
+          base = stable(actsOnSubtree(suggestion.action, target!) ? subtree(treeOf(repos, target!)) : own(target!));
+        }
+        if (blocks !== undefined) {
+          if (suggestion.action === "delete") fail("validation", "A delete proposes no blocks");
+          if (blocks.length === 0) fail("validation", `A ${suggestion.action} needs the blocks to propose`);
+          const old = repos.blocks.getChildren(suggestion.id).map((b): Operation => ({ op: "delete", id: b.id }));
+          this.apply(repos, [...old, ...insertOps(suggestion.id, null, blocks)]);
+        }
+        revised = { ...suggestion, ...common, base };
+      }
+      repos.suggestions.update(revised);
+      return this.view(repos, revised);
+    });
+  }
+
+  /** An agent's open suggestions (still on their page, or with a subject that still exists), oldest first, optionally in one state. */
+  listByAuthor(author: string, state?: SuggestionState): SuggestionView[] {
+    const repos = this.uow.repositories;
+    return repos.suggestions
+      .listPendingByAuthor(author)
+      .filter((s) => (s.subject ? this.actions?.placeOf(s.subject) : repos.blocks.getBlock(s.id)))
+      .map((s) => this.view(repos, s))
+      .filter((s) => state === undefined || s.state === state);
+  }
+
   /** Puts the page back as it was before an approval or rejection, with the suggestion pending again. */
   reopen(id: string): SuggestionView {
     return this.uow.run((repos) => {
@@ -309,20 +427,24 @@ export class SuggestionService {
     });
   }
 
-  /** Approves a page's pending suggestions in document order, skipping outdated ones. */
-  approveAll(pageId: string): { approved: number; outdated: number } {
+  /** Approves a page's pending suggestions in document order, skipping outdated ones and those waiting for changes. */
+  approveAll(pageId: string): { approved: number; outdated: number; waiting: number } {
     return this.uow.run((repos) => {
       let approved = 0;
       let outdated = 0;
+      let waiting = 0;
       for (const id of this.idsInOrder(repos, pageId)) {
-        if (this.isOutdated(repos, repos.suggestions.get(id)!)) {
+        const view = this.view(repos, repos.suggestions.get(id)!);
+        if (view.state === "changes_requested") {
+          waiting++;
+        } else if (view.outdated) {
           outdated++;
         } else {
           this.approveWithin(repos, id);
           approved++;
         }
       }
-      return { approved, outdated };
+      return { approved, outdated, waiting };
     });
   }
 
@@ -438,8 +560,13 @@ export class SuggestionService {
   }
 
   private view(repos: Repositories, suggestion: Suggestion): SuggestionView {
-    const state = suggestion.status === "pending" && this.isOutdated(repos, suggestion) ? "outdated" : suggestion.status;
-    return { ...suggestion, state };
+    const pending = suggestion.status === "pending";
+    const outdated = pending && this.isOutdated(repos, suggestion);
+    const all = pending ? repos.suggestions.listFeedback(suggestion.id) : [];
+    const feedback = all.filter((f) => f.revision === suggestion.revision);
+    const answered = feedback.length === 0 ? (all.filter((f) => f.revision < suggestion.revision).at(-1) ?? null) : null;
+    const state: SuggestionState = !pending ? suggestion.status : feedback.length ? "changes_requested" : outdated ? "outdated" : "pending";
+    return { ...suggestion, state, outdated, feedback, answered } as SuggestionView;
   }
 
   private isOutdated(repos: Repositories, suggestion: Suggestion): boolean {

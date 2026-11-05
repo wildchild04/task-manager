@@ -19,6 +19,8 @@ import { Link as RouterLink } from "react-router";
 
 import { RichText } from "./rich-text";
 import type { CalloutTone, RichText as RichTextValue } from "~/domain/blocks/types";
+import { RequestChangesDialog } from "../components/request-changes-dialog";
+import type { DecisionResult } from "../lib/suggestions.server";
 import type { ReferenceView, SuggestionBlockView, ViewBlock } from "./view-model";
 import { plainText } from "./view-model";
 
@@ -132,49 +134,83 @@ export const SuggestionsContext = createContext<{
   /** The suggestions by block ID, for the editor, whose blocks don't carry their views. */
   byId?: Readonly<Record<string, SuggestionBlockView>>;
   decide?: SuggestionDecide;
+  /** Sends the human's feedback to the suggestion's agent. */
+  requestChanges?: (id: string, text: string) => Promise<DecisionResult>;
   busy?: boolean;
 }>({});
 
 const SUGGESTION_LABELS = { insert: "Suggests adding", replace: "Suggests replacing", delete: "Suggests deleting" } as const;
 
+/** What a suggestion's status shows: waiting for the agent, outdated, or revised since the human's feedback. */
+export function reviewStatus(suggestion: { state: string; outdated: boolean; answered: string | null }) {
+  if (suggestion.state === "changes_requested") return { label: "Changes requested", tone: "warning" as const };
+  if (suggestion.outdated) return { label: "Outdated", tone: "error" as const };
+  if (suggestion.answered) return { label: "Revised", tone: "default" as const };
+  return undefined;
+}
+
+/** The human's feedback as the suggestion shows it: what's waiting, or what the latest revision answered. */
+export const askedLine = (suggestion: { feedback: string | null; answered: string | null }) => {
+  const asked = suggestion.feedback ?? suggestion.answered;
+  return asked ? `You asked: ${asked}` : null;
+};
+
 /** An agent's suggestion: who and what, its note, what it would remove (struck through), what it proposes, and the decision. */
 export function SuggestionBox({ suggestion }: { suggestion: SuggestionBlockView }) {
   const context = useContext(SuggestionsContext);
-  const { decide, busy } = context;
+  const { decide, requestChanges, busy } = context;
+  const [asking, setAsking] = useState(false);
   const { id, author, action, note, outdated, removed, blocks } = suggestion;
   const label = SUGGESTION_LABELS[action];
   const explanation = outdated ? "The block changed since this was suggested, so it can only be rejected." : undefined;
+  const lines = [note, askedLine(suggestion), explanation].filter((line): line is string => Boolean(line));
   return (
-    <ReviewContainer
-      aria-label={`${author}: ${label}`}
-      author={author}
-      label={label}
-      tone="warning"
-      status={outdated ? { label: "Outdated", tone: "error" } : undefined}
-      note={note && explanation ? `${note} ${explanation}` : (note ?? explanation)}
-      removed={
-        removed && (
-          // The copy is the removed part itself, so it isn't marked again.
-          <SuggestionsContext.Provider value={{ ...context, removing: undefined }}>
-            <Blocks blocks={[removed]} />
-          </SuggestionsContext.Provider>
-        )
-      }
-      actions={
-        <Stack direction="row" spacing={1} alignItems="center">
-          <Button size="small" variant="text" disabled={!decide || busy} onClick={() => decide?.("reject", id)}>
-            Reject
-          </Button>
-          {!outdated && (
-            <Button size="small" variant="contained" disabled={!decide || busy} onClick={() => decide?.("approve", id)}>
-              Approve
+    <>
+      <ReviewContainer
+        aria-label={`${author}: ${label}`}
+        author={author}
+        label={label}
+        tone="warning"
+        status={reviewStatus(suggestion)}
+        note={
+          lines.length > 1
+            ? lines.map((line) => (
+                <span key={line} className="review-note-line">
+                  {line}
+                </span>
+              ))
+            : lines[0]
+        }
+        removed={
+          removed && (
+            // The copy is the removed part itself, so it isn't marked again.
+            <SuggestionsContext.Provider value={{ ...context, removing: undefined }}>
+              <Blocks blocks={[removed]} />
+            </SuggestionsContext.Provider>
+          )
+        }
+        actions={
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Button size="small" variant="text" disabled={!decide || busy} onClick={() => decide?.("reject", id)}>
+              Reject
             </Button>
-          )}
-        </Stack>
-      }
-    >
-      {blocks.length > 0 ? <Blocks blocks={blocks} /> : undefined}
-    </ReviewContainer>
+            <Button size="small" variant="outlined" disabled={!requestChanges || busy} onClick={() => setAsking(true)}>
+              Request changes
+            </Button>
+            {!outdated && (
+              <Button size="small" variant="contained" disabled={!decide || busy} onClick={() => decide?.("approve", id)}>
+                Approve
+              </Button>
+            )}
+          </Stack>
+        }
+      >
+        {blocks.length > 0 ? <Blocks blocks={blocks} /> : undefined}
+      </ReviewContainer>
+      {asking && requestChanges && (
+        <RequestChangesDialog author={author} send={(text) => requestChanges(id, text)} onClose={() => setAsking(false)} />
+      )}
+    </>
   );
 }
 

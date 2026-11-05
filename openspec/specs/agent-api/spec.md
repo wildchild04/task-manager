@@ -100,7 +100,7 @@ Agents SHALL be able to read projects, tasks, descriptions, comments, references
 - **THEN** it is cancelled and the next occurrence exists
 
 ### Requirement: Agent functions
-The API SHALL offer exactly these functions, each returning only the listed fields. Functions that take Markdown (`POST tasks` `description`, `POST task/:id/comment`, `POST task/:id/finding`, `POST finding/:id`, `POST task/:id/description`, `POST pages`, `POST suggest`) SHALL also return `warnings` when the Markdown held unsupported constructs (see Markdown guide and warnings), and only then:
+The API SHALL offer exactly these functions, each returning only the listed fields. Functions that take Markdown (`POST tasks` `description`, `POST task/:id/comment`, `POST task/:id/finding`, `POST finding/:id`, `POST task/:id/description`, `POST pages`, `POST suggest`, `POST suggestion/:id/revise`) SHALL also return `warnings` when the Markdown held unsupported constructs (see Markdown guide and warnings), and only then:
 
 | Function | Request | Response |
 |---|---|---|
@@ -124,8 +124,10 @@ The API SHALL offer exactly these functions, each returning only the listed fiel
 | `GET page/:id` | `maxChars?`, `offset?`, `anchors?` | `{ title, markdown, more, offset? }` |
 | `POST suggest` | `{ page? , task?, action, after?, inside?, target?, markdown?, note? }` | `{ ok: true, id }` |
 | `POST suggest-action` | `{ action, project? , page? , task?, title?, schedule?, transition?, scope?, note? }` | `{ ok: true, id }` |
-| `GET suggestion/:id` | | `{ id, action, status, place, subject?, resolvedAt? }` (`place`: `page:<id>` or `task:<id>`; `subject`, for action suggestions: `project:<id>`, `page:<id>` or `task:<id>`) |
+| `GET suggestions` | `state?` (`pending`, `outdated` or `changes_requested`), `limit?` (default 10), `cursor?` | `{ suggestions: [{ id, action, status, place, subject? }], more, cursor? }`: the caller's own open suggestions, oldest first |
+| `GET suggestion/:id` | | `{ id, action, status, place, subject?, revision, note?, feedback?, resolvedAt? }` (`place`: `page:<id>` or `task:<id>`; `subject`, for action suggestions: `project:<id>`, `page:<id>` or `task:<id>`; `feedback`, while `changes_requested`: `[{ text, at }]`, oldest first) |
 | `POST suggestion/:id/withdraw` | | `{ ok: true }` |
+| `POST suggestion/:id/revise` | `{ markdown?, title?, schedule?, note? }` | `{ ok: true, revision }` |
 | `GET markdown` | | `{ blocks: [{ type, markdown, example }], inline: [{ name, markdown }], unsupported: [{ name, markdown, kept }] }` |
 
 #### Scenario: A work loop
@@ -143,6 +145,10 @@ The API SHALL offer exactly these functions, each returning only the listed fiel
 #### Scenario: Comment and finding IDs don't mix
 - **WHEN** an agent calls `POST finding/:id` with the ID of a comment
 - **THEN** it is refused with code `not_found`
+
+#### Scenario: Revising after feedback
+- **WHEN** an agent lists its suggestions with `state: "changes_requested"`, reads one with `GET suggestion/:id`, and revises it
+- **THEN** the list includes it, the read shows its `feedback`, and after `POST suggestion/:id/revise` it is `pending` with the next `revision`
 
 ### Requirement: Agents create tasks
 `POST tasks` SHALL create a task of `kind` (exploration, work, chore or update) titled `title` in `project` (a project ID or its 8-character prefix), in the kind's initial state, as the web forms do. `description`, in the Markdown of the `Markdown conversion` requirement, SHALL become the task's description. Chores MAY take `urgency` (`normal` by default) and `schedule` (the schedule types of `chore-scheduling`, e.g. `{ type: "frequency", every: "weekly", weekday: 1, time: "09:00" }`), and their due time SHALL be computed from it. Updates SHALL take `iteratesOn`, a done work task. A missing title, an unknown kind, invalid chore fields, or `urgency`/`schedule`/`iteratesOn` on a kind that doesn't take them SHALL be refused with status 422 (code `validation`); an unknown project or task with status 404 (code `not_found`). Nothing SHALL be created when a request is refused.
@@ -251,4 +257,27 @@ A line that is only `![alt](src)` SHALL become an image block: a `src` naming an
 #### Scenario: Status after approval
 - **WHEN** the human approves an agent's rename suggestion and the agent asks for its status
 - **THEN** the answer reports `approved` with `resolvedAt`
+
+### Requirement: Agents revise suggestions
+`GET suggestions` SHALL list the calling agent's own suggestions that are still open (`pending`, `outdated` or `changes_requested`, as reported), oldest first, paged like `GET tasks`; `state` SHALL narrow it to one of those states. Other agents' suggestions SHALL NOT be listed. `GET suggestion/:id` SHALL report the suggestion's `revision`, its `note` when it has one, and, while it's `changes_requested`, its open `feedback`. `POST suggestion/:id/revise` SHALL revise the calling agent's own open suggestion (see suggestion-feedback): `markdown` (the new proposed blocks of a block insert or replace), `title` (a rename), `schedule` (a schedule suggestion: a `chore-scheduling` schedule, or `null`), and `note` (at most 280 characters). Fields that don't belong to the suggestion's action SHALL be refused, and so SHALL a request with none of them. A revision SHALL be refused with status 422 (code `validation`) when it breaks these rules or the rules of suggesting; with status 403 (code `forbidden`) for another agent's suggestion; with status 409 (code `resolved`) for a resolved one; and with status 404 (code `not_found`) for an unknown suggestion. Nothing SHALL change when a request is refused.
+
+#### Scenario: Find feedback
+- **WHEN** the human requested changes on one of "claude"'s two pending suggestions, and "claude" calls `GET suggestions` with `state: "changes_requested"`
+- **THEN** only that suggestion is listed, with status `changes_requested`
+
+#### Scenario: Read feedback
+- **WHEN** "claude" calls `GET suggestion/:id` on it
+- **THEN** the answer includes `revision: 1` and `feedback: [{ text: "Shorter, please", at }]`
+
+#### Scenario: Revise with a title
+- **WHEN** "claude" calls `POST suggestion/:id/revise` on its rename suggestion with `title: "Plans"` and `note: "Shortened"`
+- **THEN** the answer is `{ ok: true, revision: 2 }`, and `GET suggestion/:id` reports `pending` with the note "Shortened" and no `feedback`
+
+#### Scenario: Wrong field for the action
+- **WHEN** an agent revises a delete suggestion with `markdown`
+- **THEN** it is refused with code `validation` and nothing changes
+
+#### Scenario: Another agent's list
+- **WHEN** "reviewer" calls `GET suggestions`
+- **THEN** suggestions made by "claude" are not listed
 

@@ -413,7 +413,15 @@ describe("agent API", () => {
       expect(made.body).toEqual({ ok: true, id: expect.any(String) });
       expect(services.tasks.get(W)!.state).toBe("todo");
       const status = await call("GET", `suggestion/${made.body.id}`);
-      expect(status.body).toEqual({ id: made.body.id, action: "transition", status: "pending", place: "task:aaaa0001", subject: "task:aaaa0001" });
+      expect(status.body).toEqual({
+        id: made.body.id,
+        action: "transition",
+        status: "pending",
+        place: "task:aaaa0001",
+        subject: "task:aaaa0001",
+        revision: 1,
+        note: "Superseded",
+      });
       services.suggestions.approve(services.suggestions.idsStartingWith(made.body.id)[0]!);
       expect(services.tasks.get(W)!.state).toBe("cancelled");
       expect((await call("GET", `suggestion/${made.body.id}`)).body).toMatchObject({ status: "approved", resolvedAt: expect.any(String) });
@@ -498,6 +506,73 @@ describe("agent API", () => {
     });
   });
 
+  describe("revising suggestions", () => {
+    const fullId = (id: string) => services.suggestions.idsStartingWith(id)[0]!;
+    const page = async () => (await call("POST", "pages", { title: "Scratch", markdown: "Ship on Monday" }, "claude")).body.id as string;
+
+    it("lists its own suggestions with feedback, reads the feedback, and revises in place", async () => {
+      const pageId = await page();
+      const rename = (await call("POST", "suggest-action", { action: "rename", page: pageId, title: "Notes from the Monday meeting" }, "claude")).body.id;
+      const insert = (await call("POST", "suggest", { page: pageId, action: "insert", markdown: "- One" }, "claude")).body.id;
+      await call("POST", "suggest", { page: pageId, action: "insert", markdown: "- Theirs" }, "reviewer");
+      services.suggestions.requestChanges(fullId(rename), "Shorter, please");
+
+      expect((await call("GET", "suggestions", undefined, "claude")).body).toEqual({
+        suggestions: [
+          { id: rename, action: "rename", status: "changes_requested", place: `page:${pageId}`, subject: `page:${pageId}` },
+          { id: insert, action: "insert", status: "pending", place: `page:${pageId}` },
+        ],
+        more: false,
+      });
+      expect((await call("GET", "suggestions?state=changes_requested", undefined, "claude")).body.suggestions.map((s: { id: string }) => s.id)).toEqual([
+        rename,
+      ]);
+      expect((await call("GET", "suggestions?limit=1", undefined, "claude")).body).toMatchObject({ more: true, cursor: expect.any(String) });
+      expect((await call("GET", `suggestion/${rename}`, undefined, "claude")).body).toEqual({
+        id: rename,
+        action: "rename",
+        status: "changes_requested",
+        place: `page:${pageId}`,
+        subject: `page:${pageId}`,
+        revision: 1,
+        feedback: [{ text: "Shorter, please", at: expect.any(String) }],
+      });
+
+      const revised = await call("POST", `suggestion/${rename}/revise`, { title: "Monday notes", note: "Shortened" }, "claude");
+      expect(revised.body).toEqual({ ok: true, revision: 2 });
+      expect((await call("GET", `suggestion/${rename}`, undefined, "claude")).body).toMatchObject({
+        status: "pending",
+        revision: 2,
+        note: "Shortened",
+      });
+      expect((await call("GET", `suggestion/${rename}`, undefined, "claude")).body.feedback).toBeUndefined();
+      expect((await call("GET", "suggestions?state=changes_requested", undefined, "claude")).body.suggestions).toEqual([]);
+
+      expect((await call("POST", `suggestion/${insert}/revise`, { markdown: "1. One\n2. Two" }, "claude")).body).toEqual({ ok: true, revision: 2 });
+      expect((await call("GET", `page/${pageId}`)).body.markdown).toContain("1. One\n2. Two");
+    });
+
+    it("refuses fields that don't fit, nothing to change, others' suggestions and resolved ones", async () => {
+      const pageId = await page();
+      const rename = (await call("POST", "suggest-action", { action: "rename", page: pageId, title: "Plans" }, "claude")).body.id;
+      const target = services.blocks.getChildren(services.suggestions.get(fullId(rename))!.pageId)[0]!.id.slice(0, 8);
+      const del = (await call("POST", "suggest", { page: pageId, action: "delete", target }, "claude")).body.id;
+      const refused = async (id: string, body: unknown, agent = "claude") => (await call("POST", `suggestion/${id}/revise`, body, agent)).body.error?.code;
+
+      expect(await refused(rename, { markdown: "- No" })).toBe("validation");
+      expect(await refused(del, { markdown: "- No" })).toBe("validation");
+      expect(await refused(del, { title: "No" })).toBe("validation");
+      expect(await refused(rename, {})).toBe("validation");
+      expect(await refused(rename, { colour: "red" })).toBe("bad_request");
+      expect(await refused(rename, { note: "Mine" }, "reviewer")).toBe("forbidden");
+      expect(await refused("ffffffff", { note: "Who?" })).toBe("not_found");
+      expect((await call("POST", `suggestion/${del}/revise`, { note: "Duplicate" }, "claude")).body).toEqual({ ok: true, revision: 2 });
+      services.suggestions.reject(fullId(rename));
+      expect(await refused(rename, { title: "Late" })).toBe("resolved");
+      expect((await call("GET", "suggestions", undefined, "reviewer")).body).toEqual({ suggestions: [], more: false });
+    });
+  });
+
   describe("suggestions", () => {
     const exploration = () => {
       const task = services.tasks.create({ id: "expl0001-0000-0000-0000-000000000000", projectId: P, kind: "exploration", title: "Block editor v1" });
@@ -547,6 +622,8 @@ describe("agent API", () => {
         action: "insert",
         status: "pending",
         place: "task:expl0001",
+        revision: 1,
+        note: "From the content audit",
       });
     });
 

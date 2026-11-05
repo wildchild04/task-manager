@@ -1,25 +1,27 @@
-import { Alert, Button, Stack, Typography } from "@wildchild/design-system";
+import { Alert, Button, Chip, Stack, Typography } from "@wildchild/design-system";
 import { type ReactNode, useState } from "react";
 import { useNavigate, useRevalidator } from "react-router";
 
 import type { ActionKind } from "~/domain/suggestions/types";
 
+import { askedLine, reviewStatus } from "../blocks/block-view";
 import type { ActionSuggestionItem } from "../lib/action-suggestions.server";
-import { withBase } from "../lib/base-path";
-import type { DecisionResult } from "../lib/suggestions.server";
+import { postSuggestionDecision, RequestChangesDialog } from "./request-changes-dialog";
 
 /** The confirmation a delete suggestion opens before approving: the same dialog as the delete button's. */
 export type ConfirmDelete = (props: { busy: boolean; onClose: () => void; onConfirm: () => void }) => ReactNode;
 
 /**
  * One pending action suggestion, shown next to the control it would use:
- * "<agent> suggests <words>", its note, and Approve (not when outdated) and
- * Reject. Approving a deletion first asks, as the delete button does.
+ * "<agent> suggests <words>", its note, its status and the human's feedback,
+ * and Approve (not when outdated), Request changes and Reject. Approving a
+ * deletion first asks, as the delete button does.
  */
 export function ActionSuggestionBar({ item, confirmDelete }: { item: ActionSuggestionItem; confirmDelete?: ConfirmDelete }) {
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   const [confirming, setConfirming] = useState(false);
+  const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
 
@@ -27,17 +29,7 @@ export function ActionSuggestionBar({ item, confirmDelete }: { item: ActionSugge
   // unmount the bar before it could go where the delete button would have gone.
   const decide = async (intent: "approve" | "reject") => {
     setBusy(true);
-    let result: DecisionResult;
-    try {
-      const response = await fetch(withBase("/api/suggestions"), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ intent, id: item.id }),
-      });
-      result = (await response.json()) as DecisionResult;
-    } catch {
-      result = { ok: false, message: "The server couldn't be reached; try again" };
-    }
+    const result = await postSuggestionDecision({ intent, id: item.id });
     if (result.ok && result.redirectTo) {
       await navigate(result.redirectTo);
       return;
@@ -48,6 +40,14 @@ export function ActionSuggestionBar({ item, confirmDelete }: { item: ActionSugge
     setBusy(false);
   };
   const approve = () => (item.action === "delete" && confirmDelete ? setConfirming(true) : void decide("approve"));
+  // A refusal stays in the dialog; a sent request reloads the screen.
+  const requestChanges = async (text: string) => {
+    const result = await postSuggestionDecision({ intent: "request-changes", id: item.id, text });
+    if (result.ok) await revalidator.revalidate();
+    return result;
+  };
+  const status = reviewStatus(item);
+  const asked = askedLine(item);
 
   return (
     <>
@@ -62,6 +62,9 @@ export function ActionSuggestionBar({ item, confirmDelete }: { item: ActionSugge
                 Approve
               </Button>
             )}
+            <Button size="small" variant="outlined" disabled={busy} onClick={() => setAsking(true)}>
+              Request changes
+            </Button>
             <Button size="small" variant="outlined" disabled={busy} onClick={() => void decide("reject")}>
               Reject
             </Button>
@@ -69,7 +72,17 @@ export function ActionSuggestionBar({ item, confirmDelete }: { item: ActionSugge
         }
       >
         <Stack spacing={0.5}>
+          {status && status.label !== "Outdated" && (
+            <div>
+              <Chip size="small" label={status.label} color={status.tone === "warning" ? "warning" : "secondary"} variant={status.tone === "warning" ? "filled" : "outlined"} />
+            </div>
+          )}
           {item.note && <Typography variant="body2">{item.note}</Typography>}
+          {asked && (
+            <Typography variant="body2" color="text.secondary">
+              {asked}
+            </Typography>
+          )}
           {item.outdated && (
             <Typography variant="body2" color="text.secondary">
               Outdated: this changed since it was suggested.
@@ -82,6 +95,7 @@ export function ActionSuggestionBar({ item, confirmDelete }: { item: ActionSugge
           )}
         </Stack>
       </Alert>
+      {asking && <RequestChangesDialog author={item.author} send={requestChanges} onClose={() => setAsking(false)} />}
       {confirming &&
         confirmDelete?.({
           busy,

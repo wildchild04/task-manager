@@ -1,7 +1,14 @@
 import type Database from "better-sqlite3";
 
 import type { SuggestionRepository } from "~/domain/suggestions/suggestion.repository";
-import type { ActionPayload, ActionSuggestion, BlockSuggestion, SubjectKind, Suggestion } from "~/domain/suggestions/types";
+import type {
+  ActionPayload,
+  ActionSuggestion,
+  BlockSuggestion,
+  SubjectKind,
+  Suggestion,
+  SuggestionFeedback,
+} from "~/domain/suggestions/types";
 
 type SuggestionRow = {
   id: string;
@@ -18,7 +25,19 @@ type SuggestionRow = {
   undo: string | null;
   created_at: string;
   resolved_at: string | null;
+  revision: number;
+  revised_at: string | null;
 };
+
+type FeedbackRow = { id: string; suggestion_id: string; text: string; revision: number; created_at: string };
+
+const toFeedback = (row: FeedbackRow): SuggestionFeedback => ({
+  id: row.id,
+  suggestionId: row.suggestion_id,
+  text: row.text,
+  revision: row.revision,
+  createdAt: row.created_at,
+});
 
 function toSuggestion(row: SuggestionRow): Suggestion {
   const common = {
@@ -30,6 +49,8 @@ function toSuggestion(row: SuggestionRow): Suggestion {
     status: row.status,
     createdAt: row.created_at,
     resolvedAt: row.resolved_at,
+    revision: row.revision,
+    revisedAt: row.revised_at,
   };
   if (row.subject_kind !== null) {
     return {
@@ -64,6 +85,8 @@ const values = (s: Suggestion) => [
   s.undo === null ? null : JSON.stringify(s.undo),
   s.createdAt,
   s.resolvedAt,
+  s.revision,
+  s.revisedAt,
   s.id,
 ];
 
@@ -74,18 +97,27 @@ export class SqliteSuggestionRepository implements SuggestionRepository {
     this.s = {
       insert: db.prepare(
         `INSERT INTO suggestions (page_id, action, target_id, subject_kind, subject_id, payload, note, actor_name, base, status,
-         undo, created_at, resolved_at, id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         undo, created_at, resolved_at, revision, revised_at, id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ),
       update: db.prepare(
         `UPDATE suggestions SET page_id = ?, action = ?, target_id = ?, subject_kind = ?, subject_id = ?, payload = ?, note = ?, actor_name = ?, base = ?, status = ?,
-         undo = ?, created_at = ?, resolved_at = ? WHERE id = ?`,
+         undo = ?, created_at = ?, resolved_at = ?, revision = ?, revised_at = ? WHERE id = ?`,
       ),
       get: db.prepare<[string], SuggestionRow>("SELECT * FROM suggestions WHERE id = ?"),
       findByPrefix: db.prepare<[{ prefix: string }], SuggestionRow>(
         "SELECT * FROM suggestions WHERE substr(id, 1, length(@prefix)) = @prefix",
       ),
       listPending: db.prepare<[], SuggestionRow>("SELECT * FROM suggestions WHERE status = 'pending' ORDER BY created_at, rowid"),
+      listPendingByAuthor: db.prepare<[string], SuggestionRow>(
+        "SELECT * FROM suggestions WHERE status = 'pending' AND actor_name = ? ORDER BY created_at, rowid",
+      ),
+      addFeedback: db.prepare(
+        "INSERT INTO suggestion_feedback (id, suggestion_id, text, revision, created_at) VALUES (@id, @suggestionId, @text, @revision, @createdAt)",
+      ),
+      listFeedback: db.prepare<[string], FeedbackRow>(
+        "SELECT * FROM suggestion_feedback WHERE suggestion_id = ? ORDER BY created_at, rowid",
+      ),
     };
   }
 
@@ -108,5 +140,17 @@ export class SqliteSuggestionRepository implements SuggestionRepository {
 
   listPending(): Suggestion[] {
     return this.s.listPending.all().map(toSuggestion);
+  }
+
+  listPendingByAuthor(author: string): Suggestion[] {
+    return this.s.listPendingByAuthor.all(author).map(toSuggestion);
+  }
+
+  addFeedback(feedback: SuggestionFeedback): void {
+    this.s.addFeedback.run(feedback);
+  }
+
+  listFeedback(suggestionId: string): SuggestionFeedback[] {
+    return this.s.listFeedback.all(suggestionId).map(toFeedback);
   }
 }

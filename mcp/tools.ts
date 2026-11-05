@@ -307,16 +307,51 @@ export function createAgentServer(call: AgentCall): McpServer {
     "get_suggestion",
     {
       description:
-        "A suggestion's status: { id, action, status, place, subject?, resolvedAt? } (`subject`: what an action from suggest_action acts on). Status is pending, outdated (its target or subject changed since; it can only be rejected, so withdraw and suggest again), approved, rejected or withdrawn.",
+        "A suggestion's status: { id, action, status, place, subject?, revision, note?, feedback?, resolvedAt? } (`subject`: what an action from suggest_action acts on). Status is pending, changes_requested (the human asked for changes: `feedback` is [{ text, at }], oldest first; revise it with revise_suggestion), outdated (its target or subject changed since; revise it against the page as it is now, or withdraw it), approved, rejected or withdrawn.",
       inputSchema: { id: z.string().describe("Suggestion ID from suggest or suggest_action") },
     },
     ({ id }) => run(call, "GET", `suggestion/${enc(id)}`),
   );
 
   server.registerTool(
+    "list_suggestions",
+    {
+      description:
+        "Your own open suggestions (from suggest and suggest_action), oldest first: at most `limit` (default 10) as { id, action, status, place, subject? }, plus `more`; pass the returned `cursor` for the next ones. `state` narrows them to pending, outdated or changes_requested; a changes_requested one has the human's feedback, which get_suggestion shows. Check it to find suggestions to revise.",
+      inputSchema: {
+        state: z.enum(["pending", "outdated", "changes_requested"]).optional().describe("Only suggestions in this state"),
+        limit: z.number().int().min(1).max(50).optional().describe("How many to return (default 10, max 50)"),
+        cursor: z.string().optional().describe("The `cursor` from the previous result, to get the next ones"),
+      },
+    },
+    (input) => run(call, "GET", "suggestions", input),
+  );
+
+  server.registerTool(
+    "revise_suggestion",
+    {
+      description:
+        "Change your own open suggestion in place, usually after the human asked for changes (see get_suggestion's `feedback`); the human then reviews it again. It keeps its ID, action, place and target or subject, and is checked against them as they are now. Give what fits its action: insert and replace take `markdown` (the new proposed blocks, replacing the old ones), rename takes `title`, schedule takes `schedule` (or null); any suggestion takes `note` (at most 280 characters), your reply to the human. To change the action, target or subject, withdraw it and suggest again. Returns { ok, revision, warnings? }." +
+        MARKDOWN_NOTE,
+      inputSchema: {
+        id: z.string().describe("Suggestion ID from list_suggestions, suggest or suggest_action"),
+        markdown: z.string().optional().describe("insert and replace: the new proposed blocks, in Markdown"),
+        title: z.string().optional().describe("rename: the new title"),
+        schedule: z
+          .record(z.string(), z.unknown())
+          .nullable()
+          .optional()
+          .describe("schedule: as for create_task, or null to remove the chore's schedule"),
+        note: z.string().optional().describe("Your reply to the human"),
+      },
+    },
+    ({ id, ...input }) => run(call, "POST", `suggestion/${enc(id)}/revise`, input),
+  );
+
+  server.registerTool(
     "withdraw_suggestion",
     {
-      description: "Take back your own pending or outdated suggestion (from suggest or suggest_action). Returns { ok }.",
+      description: "Take back your own open suggestion (pending, outdated or changes_requested; from suggest or suggest_action). Returns { ok }.",
       inputSchema: { id: z.string().describe("Suggestion ID from suggest or suggest_action") },
     },
     ({ id }) => run(call, "POST", `suggestion/${enc(id)}/withdraw`, {}),

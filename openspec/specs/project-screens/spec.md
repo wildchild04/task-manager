@@ -127,7 +127,7 @@ The tabs SHALL be Description (the home page content, editable as specified by t
 - **THEN** the dialog said that 3 tasks and 1 document would be deleted, the browser is on the home route, and "Garden" is no longer listed
 
 ### Requirement: Suggestions waiting for review
-The home dashboard SHALL show a "Waiting for review" section listing each project, page and task with pending suggestions, block or action suggestions alike: its title and place, linking to it (a project to its project home), the number of pending suggestions, and the agents that made them, or, when its only pending suggestion is an action, the action in words; the place with the oldest pending suggestion first. Action suggestions whose subject no longer exists SHALL NOT be listed. The section SHALL NOT be shown when no suggestion is pending.
+The home dashboard SHALL show a "Waiting for review" section listing each project, page and task with pending suggestions, block or action suggestions alike: its title and place, linking to it (a project to its project home), the number of pending suggestions, and the agents that made them, or, when its only pending suggestion is an action, the action in words; the place with the oldest pending suggestion first. Action suggestions whose subject no longer exists SHALL NOT be listed. Suggestions with changes requested (see suggestion-feedback) SHALL NOT be listed or counted until their agent revises them. The section SHALL NOT be shown when no suggestion is pending.
 
 #### Scenario: Two places waiting
 - **WHEN** "builder" has two pending suggestions on the exploration "Block editor v1" and "planner" one on the page "Roadmap", made later
@@ -140,4 +140,8 @@ The home dashboard SHALL show a "Waiting for review" section listing each projec
 #### Scenario: Nothing pending
 - **WHEN** every suggestion has been approved or rejected
 - **THEN** the home dashboard shows no "Waiting for review" section
+
+#### Scenario: Changes requested
+- **WHEN** "builder" has two pending suggestions on "Block editor v1" and the human requests changes on one
+- **THEN** the home dashboard lists "Block editor v1" with 1 suggestion
 

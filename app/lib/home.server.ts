@@ -169,7 +169,8 @@ function review(services: AppServices): ReviewItem[] {
     .map((p) => ({ id: p.homePageId, title: p.title || "Untitled", place: "Project", href: `/projects/${p.id}` }));
   const places = new Map([...homes, ...allPages(services), ...allTasks(services)].map((place) => [place.id, place]));
   const items = new Map<string, ReviewItem>();
-  const pending = services.suggestions.listPending();
+  // Suggestions with changes requested wait on their agent, not on the human.
+  const pending = services.suggestions.listPending().filter((s) => s.state !== "changes_requested");
   for (const suggestion of pending) {
     const place = places.get(suggestion.pageId);
     if (!place) continue;

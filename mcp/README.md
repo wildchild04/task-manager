@@ -54,8 +54,10 @@ To run from the source instead (while working on `mcp/`): `npm run mcp`, with th
 | `create_page` | A page with Markdown content: global in the workspace, in a project's library (`project`), or inside another page (`parent`) |
 | `suggest` | Propose an insert, replace or delete in any page or description, at a block from `anchors`; a human approves or rejects it |
 | `suggest_action` | Propose renaming or deleting a project, page or task, a chore's schedule, or an ending transition (cancel work, tombstone an idea, cancel a chore series); a human approves or rejects it |
-| `get_suggestion` | A suggestion's status: pending, outdated, approved, rejected, withdrawn; `subject` for actions |
-| `withdraw_suggestion` | Take back your own pending suggestion |
+| `list_suggestions` | Your own open suggestions, oldest first; `state: "changes_requested"` finds the ones the human asked you to change |
+| `get_suggestion` | A suggestion's status: pending, changes_requested (with the human's `feedback`), outdated, approved, rejected, withdrawn; `revision`, `note`, and `subject` for actions |
+| `revise_suggestion` | Change your own open suggestion in place: new `markdown`, `title` or `schedule`, and a `note` replying to the human |
+| `withdraw_suggestion` | Take back your own open suggestion |
 | `get_markdown_guide` | The Markdown agents can write (headings to `######`, lists, todos, quotes, pipe tables, ``` code fences, `> [!NOTE]` callouts, marks, links, mentions) and what isn't supported |
 
 Images are written as `![alt](https://…)` on a line of their own; pages read back uploaded images with their absolute URLs. Tools that take Markdown keep anything unsupported (images without an http(s) URL or inside a line of text, raw HTML, footnotes, a table without its `|---|` row, an unclosed fence) as text and say so in `warnings`, by line, e.g. `"Line 3: images need an http(s) URL or an uploaded image; kept as text"`.

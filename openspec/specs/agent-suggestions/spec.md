@@ -75,11 +75,15 @@ After approving or rejecting a suggestion, the page SHALL offer **Undo** until t
 - **THEN** the original block is back, the suggestion is pending again in its place, and its record is `pending`
 
 ### Requirement: Approve all and reject all
-A page with more than one pending suggestion SHALL offer **Approve all** and **Reject all**, applying to that page's pending suggestions in document order as one step. Approve all SHALL skip outdated suggestions and report how many were approved and how many were skipped.
+A page with more than one pending suggestion SHALL offer **Approve all** and **Reject all**, applying to that page's pending suggestions in document order as one step. Approve all SHALL skip outdated suggestions and suggestions with changes requested (see suggestion-feedback), and report how many were approved and how many of each were skipped. Reject all SHALL reject suggestions with changes requested too.
 
 #### Scenario: Approve all with one outdated
 - **WHEN** a page has three pending suggestions, one of them outdated, and Approve all is chosen
 - **THEN** two are approved, the outdated one stays pending, and the page reports "2 approved, 1 outdated"
+
+#### Scenario: Approve all with changes requested
+- **WHEN** a page has three pending suggestions, the human requested changes on one, and Approve all is chosen
+- **THEN** two are approved, the one with changes requested stays as it was, and the page reports "2 approved, 1 waiting for changes"
 
 ### Requirement: Reviewing suggestions on a page
 On every page and task description that shows content, a suggestion SHALL be shown in place as one enclosed, highlighted (yellow) region showing its author, its action ("Suggests adding", "Suggests replacing", "Suggests deleting"), its note, "Outdated" when it is, and **Approve** (not shown when outdated) and **Reject**. Inside the region, the proposed blocks SHALL be shown as an addition (labelled "Proposed", tinted green) and, for a replace or delete, a struck-through copy of the target's current content as a deletion (labelled "Removed", tinted red), so old and new are told apart by label as well as colour. In the editor, the target itself SHALL be marked in place the same way as the region's "Removed" part (red tint and red bar), so what would go is recognisable at both places; the copy inside the region SHALL NOT be marked again. Line breaks in the target's text SHALL show in both places. The page SHALL show how many suggestions are pending.

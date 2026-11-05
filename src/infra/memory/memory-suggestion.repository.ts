@@ -1,9 +1,12 @@
 import type { SuggestionRepository } from "~/domain/suggestions/suggestion.repository";
-import type { Suggestion } from "~/domain/suggestions/types";
+import type { Suggestion, SuggestionFeedback } from "~/domain/suggestions/types";
 
-/** Writes replace the map, so unit-of-work snapshots are never mutated. Insertion order is creation order. */
+type State = { suggestions: Map<string, Suggestion>; feedback: readonly SuggestionFeedback[] };
+
+/** Writes replace the map and the list, so unit-of-work snapshots are never mutated. Insertion order is creation order. */
 export class MemorySuggestionRepository implements SuggestionRepository {
   private suggestions = new Map<string, Suggestion>();
+  private feedback: readonly SuggestionFeedback[] = [];
 
   insert(suggestion: Suggestion): void {
     this.suggestions = new Map(this.suggestions).set(suggestion.id, suggestion);
@@ -25,11 +28,24 @@ export class MemorySuggestionRepository implements SuggestionRepository {
     return [...this.suggestions.values()].filter((s) => s.status === "pending");
   }
 
-  snapshot(): Map<string, Suggestion> {
-    return this.suggestions;
+  listPendingByAuthor(author: string): Suggestion[] {
+    return this.listPending().filter((s) => s.author === author);
   }
 
-  restore(snapshot: Map<string, Suggestion>): void {
-    this.suggestions = snapshot;
+  addFeedback(feedback: SuggestionFeedback): void {
+    this.feedback = [...this.feedback, feedback];
+  }
+
+  listFeedback(suggestionId: string): SuggestionFeedback[] {
+    return this.feedback.filter((f) => f.suggestionId === suggestionId);
+  }
+
+  snapshot(): State {
+    return { suggestions: this.suggestions, feedback: this.feedback };
+  }
+
+  restore(snapshot: State): void {
+    this.suggestions = snapshot.suggestions;
+    this.feedback = snapshot.feedback;
   }
 }

@@ -118,6 +118,9 @@ describe("suggestion boxes", () => {
     action: "insert",
     note: null,
     outdated: false,
+    state: "pending",
+    feedback: null,
+    answered: null,
     targetId: null,
     blocks: [content("n", "paragraph", "proposed-text")],
     removed: null,
@@ -141,6 +144,18 @@ describe("suggestion boxes", () => {
     expect(html).toContain("Outdated");
     expect(html).toMatch(/<\/span>Reject</);
     expect(html).not.toMatch(/<\/span>Approve</);
+  });
+
+  it("offers Request changes, and shows the feedback waiting for the agent, then what a revision answered", () => {
+    const waiting = render([suggestion({ note: "From the audit", state: "changes_requested", feedback: "Use a numbered list" })]);
+    for (const text of ["Request changes", "Changes requested", "From the audit", "You asked: Use a numbered list"]) {
+      expect(waiting).toContain(text);
+    }
+    expect(waiting).toMatch(/<\/span>Approve</);
+    const revised = render([suggestion({ answered: "Use a numbered list" })]);
+    expect(revised).toContain("Revised");
+    expect(revised).toContain("You asked: Use a numbered list");
+    expect(revised).not.toContain("Changes requested");
   });
 });
 

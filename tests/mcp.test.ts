@@ -57,7 +57,7 @@ describe("MCP server", () => {
     }
   });
 
-  it("offers the twenty-three tools, each describing its defaults", async () => {
+  it("offers the twenty-five tools, each describing its defaults", async () => {
     const client = await connect(services);
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
@@ -76,9 +76,11 @@ describe("MCP server", () => {
       "list_findings",
       "list_projects",
       "list_references",
+      "list_suggestions",
       "list_tasks",
       "read_description",
       "read_page",
+      "revise_suggestion",
       "search_pages",
       "suggest",
       "suggest_action",
@@ -86,7 +88,9 @@ describe("MCP server", () => {
       "withdraw_suggestion",
     ]);
     expect(tools.find((t) => t.name === "list_tasks")!.description).toContain("default 10");
-    for (const name of ["comment", "append_description", "add_finding", "edit_finding", "create_task", "create_page", "suggest"]) {
+    expect(tools.find((t) => t.name === "list_suggestions")!.description).toContain("changes_requested");
+    expect(tools.find((t) => t.name === "revise_suggestion")!.description).toContain("withdraw it and suggest again");
+    for (const name of ["comment", "append_description", "add_finding", "edit_finding", "create_task", "create_page", "suggest", "revise_suggestion"]) {
       expect(tools.find((t) => t.name === name)!.description).toContain("get_markdown_guide");
     }
   });
@@ -176,6 +180,23 @@ describe("MCP server", () => {
     expect(made).toEqual({ ok: true, id: expect.any(String) });
     const status = JSON.parse(text(await client.callTool({ name: "get_suggestion", arguments: { id: made.id } })));
     expect(status).toMatchObject({ status: "pending", subject: `page:${page.id}` });
+  });
+
+  it("finds the human's feedback and revises the suggestion", async () => {
+    const client = await connect(services);
+    const call = async (name: string, args: Record<string, unknown>) => JSON.parse(text(await client.callTool({ name, arguments: args })));
+    const page = await call("create_page", { title: "Scratch" });
+    const made = await call("suggest_action", { action: "rename", page: page.id, title: "Notes from the Monday meeting" });
+    services.suggestions.requestChanges(services.suggestions.idsStartingWith(made.id)[0]!, "Shorter, please");
+
+    const listed = await call("list_suggestions", { state: "changes_requested" });
+    expect(listed).toEqual({
+      suggestions: [{ id: made.id, action: "rename", status: "changes_requested", place: `page:${page.id}`, subject: `page:${page.id}` }],
+      more: false,
+    });
+    expect(await call("get_suggestion", { id: made.id })).toMatchObject({ feedback: [{ text: "Shorter, please" }] });
+    expect(await call("revise_suggestion", { id: made.id, title: "Monday notes", note: "Shortened" })).toEqual({ ok: true, revision: 2 });
+    expect(await call("get_suggestion", { id: made.id })).toMatchObject({ status: "pending", revision: 2, note: "Shortened" });
   });
 
   it("returns refusals as tool errors with the API's code", async () => {

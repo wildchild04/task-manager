@@ -524,3 +524,8 @@ body {
   align-items: center;
   color: var(--ds-on-surface-variant);
 }
+
+/* A suggestion's note of several lines (the agent's note, the human's feedback, why it's outdated), one per line. */
+.review-note-line {
+  display: block;
+}

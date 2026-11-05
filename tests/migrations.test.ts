@@ -8,22 +8,22 @@ import { afterEach, describe, expect, it } from "vitest";
 import { defaultMigrationsDir, migrate } from "~/infra/sqlite/migrate";
 import { SqliteSuggestionRepository } from "~/infra/sqlite/sqlite-suggestion.repository";
 
-describe("007_action_suggestions", () => {
-  const dirs: string[] = [];
-  afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
+const dirs: string[] = [];
+afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
 
-  /** A database migrated up to (not including) `stop`. */
-  function migratedUpTo(stop: string): Database.Database {
-    const dir = mkdtempSync(join(tmpdir(), "migrations-"));
-    dirs.push(dir);
-    for (const file of readdirSync(defaultMigrationsDir).filter((f) => f < stop)) {
-      copyFileSync(join(defaultMigrationsDir, file), join(dir, file));
-    }
-    const db = new Database(":memory:");
-    migrate(db, dir);
-    return db;
+/** A database migrated up to (not including) `stop`. */
+function migratedUpTo(stop: string): Database.Database {
+  const dir = mkdtempSync(join(tmpdir(), "migrations-"));
+  dirs.push(dir);
+  for (const file of readdirSync(defaultMigrationsDir).filter((f) => f < stop)) {
+    copyFileSync(join(defaultMigrationsDir, file), join(dir, file));
   }
+  const db = new Database(":memory:");
+  migrate(db, dir);
+  return db;
+}
 
+describe("007_action_suggestions", () => {
   it("keeps every block suggestion, with no subject", () => {
     const db = migratedUpTo("007");
     const insert = db.prepare(
@@ -58,6 +58,8 @@ describe("007_action_suggestions", () => {
       undo: null,
       createdAt: "2026-10-19T08:00:00.000Z",
       resolvedAt: null,
+      revision: 1,
+      revisedAt: null,
     });
     expect(repo.get("r")).toMatchObject({ subject: { kind: "page", id: "P" }, payload: { title: "Roadmap 2027" } });
 
@@ -81,5 +83,27 @@ describe("008_accounts", () => {
     expect(() => insert.run("b", "h2", null)).toThrow(/UNIQUE/);
     db.prepare("UPDATE agent_tokens SET revoked_at = '2026-11-02' WHERE id = 'a'").run();
     expect(() => insert.run("b", "h2", null)).not.toThrow();
+  });
+});
+
+describe("010_suggestion_feedback", () => {
+  it("reads existing suggestions at revision 1 with no feedback, and stores feedback", () => {
+    const db = migratedUpTo("010");
+    db.prepare(
+      `INSERT INTO suggestions (id, page_id, action, actor_name, status, created_at)
+       VALUES ('a', 'P', 'insert', 'builder', 'pending', '2026-11-01T08:00:00.000Z')`,
+    ).run();
+
+    expect(migrate(db)).toEqual(["010_suggestion_feedback.sql"]);
+    const repo = new SqliteSuggestionRepository(db);
+    expect(repo.get("a")).toMatchObject({ revision: 1, revisedAt: null });
+    expect(repo.listFeedback("a")).toEqual([]);
+
+    repo.addFeedback({ id: "f", suggestionId: "a", text: "Shorter", revision: 1, createdAt: "2026-11-02T08:00:00.000Z" });
+    expect(repo.listFeedback("a")).toEqual([
+      { id: "f", suggestionId: "a", text: "Shorter", revision: 1, createdAt: "2026-11-02T08:00:00.000Z" },
+    ]);
+    expect(repo.listPendingByAuthor("builder").map((s) => s.id)).toEqual(["a"]);
+    expect(repo.listPendingByAuthor("claude")).toEqual([]);
   });
 });

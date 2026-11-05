@@ -1,5 +1,5 @@
 import type { AppServices } from "~/composition";
-import type { ActionKind, ActionSuggestion, Subject } from "~/domain/suggestions/types";
+import type { ActionKind, ActionSuggestion, Subject, SuggestionState } from "~/domain/suggestions/types";
 
 import { describeSchedule, slugOfKind, TASK_LISTS } from "./format";
 import { pageDeletion } from "./page-edit.server";
@@ -13,6 +13,12 @@ export type ActionSuggestionItem = {
   words: string;
   note: string | null;
   outdated: boolean;
+  /** `changes_requested` while the human's feedback waits for the agent. */
+  state: SuggestionState;
+  /** The human's latest open feedback. */
+  feedback: string | null;
+  /** After a revision: the feedback it answered. */
+  answered: string | null;
 };
 
 /** "this project", "this page", "this exploration", … */
@@ -49,7 +55,10 @@ export function actionSuggestionItems(services: AppServices, placePageId: string
     action: s.action,
     words: actionWords(services, s),
     note: s.note,
-    outdated: s.state === "outdated",
+    outdated: s.outdated,
+    state: s.state,
+    feedback: s.feedback.at(-1)?.text ?? null,
+    answered: s.answered?.text ?? null,
   }));
 }
 

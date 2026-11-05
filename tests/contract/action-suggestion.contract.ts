@@ -205,7 +205,7 @@ export function actionSuggestionContract(name: string, factory: ServicesFactory)
 
       it("keeps action suggestions out of a page's approve all", () => {
         suggest("w", page("W"), { action: "rename", title: "Roadmap 2027" });
-        expect(services.suggestions.approveAll("W")).toEqual({ approved: 0, outdated: 0 });
+        expect(services.suggestions.approveAll("W")).toEqual({ approved: 0, outdated: 0, waiting: 0 });
         expect(state("w")).toBe("pending");
       });
     });

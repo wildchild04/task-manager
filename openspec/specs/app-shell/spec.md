@@ -71,7 +71,7 @@ An unknown route or a page ID that does not exist SHALL render a not-found page 
 - **THEN** a not-found page is shown with status 404
 
 ### Requirement: Notification bell
-The app shell's top bar SHALL show a bell button on every screen, with a badge counting the places that need the human (hidden at zero): projects, pages and tasks with pending suggestions (block or action suggestions, see action-suggestions), chores that are overdue or urgent, and work tasks returned by an agent and not yet started again. Its accessible name SHALL include the count. Opening it SHALL list those places, one row each: suggestions waiting (oldest first, with the number of suggestions and the agents that made them, or, when the place's only pending suggestion is an action, the action in words such as "Suggests deleting this page"), then overdue chores, urgent chores by due time, and returned work (with the agent that returned it); choosing a row SHALL open the project home, page or task. Action suggestions whose subject no longer exists SHALL NOT be counted. With nothing to show, the list SHALL say "Nothing needs you". The count and list SHALL be the same as the home dashboard's for the same items, and SHALL be current after every navigation and every action taken in the app.
+The app shell's top bar SHALL show a bell button on every screen, with a badge counting the places that need the human (hidden at zero): projects, pages and tasks with pending suggestions (block or action suggestions, see action-suggestions), chores that are overdue or urgent, and work tasks returned by an agent and not yet started again. Its accessible name SHALL include the count. Opening it SHALL list those places, one row each: suggestions waiting (oldest first, with the number of suggestions and the agents that made them, or, when the place's only pending suggestion is an action, the action in words such as "Suggests deleting this page"), then overdue chores, urgent chores by due time, and returned work (with the agent that returned it); choosing a row SHALL open the project home, page or task. Action suggestions whose subject no longer exists SHALL NOT be counted. Suggestions with changes requested (see suggestion-feedback) wait on their agent and SHALL NOT be counted; once revised, they SHALL be counted again. With nothing to show, the list SHALL say "Nothing needs you". The count and list SHALL be the same as the home dashboard's for the same items, and SHALL be current after every navigation and every action taken in the app.
 
 #### Scenario: Suggestions waiting
 - **WHEN** "claude" has two pending suggestions on the exploration "Block editor v1"
@@ -96,6 +96,10 @@ The app shell's top bar SHALL show a bell button on every screen, with a badge c
 #### Scenario: Work in progress isn't listed
 - **WHEN** the only active work is in progress with an agent
 - **THEN** the bell has no badge
+
+#### Scenario: Waiting on the agent
+- **WHEN** the human requests changes on the only pending suggestion
+- **THEN** the bell has no badge, and when the agent revises it, the bell lists its place again
 
 ### Requirement: Account menu
 While signed in, the shell's top bar SHALL show an account button naming the account's email, opening a menu with Settings (to `/settings`) and Sign out.

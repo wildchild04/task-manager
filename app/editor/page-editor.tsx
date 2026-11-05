@@ -44,6 +44,7 @@ import { Vim, type VimLayout, type VimMode } from "~/editor/vim";
 import { lastCharacter } from "~/editor/vim-motions";
 
 import { SuggestionsContext } from "../blocks/block-view";
+import { postSuggestionDecision } from "../components/request-changes-dialog";
 import { MentionTargetsContext } from "../blocks/rich-text";
 import type { MentionTargets } from "../blocks/view-model";
 import type { EditablePage } from "../lib/page-edit.server";
@@ -800,17 +801,7 @@ export function PageEditor({
       setDeciding(true);
       queue.flush();
       await queue.idle();
-      let result: { ok: boolean; message: string; undo?: string };
-      try {
-        const response = await fetch(withBase("/api/suggestions"), {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        result = (await response.json()) as typeof result;
-      } catch {
-        result = { ok: false, message: "The server couldn't be reached; try again" };
-      }
+      const result = await postSuggestionDecision(body);
       forgetVersion();
       await revalidator.revalidate();
       setDeciding(false);
@@ -822,6 +813,20 @@ export function PageEditor({
     },
     [queue, revalidator],
   );
+  // Feedback for an agent: a refusal stays in its dialog, so only a sent one reloads the page.
+  const requestChanges = useCallback(
+    async (id: string, text: string) => {
+      queue.flush();
+      await queue.idle();
+      const result = await postSuggestionDecision({ intent: "request-changes", id, text });
+      if (result.ok) {
+        forgetVersion();
+        await revalidator.revalidate();
+      }
+      return result;
+    },
+    [queue, revalidator],
+  );
   const suggestions = useMemo(() => {
     const views = Object.values(page.suggestions);
     return {
@@ -829,8 +834,9 @@ export function PageEditor({
       byId: page.suggestions,
       removing: new Set(views.flatMap((s) => (s.targetId ? [s.targetId] : []))),
       decide: (intent: "approve" | "reject", id: string) => void sendDecision({ intent, id }),
+      requestChanges,
     };
-  }, [page.suggestions, sendDecision]);
+  }, [page.suggestions, sendDecision, requestChanges]);
 
   // ----- Leaving with unsaved edits -----
 

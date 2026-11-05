@@ -8,6 +8,7 @@ import { deletionRedirect } from "./action-suggestions.server";
 const decisionSchema = z.discriminatedUnion("intent", [
   z.object({ intent: z.enum(["approve", "reject", "reopen"]), id: z.string().min(1) }),
   z.object({ intent: z.enum(["approve-all", "reject-all"]), pageId: z.string().min(1) }),
+  z.object({ intent: z.literal("request-changes"), id: z.string().min(1), text: z.string() }),
 ]);
 
 /**
@@ -18,7 +19,10 @@ export type DecisionResult = { ok: true; message: string; undo?: string; redirec
 
 const count = (n: number, what: string) => `${n} ${what}`;
 
-/** Approves, rejects or reopens a suggestion, or approves or rejects all of a page's: what the review buttons send. */
+/**
+ * Approves, rejects or reopens a suggestion, asks its agent for changes, or approves or rejects all of a
+ * page's: what the review buttons send.
+ */
 export function decideSuggestion(services: AppServices, input: unknown): DecisionResult {
   const parsed = decisionSchema.safeParse(input);
   if (!parsed.success) return { ok: false, message: "The decision couldn't be read" };
@@ -45,12 +49,19 @@ export function decideSuggestion(services: AppServices, input: unknown): Decisio
         services.suggestions.reopen(decision.id);
         return { ok: true, message: "Undone" };
       case "approve-all": {
-        const { approved, outdated } = services.suggestions.approveAll(decision.pageId);
+        const { approved, outdated, waiting } = services.suggestions.approveAll(decision.pageId);
         return {
           ok: true,
-          message: [count(approved, "approved"), ...(outdated ? [count(outdated, "outdated")] : [])].join(", "),
+          message: [
+            count(approved, "approved"),
+            ...(outdated ? [count(outdated, "outdated")] : []),
+            ...(waiting ? [count(waiting, "waiting for changes")] : []),
+          ].join(", "),
         };
       }
+      case "request-changes":
+        services.suggestions.requestChanges(decision.id, decision.text);
+        return { ok: true, message: "Changes requested" };
       case "reject-all":
         return { ok: true, message: count(services.suggestions.rejectAll(decision.pageId).rejected, "rejected") };
     }

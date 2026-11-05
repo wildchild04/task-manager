@@ -311,7 +311,7 @@ export function suggestionContract(name: string, factory: ServicesFactory) {
         suggest({ id: "early", afterId: "B", blocks: [para("n3", "After beta")] });
         setText("A", "Alpha 2");
         expect(services.suggestions.pendingOn("P").map((s) => s.id)).toEqual(["r", "early", "late"]);
-        expect(services.suggestions.approveAll("P")).toEqual({ approved: 2, outdated: 1 });
+        expect(services.suggestions.approveAll("P")).toEqual({ approved: 2, outdated: 1, waiting: 0 });
         expect(services.suggestions.pendingOn("P").map((s) => s.id)).toEqual(["r"]);
         expect(services.suggestions.rejectAll("P")).toEqual({ rejected: 1 });
         expect(services.suggestions.listPending()).toEqual([]);

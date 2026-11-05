@@ -90,6 +90,25 @@ describe("suggestions on screens", () => {
     expect(decideSuggestion(services, { intent: "reject-all", pageId: "P" })).toEqual({ ok: true, message: "1 rejected" });
     expect(decideSuggestion(services, { intent: "explode" })).toEqual({ ok: false, message: "The decision couldn't be read" });
   });
+
+  it("requests changes, shows the feedback and then what a revision answered, and skips it in approve all", () => {
+    expect(decideSuggestion(services, { intent: "request-changes", id: "i", text: "  " })).toEqual({
+      ok: false,
+      message: "Say what should change",
+    });
+    expect(decideSuggestion(services, { intent: "request-changes", id: "i", text: "Make it two paragraphs" })).toEqual({
+      ok: true,
+      message: "Changes requested",
+    });
+    const box = () => buildPageView(services.blocks, "P", services.suggestions)!.blocks.find((b) => b.id === "i");
+    expect(box()).toMatchObject({ state: "changes_requested", outdated: false, feedback: "Make it two paragraphs", answered: null });
+    expect(decideSuggestion(services, { intent: "approve-all", pageId: "P" })).toEqual({
+      ok: true,
+      message: "1 approved, 1 waiting for changes",
+    });
+    services.suggestions.revise({ id: "i", author: "planner", blocks: [para("n3", "One"), para("n4", "Two")] });
+    expect(box()).toMatchObject({ state: "pending", feedback: null, answered: "Make it two paragraphs" });
+  });
 });
 
 describe("action suggestions on screens", () => {
@@ -120,14 +139,38 @@ describe("action suggestions on screens", () => {
     add("p", { kind: "project", id: "P" }, { action: "rename", title: "Allotment" });
 
     expect(actionSuggestionItems(services, idea)).toEqual([
-      { id: "r", author: "claude", action: "rename", words: 'renaming this exploration to "Passkey login"', note: null, outdated: false },
-      { id: "t", author: "claude", action: "transition", words: "tombstoning this exploration", note: "Superseded", outdated: false },
+      {
+        id: "r",
+        author: "claude",
+        action: "rename",
+        words: 'renaming this exploration to "Passkey login"',
+        note: null,
+        outdated: false,
+        state: "pending",
+        feedback: null,
+        answered: null,
+      },
+      {
+        id: "t",
+        author: "claude",
+        action: "transition",
+        words: "tombstoning this exploration",
+        note: "Superseded",
+        outdated: false,
+        state: "pending",
+        feedback: null,
+        answered: null,
+      },
     ]);
     expect(actionSuggestionItems(services, chore).map((i) => i.words)).toEqual([
       "changing the schedule to Every Monday at 09:00",
       "removing the schedule",
     ]);
     expect(actionSuggestionItems(services, "W").map((i) => i.words)).toEqual(["deleting this page"]);
+    services.suggestions.requestChanges("d", "Keep it, archive instead");
+    expect(actionSuggestionItems(services, "W")).toMatchObject([
+      { state: "changes_requested", feedback: "Keep it, archive instead", answered: null },
+    ]);
     expect(actionSuggestionItems(services, services.projects.get("P")!.homePageId).map((i) => i.words)).toEqual([
       'renaming this project to "Allotment"',
     ]);

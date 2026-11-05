@@ -35,6 +35,10 @@ type Record = {
   status: SuggestionStatus;
   createdAt: string;
   resolvedAt: string | null;
+  /** 1 when made, one more with each revision by its agent. */
+  revision: number;
+  /** When its agent last revised it; null until then. */
+  revisedAt: string | null;
 };
 
 /** A proposed change to a page's own content; the `suggestion` block with the same ID holds the proposed blocks while it's on the page. */
@@ -58,8 +62,20 @@ export type ActionSuggestion = Record & {
 
 export type Suggestion = BlockSuggestion | ActionSuggestion;
 
-/** A suggestion's status as reported: a pending one whose target or subject changed is `outdated`. */
-export type SuggestionState = SuggestionStatus | "outdated";
+/**
+ * A suggestion's status as reported: a pending one with open feedback is `changes_requested`, and otherwise,
+ * when its target or subject changed, `outdated`.
+ */
+export type SuggestionState = SuggestionStatus | "outdated" | "changes_requested";
+
+/** The human's request for changes, given on one revision of a suggestion; open while that is still the current one. */
+export type SuggestionFeedback = {
+  id: string;
+  suggestionId: string;
+  text: string;
+  revision: number;
+  createdAt: string;
+};
 
 /** A proposed block, with nested content. */
 export type SuggestionBlockInput = NewBlock & { children?: SuggestionBlockInput[] };

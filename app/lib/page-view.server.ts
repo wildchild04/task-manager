@@ -168,7 +168,10 @@ function buildChildrenView(
           author: record?.author ?? "An agent",
           action: block.props.action,
           note: record?.note ?? null,
-          outdated: record?.state === "outdated",
+          outdated: record?.outdated ?? false,
+          state: record?.state ?? "pending",
+          feedback: record?.feedback.at(-1)?.text ?? null,
+          answered: record?.answered?.text ?? null,
           targetId,
           blocks: children,
           removed:

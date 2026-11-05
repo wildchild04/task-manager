@@ -176,6 +176,21 @@ describe("home dashboard", () => {
       services.suggestions.approve(id);
       expect(notificationsView(services, clock)).toEqual([]);
     });
+
+    it("leaves out suggestions waiting for changes, and lists them again once revised", () => {
+      const explore = task("E", "A", "exploration", "Block editor v1");
+      const first = suggestOn(explore.bodyPageId, "s1");
+      suggestOn(explore.bodyPageId, "s2");
+      services.suggestions.requestChanges(first.id, "Use a numbered list");
+      expect(homeView(services, clock).review).toMatchObject([{ id: explore.bodyPageId, count: 1 }]);
+      services.suggestions.requestChanges(services.suggestions.listByAuthor("claude", "pending")[0]!.id, "Shorter");
+      expect(notificationsView(services, clock)).toEqual([]);
+      expect(homeView(services, clock).review).toEqual([]);
+      services.suggestions.revise({ id: first.id, author: "claude", note: "Numbered now" });
+      expect(notificationsView(services, clock)).toEqual([
+        { id: explore.bodyPageId, title: "Block editor v1", detail: "1 suggestion · claude", href: "/tasks/E" },
+      ]);
+    });
   });
 
   describe("action suggestions", () => {

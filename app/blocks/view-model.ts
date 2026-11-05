@@ -1,4 +1,5 @@
 import type { PropsByType, RichText } from "~/domain/blocks/types";
+import type { SuggestionState } from "~/domain/suggestions/types";
 
 /** Content block types the viewer renders directly. */
 export type ContentBlockType = Exclude<keyof PropsByType, "page" | "reference" | "comment" | "suggestion">;
@@ -34,7 +35,14 @@ export type SuggestionBlockView = {
   author: string;
   action: "insert" | "replace" | "delete";
   note: string | null;
+  /** Its target changed since it was suggested or last revised: it can't be approved. */
   outdated: boolean;
+  /** `changes_requested` while the human's feedback waits for the agent. */
+  state: SuggestionState;
+  /** The human's latest open feedback. */
+  feedback: string | null;
+  /** After a revision: the feedback it answered. */
+  answered: string | null;
   targetId: string | null;
   blocks: ViewBlock[];
   removed: ViewBlock | null;
