@@ -109,7 +109,8 @@ The API SHALL offer exactly these functions, each returning only the listed fiel
 | `GET tasks` | `project?`, `kind?`, `state?`, `query?` (title contains), `limit?`, `cursor?` | `{ tasks: [{ id, kind, state, title }], more, cursor? }`, most recently updated first |
 | `POST tasks` | `{ project, kind, title, description?, urgency?, schedule?, iteratesOn? }` | `{ ok: true, id, state }` |
 | `GET task/:id` | | `{ id, kind, state, title, project, heldBy?, transitions, counts: { comments, references, findings? } }` (`transitions`: those this agent may apply now, never the ending ones; `findings` for explorations only) |
-| `GET task/:id/description` | `maxChars?`, `offset?`, `anchors?` | `{ markdown, more, offset? }` |
+| `GET task/:id/description` | `maxChars?`, `offset?`, `anchors?` | `{ markdown, more, offset?, assets? }` |
+| `GET task/:id/asset/:asset` | | `{ id, type, size, width?, height?, data }` (see Agents read images) |
 | `GET task/:id/comments` | `limit?` (default 5), `cursor?`, `maxChars?` (per comment, default 1000) | `{ comments: [{ id, author, markdown }], more, cursor? }`, newest first |
 | `GET task/:id/references` | `limit?` | `{ references: [{ kind, id, title }], more }` (missing targets as `{ kind, id, missing: true }`) |
 | `POST task/:id/transition` | `{ name, reason?, title?, next?, scope? }` (`reason` for work `return`, `title` for `promote`, `next` for chore `complete`, `scope` for chore `cancel`) | `{ ok: true, state, work? }` (`work`: the new work's ID after `promote`) |
@@ -121,7 +122,8 @@ The API SHALL offer exactly these functions, each returning only the listed fiel
 | `POST task/:id/description` | `{ markdown }` (appended) | `{ ok: true }` |
 | `GET pages` | `query`, `limit?` | `{ pages: [{ id, title, place }], more }` |
 | `POST pages` | `{ title, project?, parent?, markdown? }` | `{ ok: true, id }` |
-| `GET page/:id` | `maxChars?`, `offset?`, `anchors?` | `{ title, markdown, more, offset? }` |
+| `GET page/:id` | `maxChars?`, `offset?`, `anchors?` | `{ title, markdown, more, offset?, assets? }` |
+| `GET page/:id/asset/:asset` | | `{ id, type, size, width?, height?, data }` (see Agents read images) |
 | `POST suggest` | `{ page? , task?, action, after?, inside?, target?, markdown?, note? }` | `{ ok: true, id }` |
 | `POST suggest-action` | `{ action, project? , page? , task?, title?, schedule?, transition?, scope?, note? }` | `{ ok: true, id }` |
 | `GET suggestions` | `state?` (`pending`, `outdated` or `changes_requested`), `limit?` (default 10), `cursor?` | `{ suggestions: [{ id, action, status, place, subject? }], more, cursor? }`: the caller's own open suggestions, oldest first |
@@ -280,4 +282,23 @@ A line that is only `![alt](src)` SHALL become an image block: a `src` naming an
 #### Scenario: Another agent's list
 - **WHEN** "reviewer" calls `GET suggestions`
 - **THEN** suggestions made by "claude" are not listed
+
+### Requirement: Agents read images
+`GET page/:id` and `GET task/:id/description` SHALL answer `assets`, the uploaded images in the whole page or description (pending suggestions included, not only the part cut by `maxChars`), in document order, each once, as `[{ id, alt }]`; `id` is the uploaded item's ID, the last segment of its URL in the Markdown. `assets` SHALL be left out when there are none, and external images SHALL never be listed. `GET page/:id/asset/:asset` and `GET task/:id/asset/:asset` SHALL answer one of those images as `{ id, type, size, width?, height?, data }`: its MIME type (`image/png`, `image/jpeg`, `image/gif` or `image/webp`), its size in bytes, its pixel dimensions when they can be read from its header, and its bytes in base64. The page or task SHALL be resolved as for `GET page/:id` and `GET task/:id`; an item not used by an image block in it (another page's, a malformed ID, or an external URL) SHALL be refused with status 404 (code `not_found`) without reading storage, and an item it uses whose bytes are gone with status 404 (code `missing`). Messages SHALL name the asset ID and never a storage path. Nothing outside the content repository SHALL be fetched.
+
+#### Scenario: Listing a page's images
+- **WHEN** a page holds an uploaded screenshot "Error dialog", the same screenshot again, and an external chart image
+- **THEN** `GET page/:id` answers `assets: [{ id: "<sha>.png", alt: "Error dialog" }]`, and its Markdown is as before
+
+#### Scenario: Reading an image
+- **WHEN** an agent calls `GET page/:id/asset/<sha>.png` for a 1200×800 PNG on that page
+- **THEN** the answer is `{ id, type: "image/png", size, width: 1200, height: 800, data }`, and `data` decodes to the stored bytes
+
+#### Scenario: An image from another page
+- **WHEN** an agent asks for an uploaded image's ID through a page that doesn't hold it
+- **THEN** it is refused with code `not_found`, and nothing is read from storage
+
+#### Scenario: A screenshot in a task description
+- **WHEN** a bug task's description holds an uploaded JPEG
+- **THEN** `GET task/:id/description` lists it in `assets`, and `GET task/:id/asset/:asset` answers it with `type: "image/jpeg"`
 

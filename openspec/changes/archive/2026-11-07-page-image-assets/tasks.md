@@ -14,4 +14,4 @@
 ## 4. Check
 
 - [x] 4.1 Typecheck, unit tests and the Playwright suite
-- [ ] 4.2 Try it on the dev instance through `notion-tasks-dev`: upload an image to a page, `read_page`, then `read_page_asset`, and see the image
+- [x] 4.2 Try it on the dev instance through `notion-tasks-dev`: upload an image to a page, `read_page`, then `read_page_asset`, and see the image
