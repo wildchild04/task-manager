@@ -11,7 +11,10 @@ export type AgentCall = (
   input?: Record<string, unknown>,
 ) => Promise<{ status: number; body: unknown }>;
 
-type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean };
+type ToolResult = {
+  content: ({ type: "text"; text: string } | { type: "image"; data: string; mimeType: string })[];
+  isError?: boolean;
+};
 
 /** The API's answer as a tool result: compact JSON, or the error's code and message. */
 async function run(call: AgentCall, method: "GET" | "POST", path: string, input?: Record<string, unknown>): Promise<ToolResult> {
@@ -25,6 +28,22 @@ async function run(call: AgentCall, method: "GET" | "POST", path: string, input?
       isError: true,
     };
   return { content: [{ type: "text", text: JSON.stringify(body) }] };
+}
+
+/**
+ * An image from the API as MCP image content, so the agent sees it, followed
+ * by its metadata (the API's answer without the bytes) as text.
+ */
+async function image(call: AgentCall, path: string): Promise<ToolResult> {
+  const result = await run(call, "GET", path);
+  if (result.isError) return result;
+  const { data, ...meta } = JSON.parse((result.content[0] as { text: string }).text) as { data: string; type: string };
+  return {
+    content: [
+      { type: "image", data, mimeType: meta.type },
+      { type: "text", text: JSON.stringify(meta) },
+    ],
+  };
 }
 
 const id = z.string().describe("Task ID: the 8-character ID from list_tasks (or the full ID)");
@@ -116,7 +135,7 @@ export function createAgentServer(call: AgentCall): McpServer {
     "read_description",
     {
       description:
-        "A task's description as Markdown, cut at `maxChars` (default 2000). If `more` is true, call again with the returned `offset`. Pending suggestions show as `<suggestion …>` … `</suggestion>`.",
+        "A task's description as Markdown, cut at `maxChars` (default 2000). If `more` is true, call again with the returned `offset`. Pending suggestions show as `<suggestion …>` … `</suggestion>`. Uploaded images are listed in `assets` as { id, alt }: look at one with read_page_asset.",
       inputSchema: { id, maxChars: maxChars(2000), offset, anchors },
     },
     ({ id, ...rest }) => run(call, "GET", `task/${enc(id)}/description`, rest),
@@ -237,10 +256,27 @@ export function createAgentServer(call: AgentCall): McpServer {
     "read_page",
     {
       description:
-        "A page as { title, markdown }, cut at `maxChars` (default 2000). If `more` is true, call again with the returned `offset`. Pending suggestions show as `<suggestion …>` … `</suggestion>`.",
+        "A page as { title, markdown, assets? }, cut at `maxChars` (default 2000). If `more` is true, call again with the returned `offset`. Pending suggestions show as `<suggestion …>` … `</suggestion>`. `assets` lists the page's uploaded images as { id, alt } (the whole page, in order): look at one with read_page_asset.",
       inputSchema: { id: z.string().describe("Page ID from search_pages"), maxChars: maxChars(2000), offset, anchors },
     },
     ({ id, ...rest }) => run(call, "GET", `page/${enc(id)}`, rest),
+  );
+
+  server.registerTool(
+    "read_page_asset",
+    {
+      description:
+        "Look at an uploaded image from a page or a task's description: give `page` or `task`, and `asset`, an ID from the `assets` that read_page or read_description returned. Returns the image (PNG, JPEG, GIF or WebP) and { id, type, size, width?, height? }. Only images uploaded to that page or description; external image URLs are never fetched.",
+      inputSchema: {
+        page: z.string().optional().describe("Page ID from search_pages"),
+        task: z.string().optional().describe("Task ID: its description"),
+        asset: z.string().describe("An image ID from `assets`"),
+      },
+    },
+    ({ page, task, asset }) =>
+      (page === undefined) === (task === undefined)
+        ? { content: [{ type: "text", text: "validation: Give `page` or `task`, not both" }], isError: true }
+        : image(call, page !== undefined ? `page/${enc(page)}/asset/${enc(asset)}` : `task/${enc(task!)}/asset/${enc(asset)}`),
   );
 
   server.registerTool(

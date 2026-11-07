@@ -63,3 +63,54 @@ export function detectImageType(bytes: Uint8Array): ContentType | undefined {
   if (startsWith(bytes, ascii("RIFF")) && startsWith(bytes, ascii("WEBP"), 8)) return "image/webp";
   return undefined;
 }
+
+export type ImageSize = { width: number; height: number };
+
+const u16be = (b: Uint8Array, i: number) => (b[i]! << 8) | b[i + 1]!;
+const u16le = (b: Uint8Array, i: number) => b[i]! | (b[i + 1]! << 8);
+const u24le = (b: Uint8Array, i: number) => b[i]! | (b[i + 1]! << 8) | (b[i + 2]! << 16);
+const u32be = (b: Uint8Array, i: number) => ((b[i]! << 24) >>> 0) + ((b[i + 1]! << 16) | (b[i + 2]! << 8) | b[i + 3]!);
+
+/** JPEG start-of-frame markers (baseline, progressive, lossless, …); not DHT, JPG or DAC. */
+const JPEG_SOF = new Set([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf]);
+
+function jpegSize(b: Uint8Array): ImageSize | undefined {
+  let i = 2;
+  while (i + 9 <= b.length) {
+    if (b[i] !== 0xff) return undefined;
+    const marker = b[i + 1]!;
+    if (marker === 0xff) {
+      i += 1; // fill byte
+      continue;
+    }
+    if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
+      i += 2; // markers without a length
+      continue;
+    }
+    if (JPEG_SOF.has(marker)) return { height: u16be(b, i + 5), width: u16be(b, i + 7) };
+    if (marker === 0xd9 || marker === 0xda) return undefined; // end of image, or scan data before any frame
+    i += 2 + u16be(b, i + 2);
+  }
+  return undefined;
+}
+
+function webpSize(b: Uint8Array): ImageSize | undefined {
+  const chunk = String.fromCharCode(...b.subarray(12, 16));
+  if (chunk === "VP8 " && b.length >= 30) return { width: u16le(b, 26) & 0x3fff, height: u16le(b, 28) & 0x3fff };
+  if (chunk === "VP8L" && b.length >= 25 && b[20] === 0x2f) {
+    const bits = b[21]! | (b[22]! << 8) | (b[23]! << 16) | (b[24]! << 24);
+    return { width: (bits & 0x3fff) + 1, height: ((bits >>> 14) & 0x3fff) + 1 };
+  }
+  if (chunk === "VP8X" && b.length >= 30) return { width: u24le(b, 24) + 1, height: u24le(b, 27) + 1 };
+  return undefined;
+}
+
+/** An image's pixel dimensions, read from its header, or `undefined` when they can't be read. */
+export function imageSize(bytes: Uint8Array, type: ContentType): ImageSize | undefined {
+  let size: ImageSize | undefined;
+  if (type === "image/png") size = bytes.length >= 24 ? { width: u32be(bytes, 16), height: u32be(bytes, 20) } : undefined;
+  else if (type === "image/gif") size = bytes.length >= 10 ? { width: u16le(bytes, 6), height: u16le(bytes, 8) } : undefined;
+  else if (type === "image/jpeg") size = jpegSize(bytes);
+  else size = webpSize(bytes);
+  return size && size.width > 0 && size.height > 0 ? size : undefined;
+}

@@ -15,6 +15,7 @@ const ROUTES: { method: "GET" | "POST"; path: string; handler: Handler }[] = [
   { method: "GET", path: "task/:id", handler: (s, a, p) => api.getTask(s, a, p.id!) },
   { method: "GET", path: "task/:id/description", handler: (s, _a, p, input) => api.readDescription(s, p.id!, input) },
   { method: "GET", path: "task/:id/comments", handler: (s, _a, p, input) => api.listComments(s, p.id!, input) },
+  { method: "GET", path: "task/:id/asset/:asset", handler: (s, _a, p) => api.readTaskAsset(s, p.id!, p.asset!) },
   { method: "GET", path: "task/:id/references", handler: (s, _a, p, input) => api.listReferences(s, p.id!, input) },
   { method: "POST", path: "task/:id/transition", handler: (s, a, p, input) => api.transition(s, a, p.id!, input) },
   { method: "POST", path: "task/:id/comment", handler: (s, a, p, input) => api.comment(s, a, p.id!, input) },
@@ -26,6 +27,7 @@ const ROUTES: { method: "GET" | "POST"; path: string; handler: Handler }[] = [
   { method: "GET", path: "pages", handler: (s, _a, _p, input) => api.searchPages(s, input) },
   { method: "POST", path: "pages", handler: (s, _a, _p, input) => api.createPage(s, input) },
   { method: "GET", path: "page/:id", handler: (s, _a, p, input) => api.readPage(s, p.id!, input) },
+  { method: "GET", path: "page/:id/asset/:asset", handler: (s, _a, p) => api.readPageAsset(s, p.id!, p.asset!) },
   { method: "POST", path: "suggest", handler: (s, a, _p, input) => api.suggest(s, a, input) },
   { method: "POST", path: "suggest-action", handler: (s, a, _p, input) => api.suggestAction(s, a, input) },
   { method: "GET", path: "suggestions", handler: (s, a, _p, input) => api.listSuggestions(s, a, input) },
@@ -95,7 +97,7 @@ export async function handleAgentRequest(services: AppServices, request: Request
   }
   try {
     const scoped = withOrigin(services, new URL(request.url).origin);
-    return json(200, found.route.handler(scoped, { kind: "agent", name }, found.params, input));
+    return json(200, await found.route.handler(scoped, { kind: "agent", name }, found.params, input));
   } catch (error) {
     if (error instanceof AgentError) return refuse(error.status, error.code, error.message);
     console.error("Agent API error", error);

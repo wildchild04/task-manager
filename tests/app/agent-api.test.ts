@@ -749,6 +749,78 @@ describe("agent API", () => {
     });
   });
 
+  describe("reading images", () => {
+    const be32 = (n: number) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+    /** A PNG's signature and IHDR: enough to be stored and measured. */
+    const png = (width: number, height: number) =>
+      new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...be32(13), 0x49, 0x48, 0x44, 0x52, ...be32(width), ...be32(height), 8, 6, 0, 0, 0]);
+
+    const page = async (markdown: string) => {
+      const { body } = await call("POST", "pages", { title: "Scores", markdown });
+      return body.id as string;
+    };
+
+    it("lists a page's uploaded images once, in order, and leaves the Markdown alone", async () => {
+      const shot = await services.content.put(png(1200, 800), "image/png");
+      const chart = await services.content.put(png(10, 10), "image/png");
+      const id = await page(
+        [`![Error dialog](http://app/content/${shot.id})`, "![External](https://grafana.example/p95.png)", `![Again](http://app/content/${shot.id})`, `- item\n  ![Chart](http://app/content/${chart.id})`].join("\n\n"),
+      );
+      const { body } = await call("GET", `page/${id}?maxChars=10`);
+      expect(body.assets).toEqual([
+        { id: shot.id, alt: "Error dialog" },
+        { id: chart.id, alt: "Chart" },
+      ]);
+      expect(body.markdown).toBe("![Error di");
+      expect((await call("GET", `page/${await page("No images")}`)).body).toEqual({ title: "Scores", markdown: "No images", more: false });
+    });
+
+    it("answers an image the page uses, with its type, size, dimensions and bytes", async () => {
+      const bytes = png(1200, 800);
+      const shot = await services.content.put(bytes, "image/png");
+      const id = await page(`![Score](http://app/content/${shot.id})`);
+      const { status, body } = await call("GET", `page/${id}/asset/${shot.id}`);
+      expect(status).toBe(200);
+      expect(body).toEqual({ id: shot.id, type: "image/png", size: bytes.length, width: 1200, height: 800, data: expect.any(String) });
+      expect(new Uint8Array(Buffer.from(body.data, "base64"))).toEqual(bytes);
+    });
+
+    it("refuses images the page doesn't use without reading storage, and gone ones as missing", async () => {
+      const mine = await services.content.put(png(1, 1), "image/png");
+      const theirs = await services.content.put(png(2, 2), "image/png");
+      const id = await page(`![Mine](http://app/content/${mine.id})\n\n![Ext](https://example.com/a.png)`);
+      let reads = 0;
+      const get = services.content.get.bind(services.content);
+      services.content.get = (asset) => (reads++, get(asset));
+      for (const asset of [theirs.id, "../app.sqlite", encodeURIComponent("https://example.com/a.png")]) {
+        const refused = await call("GET", `page/${id}/asset/${asset}`);
+        expect(refused).toMatchObject({ status: 404, body: { error: { code: "not_found" } } });
+        expect(refused.body.error.message).not.toMatch(/data\/content|\.tmp/);
+      }
+      expect(reads).toBe(0);
+      expect((await call("GET", `page/nope0000/asset/${mine.id}`)).body.error.code).toBe("not_found");
+      await services.content.delete(mine.id);
+      expect(await call("GET", `page/${id}/asset/${mine.id}`)).toEqual({
+        status: 404,
+        body: { error: { code: "missing", message: `The image "${mine.id}" is no longer stored` } },
+      });
+    });
+
+    it("reads images in task descriptions and pending suggestions", async () => {
+      work("bug00001-0000-0000-0000-000000000000", "Dialog breaks");
+      const shot = await services.content.put(new Uint8Array([0xff, 0xd8, 0xff, 0xc0, 0, 11, 8, 0, 20, 0, 30, 1, 1, 0x11, 0]), "image/jpeg");
+      await call("POST", "task/bug00001/description", { markdown: `![Crash](http://app/content/${shot.id})` });
+      expect((await call("GET", "task/bug00001/description")).body.assets).toEqual([{ id: shot.id, alt: "Crash" }]);
+      expect((await call("GET", `task/bug00001/asset/${shot.id}`)).body).toMatchObject({ type: "image/jpeg", width: 30, height: 20 });
+
+      const diagram = await services.content.put(png(4, 3), "image/png");
+      const id = await page("Intro");
+      await call("POST", "suggest", { page: id, action: "insert", markdown: `![Diagram](http://app/content/${diagram.id})` });
+      expect((await call("GET", `page/${id}`)).body.assets).toEqual([{ id: diagram.id, alt: "Diagram" }]);
+      expect((await call("GET", `page/${id}/asset/${diagram.id}`)).body).toMatchObject({ width: 4, height: 3 });
+    });
+  });
+
   describe("writing Markdown", () => {
     it("comments and appends to the description as blocks, with mentions", async () => {
       work("aaaa0001-0000-0000-0000-000000000000", "Write parser");

@@ -57,7 +57,7 @@ describe("MCP server", () => {
     }
   });
 
-  it("offers the twenty-five tools, each describing its defaults", async () => {
+  it("offers the twenty-six tools, each describing its defaults", async () => {
     const client = await connect(services);
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
@@ -80,6 +80,7 @@ describe("MCP server", () => {
       "list_tasks",
       "read_description",
       "read_page",
+      "read_page_asset",
       "revise_suggestion",
       "search_pages",
       "suggest",
@@ -93,6 +94,29 @@ describe("MCP server", () => {
     for (const name of ["comment", "append_description", "add_finding", "edit_finding", "create_task", "create_page", "suggest", "revise_suggestion"]) {
       expect(tools.find((t) => t.name === name)!.description).toContain("get_markdown_guide");
     }
+  });
+
+  it("shows an uploaded image as image content, and refuses others as tool errors", async () => {
+    const client = await connect(services);
+    const be32 = (n: number) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+    const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...be32(13), 0x49, 0x48, 0x44, 0x52, ...be32(64), ...be32(48), 8, 6, 0, 0, 0]);
+    const shot = await services.content.put(bytes, "image/png");
+    const made = JSON.parse(
+      text(await client.callTool({ name: "create_page", arguments: { title: "Scores", markdown: `![Score](http://app/content/${shot.id})` } })),
+    );
+    const read = JSON.parse(text(await client.callTool({ name: "read_page", arguments: { id: made.id } })));
+    expect(read.assets).toEqual([{ id: shot.id, alt: "Score" }]);
+
+    const result = await client.callTool({ name: "read_page_asset", arguments: { page: made.id, asset: read.assets[0].id } });
+    expect(result.isError).toBeFalsy();
+    const [picture, meta] = result.content as [{ type: string; data: string; mimeType: string }, { type: string; text: string }];
+    expect(picture).toEqual({ type: "image", data: Buffer.from(bytes).toString("base64"), mimeType: "image/png" });
+    expect(meta.text).toBe(JSON.stringify({ id: shot.id, type: "image/png", size: bytes.length, width: 64, height: 48 }));
+
+    const other = await client.callTool({ name: "read_page_asset", arguments: { task: "task0001", asset: shot.id } });
+    expect(other).toMatchObject({ isError: true, content: [{ text: expect.stringMatching(/^not_found: /) }] });
+    const both = await client.callTool({ name: "read_page_asset", arguments: { page: made.id, task: "task0001", asset: shot.id } });
+    expect(both.isError).toBe(true);
   });
 
   it("gives the Markdown guide", async () => {

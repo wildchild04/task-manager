@@ -10,7 +10,8 @@ import {
   toMarkdown,
 } from "~/domain/blocks/markdown";
 import { plainText } from "~/domain/blocks/text";
-import type { Batch, TreeNode } from "~/domain/blocks/types";
+import type { Batch, ImageProps, TreeNode } from "~/domain/blocks/types";
+import { imageSize } from "~/domain/content/content.repository";
 import { type Schedule, urgencySchema } from "~/domain/chores/schedule";
 import type { Comment, CommentKind } from "~/domain/comments/types";
 import { SuggestionError } from "~/domain/suggestions/errors";
@@ -256,9 +257,63 @@ const textQuery = (fallback: number) => z.object({ maxChars: maxCharsSchema(fall
 
 export function readDescription(services: AppServices, id: string, input: unknown) {
   const q = parse(textQuery(2000), input);
-  const task = findTask(services, id);
-  return cut(markdownOf(services, services.blocks.loadTree(task.bodyPageId), q.anchors), q.maxChars, q.offset);
+  const tree = services.blocks.loadTree(findTask(services, id).bodyPageId);
+  return withAssets(cut(markdownOf(services, tree, q.anchors), q.maxChars, q.offset), tree);
 }
+
+// ----- Images -----
+
+/**
+ * The uploaded images a page's content uses, in document order and each once
+ * (pending suggestions' blocks included; nested pages aren't part of it).
+ */
+function assetsOf(tree: TreeNode | undefined): { id: string; alt: string }[] {
+  const found = new Map<string, string>();
+  const visit = (nodes: readonly TreeNode[] | null) => {
+    for (const node of nodes ?? []) {
+      const props = node.block.props as Partial<ImageProps> & { contentId?: string };
+      if (node.block.type === "image" && props.contentId && !found.has(props.contentId))
+        found.set(props.contentId, props.alt ?? "");
+      visit(node.children);
+    }
+  };
+  visit(tree?.children ?? null);
+  return [...found].map(([id, alt]) => ({ id, alt }));
+}
+
+/** A read's answer with the page's `assets`, only when it has any. */
+function withAssets<T extends object>(answer: T, tree: TreeNode | undefined) {
+  const assets = assetsOf(tree);
+  return assets.length > 0 ? { ...answer, assets } : answer;
+}
+
+/**
+ * One uploaded image the page's content uses, with its bytes in base64. Only
+ * those images are answered (never another page's or an external URL), and
+ * storage isn't touched for anything else.
+ */
+async function assetOf(services: AppServices, tree: TreeNode | undefined, asset: string) {
+  if (!assetsOf(tree).some((a) => a.id === asset)) throw new AgentError(404, "not_found", `No uploaded image "${asset}" here`);
+  const item = await services.content.get(asset);
+  if (!item) throw new AgentError(404, "missing", `The image "${asset}" is no longer stored`);
+  const size = imageSize(item.bytes, item.type);
+  return { id: item.id, type: item.type, size: item.size, ...size, data: Buffer.from(item.bytes).toString("base64") };
+}
+
+export function readTaskAsset(services: AppServices, id: string, asset: string) {
+  return assetOf(services, services.blocks.loadTree(findTask(services, id).bodyPageId), asset);
+}
+
+export function readPageAsset(services: AppServices, id: string, asset: string) {
+  return assetOf(services, services.blocks.loadTree(findPage(services, id)), asset);
+}
+
+const findPage = (services: AppServices, id: string) =>
+  resolveId(
+    id,
+    allPages(services).map((p) => p.id),
+    "page",
+  );
 
 const commentsQuery = z.object({ limit: limitSchema(5), cursor: z.string().optional(), maxChars: maxCharsSchema(1000) });
 
@@ -320,16 +375,13 @@ export function searchPages(services: AppServices, input: unknown) {
 
 export function readPage(services: AppServices, id: string, input: unknown) {
   const q = parse(textQuery(2000), input);
-  const pageId = resolveId(
-    id,
-    allPages(services).map((p) => p.id),
-    "page",
-  );
+  const pageId = findPage(services, id);
   const page = services.blocks.getBlock(pageId)!;
-  return {
-    title: plainText(page.content) || "Untitled",
-    ...cut(markdownOf(services, services.blocks.loadTree(pageId), q.anchors), q.maxChars, q.offset),
-  };
+  const tree = services.blocks.loadTree(pageId);
+  return withAssets(
+    { title: plainText(page.content) || "Untitled", ...cut(markdownOf(services, tree, q.anchors), q.maxChars, q.offset) },
+    tree,
+  );
 }
 
 // ----- Writes -----

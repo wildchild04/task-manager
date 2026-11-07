@@ -39,7 +39,7 @@ To run from the source instead (while working on `mcp/`): `npm run mcp`, with th
 | `list_tasks` | Filter by `project`, `kind`, `state`, `query`; `limit` (default 10), `cursor` |
 | `create_task` | A task of any kind in a project, with a Markdown `description`; chores take `urgency` and `schedule`, updates `iteratesOn` |
 | `get_task` | Summary: state, `transitions` you may apply now, `heldBy`, counts |
-| `read_description` | The description as Markdown; `maxChars` (default 2000), `offset`, `anchors` (block IDs) |
+| `read_description` | The description as Markdown; `maxChars` (default 2000), `offset`, `anchors` (block IDs); uploaded images in `assets` |
 | `list_comments` | Newest first; `limit` (default 5), `cursor`, `maxChars` per comment (default 1000) |
 | `list_references` | What the task references |
 | `transition` | The working flow: `promote` (an exploration or update into work; optional `title`, answers the new `work` ID), `revive`; work `start`, `pause`, `complete`, `return` (with `reason`), `reopen`; chore `complete` (`next`), `cancel` (skips one occurrence) |
@@ -50,7 +50,8 @@ To run from the source instead (while working on `mcp/`): `npm run mcp`, with th
 | `edit_finding` | Replace the content of your own finding |
 | `delete_finding` | Delete your own finding |
 | `search_pages` | Knowledge library and workspace pages by title |
-| `read_page` | A page as Markdown; `maxChars`, `offset`, `anchors` (block IDs) |
+| `read_page` | A page as Markdown; `maxChars`, `offset`, `anchors` (block IDs); uploaded images in `assets` |
+| `read_page_asset` | An uploaded image from a page or description (`page` or `task`, and an `asset` ID from `assets`), as image content the agent can look at |
 | `create_page` | A page with Markdown content: global in the workspace, in a project's library (`project`), or inside another page (`parent`) |
 | `suggest` | Propose an insert, replace or delete in any page or description, at a block from `anchors`; a human approves or rejects it |
 | `suggest_action` | Propose renaming or deleting a project, page or task, a chore's schedule, or an ending transition (cancel work, tombstone an idea, cancel a chore series); a human approves or rejects it |
