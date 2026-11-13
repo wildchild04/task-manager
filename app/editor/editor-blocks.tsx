@@ -333,7 +333,7 @@ const EditorBlock = memo(function EditorBlock(props: BlockProps) {
       return <CodeBlockEditor block={block} actions={actions} />;
     case "callout":
       return (
-        <BlockFrame block={block}>
+        <BlockFrame block={block} className="editor-callout">
           <CalloutFrame
             tone={(block.props.tone as CalloutTone) ?? "default"}
             emoji={<CalloutStyleButton id={block.id} emoji={String(block.props.emoji ?? "💡")} actions={actions} />}

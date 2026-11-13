@@ -401,6 +401,16 @@ body {
 
 /* ----- Tables, callouts and headings 4–6 (markdown-blocks) ----- */
 
+/* A callout's box stands apart from the blocks around it, and its "+" and handle line up with its first line, inside its padding. */
+.editor-block.editor-callout {
+  margin: 8px 0;
+}
+
+.editor-callout > .block-handle,
+.editor-callout > .block-add {
+  top: 14px;
+}
+
 /* The editor's callout emoji is a button, taller than the line the callout's icon slot is made for: centred on the first line. */
 .callout-emoji-button {
   display: block;
