@@ -175,12 +175,13 @@ export class Editor {
 
   // ----- Edits -----
 
-  /** Types text at the selection. A space or `-` may complete a markdown shortcut, which is its own undo step. */
+  /** Types text at the selection. A space, `-` or backtick may complete a markdown shortcut, which is its own undo step. */
   type(inserted: string): void {
     if (this.range) this.overRange((state, at) => commands.insertText(state, at, inserted));
     else this.run(commands.insertText(this.state, this.selection, inserted), `type:${this.selection.blockId}`);
     if (inserted === " ") this.run(commands.markdownShortcut(this.state, this.selection));
     if (inserted === "-") this.run(commands.dividerShortcut(this.state, this.selection, this.context));
+    if (inserted === "`") this.run(commands.codeShortcut(this.state, this.selection));
   }
 
   /** Pastes blocks at the selection as one undo step; `false` where only plain text can be pasted (code, cells, the title). */

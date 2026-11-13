@@ -76,15 +76,19 @@ function marksOfChar(text: RichText, offset: number): readonly Mark[] | undefine
   return undefined;
 }
 
+/** Marks that only continue inside themselves: typing at their edge is outside them. */
+const bounded = (mark: Mark) => isLink(mark) || mark === "code";
+
 /**
  * The marks text typed at `offset` gets: those of the character before it, or
- * of the first character at the start. A link doesn't extend past its end.
+ * of the first character at the start. A link or inline code doesn't extend
+ * past its end, so typing right after `` `code` `` is plain text again.
  */
 export function marksAt(text: RichText, offset: number): Mark[] {
-  if (offset === 0) return (marksOfChar(text, 0) ?? []).filter((m) => !isLink(m));
+  if (offset === 0) return (marksOfChar(text, 0) ?? []).filter((m) => !bounded(m));
   const before = marksOfChar(text, offset - 1) ?? [];
   const after = marksOfChar(text, offset) ?? [];
-  return before.filter((m) => !isLink(m) || after.some((a) => isLink(a) && a.href === m.href));
+  return before.filter((m) => !bounded(m) || after.some((a) => markKey(a) === markKey(m)));
 }
 
 /** Inserts a mention of a page, followed by a space, in place of the text between `start` and `end`. */

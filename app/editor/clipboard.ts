@@ -4,7 +4,7 @@
  * same converter agents use.
  */
 
-import { imageFromMarkdown, imageMarkdown } from "~/domain/blocks/markdown";
+import { codeSpan, imageFromMarkdown, imageMarkdown } from "~/domain/blocks/markdown";
 
 /** Our own copies: Markdown with mentions and links to pages by their full IDs, so pasting back keeps them exactly. */
 export const APP_FORMAT = "application/x-taskhub-markdown";
@@ -121,7 +121,7 @@ function inline(node: DomNode): string {
     case "KBD":
     case "SAMP": {
       const code = node.textContent ?? "";
-      return code ? `\`${code}\`` : "";
+      return code ? codeSpan(code) : "";
     }
     case "A": {
       const href = attribute(node, "href");

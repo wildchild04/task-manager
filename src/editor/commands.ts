@@ -371,6 +371,27 @@ export function markdownShortcut(state: EditorState, selection: Selection): Comm
   };
 }
 
+/**
+ * The inline code completed by typing a closing backtick at the caret:
+ * `` `text` `` on one line becomes `text` marked as code, without the backticks.
+ * Not in code blocks or the title (plain text), nor for empty or doubled
+ * backticks (``` stays for code fences), nor when the text is already code.
+ */
+export function codeShortcut(state: EditorState, selection: Selection): CommandResult | null {
+  const block = getBlock(state, selection.blockId);
+  if (block.id === state.rootId || block.type === "code" || !isText(state, block.id) || !isCollapsed(selection)) return null;
+  const close = selection.focus - 1;
+  const value = text.plain(block.content);
+  if (value[close] !== "`") return null;
+  const open = value.lastIndexOf("`", close - 1);
+  if (open < 0 || open >= close - 1 || value[open - 1] === "`") return null;
+  if (value.slice(open + 1, close).includes("\n") || text.hasMark(block.content, open + 1, close, "code")) return null;
+  let content = text.remove(block.content, close, close + 1);
+  content = text.remove(content, open, open + 1);
+  content = text.toggleMark(content, open, close - 1, "code");
+  return { ops: [updateContent(block.id, content)], selection: caret(block.id, close - 1) };
+}
+
 /** `---` as a paragraph's whole content turns it into a divider followed by an empty paragraph. */
 export function dividerShortcut(state: EditorState, selection: Selection, context: CommandContext): CommandResult | null {
   const block = getBlock(state, selection.blockId);

@@ -316,6 +316,20 @@ body {
   text-decoration: underline;
 }
 
+/* Inline code in editable text looks like the design system's InlineCode, as pages show it read-only. */
+.editable code {
+  padding: 2px 4px;
+  border: 1px solid var(--ds-outline-variant);
+  border-radius: var(--ds-corner);
+  background: var(--ds-surface-container-high);
+  color: var(--ds-on-surface);
+  font-family: var(--ds-monospace);
+  font-size: inherit;
+  overflow-wrap: anywhere;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
 /* A mention of a page that no longer exists. */
 .mention-missing {
   opacity: 0.6;

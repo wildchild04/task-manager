@@ -19,8 +19,8 @@ export function readThemeCookie(cookieHeader: string | null): ThemeMode | null {
 }
 
 /**
- * A few of the design system's semantic colours as CSS variables, for app styles
- * written in CSS (editor boxes) rather than through components.
+ * A few of the design system's semantic colours (and its monospace font and corner) as CSS
+ * variables, for app styles written in CSS (editor boxes, inline code) rather than through components.
  */
 function surfaceVariables(mode: ThemeMode): CSSProperties {
   const color = tokens.semantic.default[mode].color;
@@ -40,6 +40,10 @@ function surfaceVariables(mode: ThemeMode): CSSProperties {
     "--ds-info": color.info,
     "--ds-info-container": color.infoContainer,
     "--ds-surface-container": color.surfaceContainer,
+    "--ds-surface-container-high": color.surfaceContainerHigh,
+    "--ds-on-surface": color.onSurface,
+    "--ds-monospace": tokens.primitives.typography.monospaceFontFamily,
+    "--ds-corner": `${tokens.primitives.shape.corner.md}px`,
   } as CSSProperties;
 }
 

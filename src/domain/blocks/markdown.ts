@@ -56,17 +56,43 @@ const closing = (mark: string) => (mark === "<u>" ? "</u>" : mark);
 const OPEN_ORDER = ["link", "underline", "strikethrough", "italic", "bold", "code"] as const;
 
 /**
+ * Inline code as CommonMark writes it: between backtick runs longer than any
+ * inside, with a space inside each when the code starts or ends with a
+ * backtick (or with spaces at both ends, which the reader would strip).
+ */
+export function codeSpan(code: string): string {
+  const fence = "`".repeat(Math.max(0, ...(code.match(/`+/g) ?? []).map((run) => run.length)) + 1);
+  const pad = /^`|`$/.test(code) || (/^ .* $/s.test(code) && code.trim() !== "") ? " " : "";
+  return `${fence}${pad}${code}${pad}${fence}`;
+}
+
+/**
  * Rich text as inline Markdown. Marks shared by consecutive spans are opened
  * once around all of them (`**a `b` c**`, not `**a ****`b`**** c**`): marks
  * already open stay outermost, the others open inside them, and inline code
  * is always innermost, since nothing can be nested in backticks.
  */
+const mentionMarkdown = (pageId: string, reader: MarkdownReader) => {
+  const target = reader.mentionTarget(pageId);
+  return target ? `@[${target.title}](${target.kind}:${target.id})` : "@[missing page]";
+};
+
 function inlineToMarkdown(content: RichText, reader: MarkdownReader): string {
   type Open = { key: string; close: string };
   const stack: Open[] = [];
   let out = "";
+  // The open inline code's text, written with its fence once it closes.
+  let code: string | null = null;
   const closeFrom = (index: number) => {
-    while (stack.length > index) out += stack.pop()!.close;
+    while (stack.length > index) {
+      const open = stack.pop()!;
+      if (open.key === "code") {
+        out += codeSpan(code!);
+        code = null;
+      } else {
+        out += open.close;
+      }
+    }
   };
   for (const span of content) {
     const marks = span.marks ?? [];
@@ -88,15 +114,13 @@ function inlineToMarkdown(content: RichText, reader: MarkdownReader): string {
     closeFrom(kept);
     for (const key of [...wanted.keys()].filter((k) => !stack.some((open) => open.key === k))) {
       const { open, close } = wanted.get(key)!;
-      out += open;
+      if (key === "code") code = "";
+      else out += open;
       stack.push({ key, close });
     }
-    if (span.mention) {
-      const target = reader.mentionTarget(span.mention.pageId);
-      out += target ? `@[${target.title}](${target.kind}:${target.id})` : "@[missing page]";
-    } else {
-      out += span.text;
-    }
+    const written = span.mention ? mentionMarkdown(span.mention.pageId, reader) : span.text;
+    if (code !== null) code += written;
+    else out += written;
   }
   closeFrom(0);
   return out;
@@ -250,7 +274,8 @@ export function imageFromMarkdown(src: string, alt: string): ImageProps | null {
 // ----- Writing -----
 
 const INLINE_PATTERNS: { kind: string; pattern: RegExp }[] = [
-  { kind: "code", pattern: /`([^`]+)`/ },
+  // A run of backticks to the next run of the same length (CommonMark code spans).
+  { kind: "code", pattern: /(?<!`)(`+)(?!`)(.+?)(?<!`)\1(?!`)/s },
   { kind: "mention", pattern: /@\[([^\]]*)\]\((task|page):([^)\s]+)\)/ },
   { kind: "link", pattern: /\[([^\]]+)\]\(([^)\s]+)\)/ },
   { kind: "bold", pattern: /\*\*(.+?)\*\*/ },
@@ -282,9 +307,13 @@ export function fromInlineMarkdown(text: string, writer: MarkdownWriter, marks: 
     const { kind, match } = best;
     if (match.index > 0) out.push(span(rest.slice(0, match.index), marks));
     switch (kind) {
-      case "code":
-        out.push(span(match[1]!, withMark(marks, "code")));
+      case "code": {
+        // One space inside each fence is padding when both are there, and the code isn't all spaces.
+        const code = match[2]!;
+        const padded = code.length >= 2 && code.startsWith(" ") && code.endsWith(" ") && code.trim() !== "";
+        out.push(span(padded ? code.slice(1, -1) : code, withMark(marks, "code")));
         break;
+      }
       case "mention": {
         const target = writer.findTarget(match[2] as "page" | "task", match[3]!);
         if (target) {
@@ -472,7 +501,7 @@ export const MARKDOWN_GUIDE = {
     { name: "bold", markdown: "**text**" },
     { name: "italic", markdown: "*text*" },
     { name: "strikethrough", markdown: "~~text~~" },
-    { name: "code", markdown: "`text`" },
+    { name: "code", markdown: "`text`, or `` a`b `` with longer backtick runs (and a space inside) when the code holds backticks" },
     { name: "underline", markdown: "<u>text</u>" },
     { name: "link", markdown: "[text](https://…), or [text](page:id) / [text](task:id) to link inside the app" },
     { name: "mention", markdown: "@[Title](page:id) or @[Title](task:id)" },

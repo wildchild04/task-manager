@@ -29,6 +29,13 @@ describe("rich text editing", () => {
     expect(text.insert(linked, 2, "!")[0]).toEqual({ text: "si!te", marks: [{ type: "link", href: "https://x.dev" }] });
   });
 
+  it("types outside inline code at its edges, and inside it within", () => {
+    const code = [{ text: "a " }, { text: "ls", marks: ["bold" as const, "code" as const] }];
+    expect(text.insert(code, 4, "!")).toEqual([{ text: "a " }, { text: "ls", marks: ["bold", "code"] }, { text: "!", marks: ["bold"] }]);
+    expect(text.insert(code, 3, "s")[1]).toEqual({ text: "lss", marks: ["bold", "code"] });
+    expect(text.insert([{ text: "ls", marks: ["code" as const] }], 0, "x")[0]).toEqual({ text: "x" });
+  });
+
   it("replaces a selection with the marks of its first character", () => {
     expect(text.replace(bold, 4, 8, "-")).toEqual([{ text: "Hell-", marks: ["bold"] }, { text: "rld" }]);
   });

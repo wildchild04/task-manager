@@ -226,6 +226,23 @@ describe("marks spanning several spans", () => {
     expect(roundTrip(markdown)).toBe(markdown);
   });
 
+  it.each([
+    ["backticks inside", "a`b", "``a`b``"],
+    ["backticks at its ends", '`"Runn|rint"`', '`` `"Runn|rint"` ``'],
+    ["a run of two inside", "x``y", "```x``y```"],
+    ["spaces at both ends", " x ", "`  x  `"],
+    ["only spaces", "  ", "`  `"],
+  ])("writes inline code with %s so it reads back the same", (_, code, markdown) => {
+    const tree = [node("p", "paragraph", [t("Regex: "), t(code, ["code"])])];
+    expect(toMarkdown(tree, reader)).toBe(`Regex: ${markdown}`);
+    expect(fromMarkdown(`Regex: ${markdown}`, writer)[0]!.content).toEqual([t("Regex: "), t(code, ["code"])]);
+  });
+
+  it("reads plain backticks around double-backtick code as text", () => {
+    expect(fromMarkdown("``x`` and `y`", writer)[0]!.content).toEqual([t("x", ["code"]), t(" and "), t("y", ["code"])]);
+    expect(fromMarkdown("a `` b", writer)[0]!.content).toEqual([t("a `` b")]);
+  });
+
   it("opens a mark once across spans that share it", () => {
     const tree = [node("p", "paragraph", [t("a ", ["bold"]), t("b", ["bold", "code"]), t(" c", ["bold"])])];
     expect(toMarkdown(tree, reader)).toBe("**a `b` c**");

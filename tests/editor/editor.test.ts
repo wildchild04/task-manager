@@ -703,6 +703,63 @@ describe("editor", () => {
     });
   });
 
+  describe("inline code shortcut", () => {
+    const content = () => editor.state.blocks.a!.content;
+
+    it("turns `text` into inline code as the closing backtick is typed, and typing goes on outside it", () => {
+      seed([p("a", "")]);
+      at("a", 0);
+      typeText("run `npm test` now");
+      expect(content()).toEqual([{ text: "run " }, { text: "npm test", marks: ["code"] }, { text: " now" }]);
+      expectInSync();
+    });
+
+    it("keeps the other marks of the text", () => {
+      seed([{ id: "a", type: "paragraph", content: [{ text: "`x", marks: ["bold"] }] }]);
+      at("a", 2);
+      typeText("`");
+      expect(content()).toEqual([{ text: "x", marks: ["bold", "code"] }]);
+    });
+
+    it("undoes back to the typed backticks", () => {
+      seed([p("a", "")]);
+      at("a", 0);
+      typeText("`x`");
+      editor.undo();
+      expect(content()).toEqual([{ text: "`x`" }]);
+      expectInSync();
+    });
+
+    it("works in other text blocks, like list items", () => {
+      seed([{ id: "a", type: "bulleted_list_item", content: [] }]);
+      at("a", 0);
+      typeText("`x`");
+      expect(content()).toEqual([{ text: "x", marks: ["code"] }]);
+    });
+
+    it.each([
+      ["empty backticks", "``"],
+      ["a code fence", "```"],
+      ["a lone backtick", "a`"],
+      ["backticks across a line break", "`a\nb`"],
+    ])("leaves %s as typed", (_, typed) => {
+      seed([p("a", "")]);
+      at("a", 0);
+      typeText(typed);
+      expect(plain(content())).toBe(typed);
+    });
+
+    it("leaves code blocks and the title as plain text", () => {
+      seed([{ id: "a", type: "code", props: { language: "" }, content: [] }]);
+      at("a", 0);
+      typeText("`x`");
+      expect(content()).toEqual([{ text: "`x`" }]);
+      at("page", 5);
+      typeText(" `x`");
+      expect(editor.state.blocks.page!.content).toEqual([{ text: "Title `x`" }]);
+    });
+  });
+
   describe("slash commands", () => {
     const command = (value: string) => SLASH_COMMANDS.find((c) => c.value === value)!;
 

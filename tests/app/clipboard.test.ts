@@ -44,6 +44,10 @@ describe("pasted HTML as Markdown", () => {
     );
   });
 
+  it("fences inline code holding backticks so it pastes as the same code", () => {
+    expect(htmlToMarkdown(body(el("p", "Regex: ", el("code", "`a|b`"))))).toBe("Regex: `` `a|b` ``");
+  });
+
   it("converts nested lists, numbered lists and checkboxes", () => {
     const html = body(
       el("ul", el("li", "one", el("ul", el("li", "nested"))), el("li", el("strong", "two"))),
