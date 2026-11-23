@@ -127,12 +127,8 @@ function writer(services: AppServices): MarkdownWriter {
           const task = findTask(services, id);
           return { pageId: task.bodyPageId, href: `/tasks/${task.id}` };
         }
-        const pageId = resolveId(
-          id,
-          allPages(services).map((p) => p.id),
-          "page",
-        );
-        return { pageId, href: `/pages/${pageId}` };
+        const pageId = findPage(services, id);
+        return { pageId, href: allPages(services).find((page) => page.id === pageId)!.href };
       } catch {
         return null;
       }
@@ -308,12 +304,16 @@ export function readPageAsset(services: AppServices, id: string, asset: string) 
   return assetOf(services, services.blocks.loadTree(findPage(services, id)), asset);
 }
 
-const findPage = (services: AppServices, id: string) =>
-  resolveId(
+/** Resolves an ordinary page or a project ID standing in for its home page. */
+const findPage = (services: AppServices, id: string) => {
+  const projects = services.projects.list();
+  const resolved = resolveId(
     id,
-    allPages(services).map((p) => p.id),
+    [...allPages(services).map((page) => page.id), ...projects.map((project) => project.id)],
     "page",
   );
+  return projects.find((project) => project.id === resolved)?.homePageId ?? resolved;
+};
 
 const commentsQuery = z.object({ limit: limitSchema(5), cursor: z.string().optional(), maxChars: maxCharsSchema(1000) });
 
@@ -458,11 +458,7 @@ export function createPage(services: AppServices, input: unknown) {
 
   let parentId: string | null = null;
   if (body.parent) {
-    parentId = resolveId(
-      body.parent,
-      allPages(services).map((p) => p.id),
-      "page",
-    );
+    parentId = findPage(services, body.parent);
   } else if (body.project) {
     const projectId = resolveId(
       body.project,
@@ -650,13 +646,7 @@ function blockIds(services: AppServices, pageId: string): string[] {
 export function suggest(services: AppServices, actor: AgentActor, input: unknown) {
   const body = parse(suggestBody, input);
   if (!body.page === !body.task) throw new AgentError(422, "validation", "Give `page` or `task`: where the suggestion goes");
-  const pageId = body.task
-    ? findTask(services, body.task).bodyPageId
-    : resolveId(
-        body.page!,
-        allPages(services).map((p) => p.id),
-        "page",
-      );
+  const pageId = body.task ? findTask(services, body.task).bodyPageId : findPage(services, body.page!);
   const ids = blockIds(services, pageId);
   const block = (id: string | undefined) => (id === undefined ? undefined : resolveId(id, ids, "block"));
   const { blocks, warnings } = body.markdown ? blocksOf(services, body.markdown) : { blocks: [], warnings: [] };

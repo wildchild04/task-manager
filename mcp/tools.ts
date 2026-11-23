@@ -246,7 +246,7 @@ export function createAgentServer(call: AgentCall): McpServer {
     "search_pages",
     {
       description:
-        "Find knowledge library and workspace pages whose title contains `query`. Returns at most `limit` (default 10) as { id, title, place }.",
+        "Find project home pages, knowledge library and workspace pages whose title contains `query`. Returns at most `limit` (default 10) as { id, title, place }.",
       inputSchema: { query: z.string(), limit: limit(10) },
     },
     (input) => run(call, "GET", "pages", input),
@@ -256,8 +256,8 @@ export function createAgentServer(call: AgentCall): McpServer {
     "read_page",
     {
       description:
-        "A page as { title, markdown, assets? }, cut at `maxChars` (default 2000). If `more` is true, call again with the returned `offset`. Pending suggestions show as `<suggestion …>` … `</suggestion>`. `assets` lists the page's uploaded images as { id, alt } (the whole page, in order): look at one with read_page_asset.",
-      inputSchema: { id: z.string().describe("Page ID from search_pages"), maxChars: maxChars(2000), offset, anchors },
+        "A page or project home as { title, markdown, assets? }, cut at `maxChars` (default 2000). Give a page ID from search_pages or a project ID from list_projects; a project ID reads its home page. If `more` is true, call again with the returned `offset`. Pending suggestions show as `<suggestion …>` … `</suggestion>`. `assets` lists the page's uploaded images as { id, alt } (the whole page, in order): look at one with read_page_asset.",
+      inputSchema: { id: z.string().describe("Page ID from search_pages, or project ID for its home page"), maxChars: maxChars(2000), offset, anchors },
     },
     ({ id, ...rest }) => run(call, "GET", `page/${enc(id)}`, rest),
   );
@@ -266,9 +266,9 @@ export function createAgentServer(call: AgentCall): McpServer {
     "read_page_asset",
     {
       description:
-        "Look at an uploaded image from a page or a task's description: give `page` or `task`, and `asset`, an ID from the `assets` that read_page or read_description returned. Returns the image (PNG, JPEG, GIF or WebP) and { id, type, size, width?, height? }. Only images uploaded to that page or description; external image URLs are never fetched.",
+        "Look at an uploaded image from a page, project home or a task's description: give `page` (a page ID or project ID for its home) or `task`, and `asset`, an ID from the `assets` that read_page or read_description returned. Returns the image (PNG, JPEG, GIF or WebP) and { id, type, size, width?, height? }. Only images uploaded to that page or description; external image URLs are never fetched.",
       inputSchema: {
-        page: z.string().optional().describe("Page ID from search_pages"),
+        page: z.string().optional().describe("Page ID from search_pages, or project ID for its home page"),
         task: z.string().optional().describe("Task ID: its description"),
         asset: z.string().describe("An image ID from `assets`"),
       },
@@ -299,10 +299,10 @@ export function createAgentServer(call: AgentCall): McpServer {
     "suggest",
     {
       description:
-        "Propose a change to a page or a task's description; a human approves or rejects it, and nothing changes until then. Read it first with `anchors: true` to get block IDs. `insert` adds `markdown` after the block `after`, as the last children of `inside`, or at the end; `replace` swaps the block `target` for `markdown`; `delete` removes `target` and what's nested in it. `note` (at most 280 characters) tells the human why. Works on any page or task, including work another agent holds. A table is suggested on as a whole: its rows and cells can't be targets. Returns { ok, id, warnings? }." +
+        "Propose a change to a page, project home or a task's description; a human approves or rejects it, and nothing changes until then. Give `page` as a page ID or a project ID for its home page. Read it first with `anchors: true` to get block IDs. `insert` adds `markdown` after the block `after`, as the last children of `inside`, or at the end; `replace` swaps the block `target` for `markdown`; `delete` removes `target` and what's nested in it. `note` (at most 280 characters) tells the human why. Works on any page or task, including work another agent holds. A table is suggested on as a whole: its rows and cells can't be targets. Returns { ok, id, warnings? }." +
         MARKDOWN_NOTE,
       inputSchema: {
-        page: z.string().optional().describe("Page ID from search_pages (or give `task`)"),
+        page: z.string().optional().describe("Page ID from search_pages or project ID for its home (or give `task`)"),
         task: z.string().optional().describe("Task ID: suggest on its description (or give `page`)"),
         action: z.enum(["insert", "replace", "delete"]),
         after: z.string().optional().describe("insert: the block ID to follow"),

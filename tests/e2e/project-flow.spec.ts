@@ -15,7 +15,7 @@ test.describe.configure({ mode: "serial" });
 test("a user creates a project and quick-adds work from its navigation", async ({ page }, testInfo) => {
   const projectName = resourceName(testInfo, "Taskhub");
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
 
   // The main-page action has text, unlike the shell's icon-only action.
   const dialog = await openHomeDialog(page, "New project");

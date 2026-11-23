@@ -3,7 +3,7 @@ import { type APIRequestContext, expect, type Page, type TestInfo } from "@playw
 import { agentHeaders } from "./accounts";
 
 export async function openHomeDialog(page: Page, name: "New page" | "New project") {
-  const button = page.getByRole("heading", { name: "Home" }).locator("xpath=..").getByRole("button", { name, exact: true });
+  const button = page.getByRole("heading", { name: "Home", exact: true }).locator("xpath=..").getByRole("button", { name, exact: true });
   const dialog = page.getByRole("dialog", { name });
   // Retry only when the dialog has not opened; this avoids assuming a fixed
   // client-startup delay while testing the observable UI state.

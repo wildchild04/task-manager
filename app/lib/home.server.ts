@@ -147,8 +147,12 @@ function projectCards(services: AppServices, now: string): ProjectCard[] {
 /** Library documents, workspace pages and tasks, most recently edited first. */
 function recent(services: AppServices, now: string): RecentItem[] {
   const timeZone = services.tasks.timeZone;
+  // Project homes are discoverable pages, but the dashboard's recent list is for documents and tasks.
+  const homeIds = new Set(services.projects.list().map((project) => project.homePageId));
   const items = [
-    ...allPages(services).map((page) => ({ kind: "page" as const, ...page, at: lastEdit(services.blocks.loadTree(page.id)) })),
+    ...allPages(services)
+      .filter((page) => !homeIds.has(page.id))
+      .map((page) => ({ kind: "page" as const, ...page, at: lastEdit(services.blocks.loadTree(page.id)) })),
     ...allTasks(services).map((task) => {
       const updated = services.tasks.get(task.href.slice("/tasks/".length))?.updatedAt ?? "";
       const body = lastEdit(services.blocks.loadTree(task.id));
@@ -163,11 +167,7 @@ function recent(services: AppServices, now: string): RecentItem[] {
 
 /** Projects, pages and tasks with pending suggestions, the one with the oldest first, with how many and from which agents. */
 function review(services: AppServices): ReviewItem[] {
-  // A project's home page stands for the project, and opens its home.
-  const homes = services.projects
-    .list()
-    .map((p) => ({ id: p.homePageId, title: p.title || "Untitled", place: "Project", href: `/projects/${p.id}` }));
-  const places = new Map([...homes, ...allPages(services), ...allTasks(services)].map((place) => [place.id, place]));
+  const places = new Map([...allPages(services), ...allTasks(services)].map((place) => [place.id, place]));
   const items = new Map<string, ReviewItem>();
   // Suggestions with changes requested wait on their agent, not on the human.
   const pending = services.suggestions.listPending().filter((s) => s.state !== "changes_requested");

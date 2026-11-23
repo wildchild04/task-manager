@@ -171,6 +171,32 @@ describe("MCP server", () => {
     expect(JSON.parse(text(await client.callTool({ name: "get_suggestion", arguments: { id } })))).toMatchObject({ status: "pending" });
   });
 
+  it("reads and suggests every kind of change on a project home through its project ID", async () => {
+    const client = await connect(services);
+    const project = services.projects.get("proj0001-0000-0000-0000-000000000000")!;
+    services.blocks.apply([{ op: "insert", block: { id: "home-note", type: "paragraph", content: [{ text: "First idea" }] }, parentId: project.homePageId }]);
+
+    const listed = JSON.parse(text(await client.callTool({ name: "search_pages", arguments: { query: "Taskhub" } })));
+    expect(listed.pages).toContainEqual({ id: project.homePageId.slice(0, 8), title: "Taskhub", place: "Project" });
+    const read = JSON.parse(text(await client.callTool({ name: "read_page", arguments: { id: "proj0001", anchors: true } })));
+    expect(read.markdown).toMatch(/^First idea \^home-not$/);
+
+    const calls = await Promise.all(
+      [
+        { action: "insert", after: "home-not", markdown: "Second idea" },
+        { action: "replace", target: "home-not", markdown: "Revised idea" },
+        { action: "delete", target: "home-not" },
+      ].map((arguments_) => client.callTool({ name: "suggest", arguments: { page: "proj0001", ...arguments_ } })),
+    );
+    const suggestions = calls.map((result) => JSON.parse(text(result)));
+    for (const suggestion of suggestions) {
+      expect(JSON.parse(text(await client.callTool({ name: "get_suggestion", arguments: { id: suggestion.id } })))).toMatchObject({
+        status: "pending",
+        place: `page:${project.homePageId.slice(0, 8)}`,
+      });
+    }
+  });
+
   it("works a task end to end as the agent", async () => {
     const client = await connect(services);
     expect(text(await client.callTool({ name: "transition", arguments: { id: "task0001", name: "start" } }))).toBe(

@@ -29,7 +29,7 @@ export function workspacePageTree(services: AppServices): LibraryNode[] {
   });
 }
 
-/** Every page that can be opened: workspace pages and library documents, at any depth. */
+/** Every page that can be opened: workspace pages, project homes and library documents, at any depth. */
 export function allPages(services: AppServices): PageMatch[] {
   const pages: PageMatch[] = [];
   const walk = (nodes: readonly LibraryNode[], trail: string[]) => {
@@ -40,6 +40,12 @@ export function allPages(services: AppServices): PageMatch[] {
   };
   walk(workspacePageTree(services), ["Pages"]);
   for (const project of services.projects.list()) {
+    pages.push({
+      id: project.homePageId,
+      title: project.title || "Untitled",
+      place: "Project",
+      href: `/projects/${project.id}`,
+    });
     walk(services.library.getLibraryTree(project.id) ?? [], [project.title || "Untitled"]);
   }
   return pages;
