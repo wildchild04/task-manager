@@ -91,6 +91,7 @@ describe("MCP server", () => {
     expect(tools.find((t) => t.name === "list_tasks")!.description).toContain("default 10");
     expect(tools.find((t) => t.name === "list_suggestions")!.description).toContain("changes_requested");
     expect(tools.find((t) => t.name === "revise_suggestion")!.description).toContain("withdraw it and suggest again");
+    expect(tools.find((t) => t.name === "suggest")!.description).toContain("do not repeat them");
     for (const name of ["comment", "append_description", "add_finding", "edit_finding", "create_task", "create_page", "suggest", "revise_suggestion"]) {
       expect(tools.find((t) => t.name === name)!.description).toContain("get_markdown_guide");
     }

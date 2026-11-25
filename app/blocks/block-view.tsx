@@ -205,6 +205,11 @@ export function SuggestionBox({ suggestion }: { suggestion: SuggestionBlockView 
           </Stack>
         }
       >
+        {suggestion.kept && (
+          <Typography variant="body2">
+            {`${suggestion.kept.count} nested ${suggestion.kept.count === 1 ? "block stays" : "blocks stay"} ${suggestion.kept.underFirst ? "under the first proposed block" : "after the proposed blocks"}.`}
+          </Typography>
+        )}
         {blocks.length > 0 ? <Blocks blocks={blocks} /> : undefined}
       </ReviewContainer>
       {asking && requestChanges && (

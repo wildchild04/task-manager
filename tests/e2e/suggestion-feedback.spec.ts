@@ -5,6 +5,28 @@ import { agent, openNewTask, resourceName } from "./helpers";
 
 test.describe.configure({ mode: "serial" });
 
+test("a replacement explains retained children and keeps them once", async ({ page, request }, testInfo) => {
+  const title = resourceName(testInfo, "Replacement children");
+  const created = await agent(request, "pages", { title, markdown: "- Parent\n  - Child one\n  - Child two" });
+  const response = await request.get(`/api/agent/page/${created.id}?anchors=true`, { headers: agentHeaders() });
+  expect(response.ok()).toBe(true);
+  const { markdown } = await response.json();
+  const target = /Parent \^([a-zA-Z0-9-]+)/.exec(markdown)?.[1];
+  expect(target).toBeTruthy();
+  const warned = await agent(request, "suggest", { page: created.id, action: "replace", target, markdown: "- New parent\n  - Child one" });
+  expect(warned.warnings).toEqual([expect.stringContaining("2 nested blocks are kept")]);
+  await agent(request, `suggestion/${warned.id}/withdraw`, {});
+  await agent(request, "suggest", { page: created.id, action: "replace", target, markdown: "- New parent" });
+
+  await page.goto("/");
+  await page.getByRole("link", { name: title, exact: true }).first().click();
+  const box = page.getByLabel("builder: Suggests replacing");
+  await expect(box).toContainText("2 nested blocks stay under the first proposed block");
+  await box.getByRole("button", { name: "Approve" }).click();
+  const bullets = page.locator('.editor-body .editable[data-type="bulleted_list_item"]');
+  await expect(bullets).toHaveText(["New parent", "Child one", "Child two"]);
+});
+
 /**
  * Spec coverage:
  * - suggestion-feedback: Requesting changes on screen (a suggestion box and an action bar; Revised after the

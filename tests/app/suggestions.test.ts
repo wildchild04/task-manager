@@ -62,7 +62,16 @@ describe("suggestions on screens", () => {
     ]);
     services.suggestions.suggest({ id: "t", pageId: "P", action: "replace", targetId: "T", blocks: [para("n3", "New")], author: "claude" });
     const view = buildPageView(services.blocks, "P", services.suggestions)!.blocks.find((b) => b.kind === "suggestion" && b.id === "t");
-    expect(view).toMatchObject({ removed: { kind: "content", type: "table", children: [{ id: "R", children: [{ id: "C" }] }] } });
+    expect(view).toMatchObject({ kept: null, removed: { kind: "content", type: "table", children: [{ id: "R", children: [{ id: "C" }] }] } });
+  });
+
+  it("reports retained children and their destination", () => {
+    services.blocks.apply([{ op: "insert", block: para("child", "Nested"), parentId: "A" }]);
+    const view = buildPageView(services.blocks, "P", services.suggestions)!.blocks[1];
+    expect(view).toMatchObject({ kept: { count: 1, underFirst: true } });
+    services.suggestions.suggest({ id: "code", pageId: "P", action: "replace", targetId: "A", blocks: [{ id: "code1", type: "code", content: [{ text: "code" }] }], author: "builder" });
+    const code = buildPageView(services.blocks, "P", services.suggestions)!.blocks.find((b) => b.kind === "suggestion" && b.id === "code");
+    expect(code).toMatchObject({ kept: { count: 1, underFirst: false } });
   });
 
   it("gives the editor the page's suggestions by ID", () => {

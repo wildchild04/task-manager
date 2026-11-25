@@ -123,6 +123,7 @@ describe("suggestion boxes", () => {
     answered: null,
     targetId: null,
     blocks: [content("n", "paragraph", "proposed-text")],
+    kept: null,
     removed: null,
     ...fields,
   });
@@ -144,6 +145,11 @@ describe("suggestion boxes", () => {
     expect(html).toContain("Outdated");
     expect(html).toMatch(/<\/span>Reject</);
     expect(html).not.toMatch(/<\/span>Approve</);
+  });
+
+  it("explains where retained blocks go", () => {
+    expect(render([suggestion({ action: "replace", kept: { count: 2, underFirst: true } })])).toContain("2 nested blocks stay under the first proposed block");
+    expect(render([suggestion({ action: "replace", kept: { count: 1, underFirst: false } })])).toContain("1 nested block stays after the proposed blocks");
   });
 
   it("offers Request changes, and shows the feedback waiting for the agent, then what a revision answered", () => {

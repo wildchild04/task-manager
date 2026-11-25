@@ -640,6 +640,38 @@ describe("agent API", () => {
       expect((await call("GET", "page/page0001")).body.markdown).toBe("Ship on **Tuesday**");
     });
 
+    it("warns about nested blocks that a replacement keeps", async () => {
+      services.blocks.apply([{ op: "insert", block: { id: "page0001-x", type: "page", content: [{ text: "Roadmap" }] }, parentId: null }]);
+      services.blocks.apply([
+        { op: "insert", block: { id: "parent00-x", type: "bulleted_list_item", content: [{ text: "Parent" }] }, parentId: "page0001-x" },
+        { op: "insert", block: { id: "child001-x", type: "bulleted_list_item", content: [{ text: "Child one" }] }, parentId: "parent00-x" },
+        { op: "insert", block: { id: "child002-x", type: "bulleted_list_item", content: [{ text: "Child two" }] }, parentId: "parent00-x", afterId: "child001-x" },
+      ]);
+      const target = services.blocks.getChildren("page0001-x")[0]!.id.slice(0, 8);
+      const made = await call("POST", "suggest", { page: "page0001", action: "replace", target, markdown: "- New parent\n  - Child one" });
+      expect(made.body.warnings).toEqual([expect.stringContaining("2 nested blocks are kept under the first proposed block")]);
+      services.suggestions.withdraw(services.suggestions.idsStartingWith(made.body.id)[0]!, "builder");
+      const leaf = await call("POST", "suggest", { page: "page0001", action: "replace", target, markdown: "```\ncode\n```\n\n- Proposed\n  - Nested" });
+      expect(leaf.body.warnings).toEqual([expect.stringContaining("2 nested blocks are kept after the proposed blocks")]);
+      services.suggestions.withdraw(services.suggestions.idsStartingWith(leaf.body.id)[0]!, "builder");
+      const clean = await call("POST", "suggest", { page: "page0001", action: "replace", target, markdown: "- New parent" });
+      expect(clean.body.warnings).toBeUndefined();
+      services.suggestions.approve(services.suggestions.idsStartingWith(clean.body.id)[0]!);
+      expect((await call("GET", "page/page0001")).body.markdown).toBe("- New parent\n  - Child one\n  - Child two");
+    });
+
+    it("does not warn that a table's rows will be retained", async () => {
+      services.blocks.apply([
+        { op: "insert", block: { id: "page0001-x", type: "page", content: [{ text: "Roadmap" }] }, parentId: null },
+        { op: "insert", block: { id: "table001-x", type: "table" }, parentId: "page0001-x" },
+        { op: "insert", block: { id: "row00001-x", type: "table_row" }, parentId: "table001-x" },
+        { op: "insert", block: { id: "cell0001-x", type: "table_cell", content: [{ text: "Old" }] }, parentId: "row00001-x" },
+      ]);
+      const made = await call("POST", "suggest", { page: "page0001", action: "replace", target: "table001", markdown: "- New\n  - Nested" });
+      expect(made.status).toBe(200);
+      expect(made.body.warnings).toBeUndefined();
+    });
+
     it("lets agents suggest on work held by another agent", async () => {
       const task = work("aaaa0001-0000-0000-0000-000000000000");
       await call("POST", "task/aaaa0001/transition", { name: "start" }, "builder");

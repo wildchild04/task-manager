@@ -100,7 +100,7 @@ function treeOf(repos: Repositories, block: Block): TreeNode {
 const asNew = (block: Block): NewBlock => ({ id: block.id, type: block.type, props: block.props, content: block.content });
 
 /** Whether blocks can be nested under a block of this type (a table holds only its rows). */
-const holdsChildren = (type: BlockType) => !isLeafType(type) && type !== "page" && type !== "suggestion" && type !== "table";
+export const holdsChildren = (type: BlockType) => !isLeafType(type) && type !== "page" && type !== "suggestion" && type !== "table";
 
 /** A delete, or a replace of a table, acts on the target and everything in it; other replaces on the block alone. */
 const actsOnSubtree = (action: SuggestionAction, target: Block) => action === "delete" || target.type === "table";

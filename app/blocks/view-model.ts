@@ -45,6 +45,7 @@ export type SuggestionBlockView = {
   answered: string | null;
   targetId: string | null;
   blocks: ViewBlock[];
+  kept: { count: number; underFirst: boolean } | null;
   removed: ViewBlock | null;
 };
 

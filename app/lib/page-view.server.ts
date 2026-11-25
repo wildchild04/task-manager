@@ -3,7 +3,7 @@ import { plainText } from "~/domain/blocks/text";
 import type { Block, ImageProps, RichText, TreeNode } from "~/domain/blocks/types";
 import type { ContentRepository } from "~/domain/content/content.repository";
 import type { ProjectService } from "~/domain/projects/project.service";
-import type { SuggestionService } from "~/domain/suggestions/suggestion.service";
+import { holdsChildren, type SuggestionService } from "~/domain/suggestions/suggestion.service";
 import { PROJECT_OWNER_KIND } from "~/domain/projects/types";
 import { TASK_OWNER_KIND } from "~/domain/tasks/types";
 
@@ -162,6 +162,8 @@ function buildChildrenView(
         const target = targetId ? blocks.getBlock(targetId) : undefined;
         // A replace shows the target block alone (a table with its rows, which are part of it); a delete, everything it would remove.
         const removed = target && viewOfBlock(target, path, depth);
+        const keptCount = block.props.action === "replace" && target && target.type !== "table" ? blocks.getChildren(target.id).length : 0;
+        const firstProposed = blocks.getChildren(block.id)[0];
         return {
           kind: "suggestion",
           id: block.id,
@@ -174,6 +176,7 @@ function buildChildrenView(
           answered: record?.answered?.text ?? null,
           targetId,
           blocks: children,
+          kept: keptCount && firstProposed ? { count: keptCount, underFirst: holdsChildren(firstProposed.type) } : null,
           removed:
             removed && removed.kind === "content" && removed.type !== "table" && block.props.action === "replace"
               ? { ...removed, children: [] }

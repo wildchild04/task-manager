@@ -16,7 +16,7 @@ import { type Schedule, urgencySchema } from "~/domain/chores/schedule";
 import type { Comment, CommentKind } from "~/domain/comments/types";
 import { SuggestionError } from "~/domain/suggestions/errors";
 import { isEndingTransition } from "~/domain/suggestions/suggested-actions";
-import { NOTE_MAX, type SuggestionView } from "~/domain/suggestions/suggestion.service";
+import { holdsChildren, NOTE_MAX, type SuggestionView } from "~/domain/suggestions/suggestion.service";
 import type { ActionPayload } from "~/domain/suggestions/types";
 import { TaskError } from "~/domain/tasks/errors";
 import { kinds } from "~/domain/tasks/kinds";
@@ -653,16 +653,25 @@ export function suggest(services: AppServices, actor: AgentActor, input: unknown
   const block = (id: string | undefined) => (id === undefined ? undefined : resolveId(id, ids, "block"));
   const { blocks, warnings } = body.markdown ? blocksOf(services, body.markdown) : { blocks: [], warnings: [] };
   try {
+    const targetId = block(body.target);
     const suggestion = services.suggestions.suggest({
       pageId,
       action: body.action,
       afterId: block(body.after),
       insideId: block(body.inside),
-      targetId: block(body.target),
+      targetId,
       blocks,
       note: body.note,
       author: actor.name,
     });
+    const target = targetId && services.blocks.getBlock(targetId);
+    if (body.action === "replace" && target && target.type !== "table" && blocks.some((item) => item.children?.length)) {
+      const kept = services.blocks.getChildren(target.id).length;
+      if (kept) {
+        const place = holdsChildren(blocks[0]!.type) ? "under the first proposed block" : "after the proposed blocks";
+        warnings.push(`${kept} nested ${kept === 1 ? "block is" : "blocks are"} kept ${place}; do not repeat ${kept === 1 ? "it" : "them"} in the proposed Markdown.`);
+      }
+    }
     return withWarnings({ ok: true as const, id: short(suggestion.id) }, warnings);
   } catch (error) {
     return fromSuggestionError(error);
