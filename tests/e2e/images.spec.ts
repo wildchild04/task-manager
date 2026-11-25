@@ -1,9 +1,9 @@
 import { existsSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 
 import { expect, type Page, test } from "@playwright/test";
 
-import { agentHeaders } from "./accounts";
+import { agentHeaders, BASE_URL, DATABASE_PATH } from "./accounts";
 import { createWorkspacePage, paragraphs, resourceName, writeParagraphs } from "./helpers";
 
 test.describe.configure({ mode: "serial" });
@@ -16,7 +16,7 @@ test.describe.configure({ mode: "serial" });
  * - agent-api: Images in Markdown
  */
 
-const contentFolder = fileURLToPath(new URL("../.tmp/content/", import.meta.url));
+const contentFolder = join(dirname(DATABASE_PATH), "content");
 const images = (page: Page) => page.locator(".editor-body .block-image");
 /** What each top-level block is, in order: an image, or a paragraph and its text. */
 const outline = (page: Page) =>
@@ -107,7 +107,7 @@ test("the Image slash command uploads a picked PNG in place of the paragraph", a
   // The caret is in the empty paragraph after the image.
   await page.keyboard.type("After");
   await expect(paragraphs(page)).toHaveText(["After"]);
-  expect(existsSync(`${contentFolder}${id.slice(0, 2)}/${id}`)).toBe(true);
+  expect(existsSync(join(contentFolder, id.slice(0, 2), id))).toBe(true);
 
   const served = await page.request.get(url);
   expect(served.headers()["content-type"]).toBe("image/png");
@@ -216,9 +216,6 @@ test("arrows and clicks select an image, Backspace deletes it; alt text is edite
   // A click selects it.
   await images(page).locator("img").click();
   await expect(block).toHaveAttribute("data-selected", "true");
-  await page.keyboard.press("Escape");
-
-  await block.hover();
   await block.getByRole("button", { name: "Drag to move, or open block actions" }).click();
   await page.getByRole("menuitem", { name: "Alt text…" }).click();
   const dialog = page.getByRole("dialog", { name: "Alt text" });
@@ -243,13 +240,13 @@ test("an external image from pasted Markdown shows its error state when broken, 
   await paragraphs(page).first().click();
   await page.keyboard.press("End");
   await page.keyboard.press("Enter");
-  await paragraphs(page).nth(1).evaluate((target) => {
+  await paragraphs(page).nth(1).evaluate((target, baseUrl) => {
     const data = new DataTransfer();
-    data.setData("text/plain", "![Broken chart](http://127.0.0.1:57321/missing.png)");
+    data.setData("text/plain", `![Broken chart](${baseUrl}/missing.png)`);
     const event = new Event("paste", { bubbles: true, cancelable: true });
     Object.defineProperty(event, "clipboardData", { value: data });
     target.dispatchEvent(event);
-  });
+  }, BASE_URL);
   await expect(images(page)).toHaveCount(1);
   await expect(images(page).getByRole("img", { name: "Broken chart" })).toContainText("Image unavailable: Broken chart");
 
@@ -267,6 +264,6 @@ test("an external image from pasted Markdown shows its error state when broken, 
     });
     return ((await read.json()) as { markdown: string }).markdown;
   };
-  await expect.poll(readAsAgent).toContain(`![](http://127.0.0.1:57321/content/${id})`);
-  expect(await readAsAgent()).toContain("![Broken chart](http://127.0.0.1:57321/missing.png)");
+  await expect.poll(readAsAgent).toContain(`![](${BASE_URL}/content/${id})`);
+  expect(await readAsAgent()).toContain(`![Broken chart](${BASE_URL}/missing.png)`);
 });

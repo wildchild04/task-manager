@@ -12,6 +12,7 @@ test.describe.configure({ mode: "serial" });
 
 test("findings on an exploration: an agent's, one written here, and a link to one", async ({ page, request }, testInfo) => {
   const id = await openNewTask(page, resourceName(testInfo, "Findings project"), "Block editor v2", "exploration");
+  await expect(page.getByRole("button", { name: "Start exploration…" })).toHaveCount(0);
   const tabs = page.getByRole("tablist", { name: "Task sections" }).getByRole("tab");
   await expect(tabs).toHaveText(["Description", "Findings", "Lineage", "References", "History"]);
 

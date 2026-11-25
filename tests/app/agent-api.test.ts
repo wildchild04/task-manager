@@ -95,7 +95,7 @@ describe("agent API", () => {
       for (let i = 0; i < 25; i++) work(`t${String(i).padStart(7, "0")}-0000-0000-0000-000000000000`, `Task ${i}`);
       const first = await call("GET", "tasks?limit=10");
       expect(first.body.tasks).toHaveLength(10);
-      expect(first.body.tasks[0]).toEqual({ id: "t0000024", kind: "work", state: "todo", title: "Task 24" });
+      expect(first.body.tasks[0]).toEqual({ id: "t0000024", fullId: "t0000024-0000-0000-0000-000000000000", kind: "work", state: "todo", title: "Task 24" });
       expect(Object.keys(first.body).sort()).toEqual(["cursor", "more", "tasks"]);
       const second = await call("GET", `tasks?limit=10&cursor=${first.body.cursor}`);
       expect(second.body.tasks[0].title).toBe("Task 14");
@@ -139,10 +139,12 @@ describe("agent API", () => {
       });
       expect((await call("GET", "task/aaaa0001")).body).toEqual({
         id: "aaaa0001",
+        fullId: "aaaa0001-0000-0000-0000-000000000000",
         kind: "work",
         state: "todo",
         title: "Add login",
         project: "proj0001",
+        projectFullId: P,
         transitions: ["start"],
         counts: { comments: 1, references: 0 },
       });
@@ -399,7 +401,7 @@ describe("agent API", () => {
     it("creates a project with its home page and library", async () => {
       const created = await call("POST", "projects", { title: " Garden " });
       expect(created.body).toEqual({ ok: true, id: expect.any(String) });
-      expect((await call("GET", "projects")).body.projects).toContainEqual({ id: created.body.id, title: "Garden" });
+      expect((await call("GET", "projects")).body.projects).toContainEqual({ id: created.body.id, fullId: expect.any(String), title: "Garden" });
       expect((await call("POST", "projects", { title: " " })).body.error.code).toBe("validation");
     });
   });

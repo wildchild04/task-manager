@@ -56,7 +56,7 @@ export default function Page({ loaderData }: Route.ComponentProps) {
   const renames = <ActionSuggestionBars items={actions} actions={["rename"]} />;
 
   return (
-    <article>
+    <article className="document-page">
       <Stack spacing={1}>
         <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
           {trail.length > 0 ? (

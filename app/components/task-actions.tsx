@@ -185,9 +185,11 @@ export function TransitionBar({ view, extra }: { view: TaskOverviewView; extra?:
             Start update…
           </Button>
         )}
-        <Button variant="text" onClick={() => setDialog("start-exploration")}>
-          Start exploration…
-        </Button>
+        {view.task.kind !== "exploration" && (
+          <Button variant="text" onClick={() => setDialog("start-exploration")}>
+            Start exploration…
+          </Button>
+        )}
         {extra}
       </Stack>
       {error && (

@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 
+import { agentHeaders } from "./accounts";
 import { createWorkspacePage, openHomeDialog, paragraphs, resourceName, saveTitle, writeParagraphs } from "./helpers";
 
 test.describe.configure({ mode: "serial" });
@@ -36,6 +37,16 @@ test("a user creates a project and quick-adds work from its navigation", async (
 
   await expect(page.getByRole("link", { name: "Add login" })).toBeVisible();
   await expect(page.getByText("To do", { exact: true })).toBeVisible();
+
+  const projects = await (await page.request.get("/api/agent/projects", { headers: agentHeaders() })).json();
+  const project = projects.projects.find((item: { title: string }) => item.title === projectName);
+  expect(project.fullId).toBe(projectPath.split("/").at(-1));
+  const tasks = await (await page.request.get(`/api/agent/tasks?project=${project.id}`, { headers: agentHeaders() })).json();
+  const task = tasks.tasks.find((item: { title: string }) => item.title === "Add login");
+  const summary = await (await page.request.get(`/api/agent/task/${task.id}`, { headers: agentHeaders() })).json();
+  expect(summary).toMatchObject({ fullId: task.fullId, projectFullId: project.fullId });
+  await page.goto(`/tasks/${task.fullId}`);
+  await expect(page.getByRole("textbox", { name: "Title" })).toHaveText("Add login");
 });
 
 test("a page can create a sub-page through the slash menu", async ({ page }, testInfo) => {
@@ -58,6 +69,24 @@ test("a page can create a sub-page through the slash menu", async ({ page }, tes
   });
 });
 
+test("block controls follow focus and selection instead of the pointer", async ({ page }, testInfo) => {
+  await createWorkspacePage(page, resourceName(testInfo, "Active controls"));
+  await writeParagraphs(page, ["First", "Second"]);
+  const blocks = page.locator(".editor-body > [data-block]");
+  await paragraphs(page).nth(1).click();
+  await blocks.first().hover();
+  for (const control of [".block-handle", ".block-add"]) {
+    await expect(blocks.first().locator(control)).toHaveCSS("opacity", "0");
+    await expect(blocks.nth(1).locator(control)).toHaveCSS("opacity", "1");
+  }
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Shift+ArrowUp");
+  for (const block of [blocks.first(), blocks.nth(1)]) {
+    await expect(block.locator(".block-handle")).toHaveCSS("opacity", "1");
+    await expect(block.locator(".block-add")).toHaveCSS("opacity", "1");
+  }
+});
+
 test("selected blocks can be turned into a list from the block-action menu", async ({ page }, testInfo) => {
   await createWorkspacePage(page, resourceName(testInfo, "Selection playground"));
   await writeParagraphs(page, ["First paragraph", "Second paragraph", "Third paragraph"]);
@@ -70,7 +99,6 @@ test("selected blocks can be turned into a list from the block-action menu", asy
   await expect(page.locator('[data-selected="true"]')).toHaveText(["First paragraph", "Second paragraph"]);
 
   const firstBlock = page.locator(".editor-body > [data-block]").first();
-  await firstBlock.hover();
   await firstBlock.getByRole("button", { name: "Drag to move, or open block actions" }).click();
   await page.getByRole("menuitem", { name: "Turn into" }).click();
   await page.getByRole("menuitem", { name: "Bulleted list" }).click();
@@ -111,7 +139,7 @@ test("the add button and formatting bar edit a block through visible controls", 
   await expect(paragraph.locator("strong")).toHaveText("Format me");
 
   const block = page.locator(".editor-body > [data-block]").first();
-  await block.hover();
+  await paragraph.click();
   await block.getByRole("button", { name: "Add a block below (Alt+click: above)" }).click();
   await expect(paragraphs(page)).toHaveCount(2);
 });
@@ -139,7 +167,7 @@ test("dragging a block moves it as a single undoable editor operation", async ({
   await writeParagraphs(page, ["First", "Second", "Third"]);
 
   const blocks = page.locator(".editor-body > [data-block]");
-  await blocks.first().hover();
+  await paragraphs(page).first().click();
   const handle = await blocks.first().getByRole("button", { name: "Drag to move, or open block actions" }).boundingBox();
   const target = await blocks.nth(2).boundingBox();
   if (!handle || !target) throw new Error("Editor block geometry was unavailable");

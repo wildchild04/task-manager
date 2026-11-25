@@ -8,6 +8,7 @@ export default defineConfig(({ mode }) => {
   for (const [key, value] of Object.entries(loadEnv(mode, process.cwd(), ""))) process.env[key] ??= value;
   const base = appBasePath();
   return {
+    ...(process.env.E2E_TEST_DIR ? { cacheDir: `${process.env.E2E_TEST_DIR}/vite-cache` } : {}),
     // Assets are served under the base path too.
     base: base === "/" ? "/" : `${base}/`,
     plugins: [reactRouter()],

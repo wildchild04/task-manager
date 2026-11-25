@@ -34,11 +34,11 @@ To run from the source instead (while working on `mcp/`): `npm run mcp`, with th
 
 | Tool | What it does |
 |---|---|
-| `list_projects` | `[{ id, title }]` |
+| `list_projects` | `{ projects: [{ id, fullId, title }] }`; `fullId` is the project page ID |
 | `create_project` | A project with its home page and knowledge library |
-| `list_tasks` | Filter by `project`, `kind`, `state`, `query`; `limit` (default 10), `cursor` |
+| `list_tasks` | Filter by `project`, `kind`, `state`, `query`; `limit` (default 10), `cursor`. Each task has `fullId` for its page URL |
 | `create_task` | A task of any kind in a project, with a Markdown `description`; chores take `urgency` and `schedule`, updates `iteratesOn` |
-| `get_task` | Summary: state, `transitions` you may apply now, `heldBy`, counts |
+| `get_task` | Summary: state, `transitions` you may apply now, `heldBy`, counts, `fullId` and `projectFullId` for page URLs |
 | `read_description` | The description as Markdown; `maxChars` (default 2000), `offset`, `anchors` (block IDs); uploaded images in `assets` |
 | `list_comments` | Newest first; `limit` (default 5), `cursor`, `maxChars` per comment (default 1000) |
 | `list_references` | What the task references |
@@ -58,9 +58,11 @@ To run from the source instead (while working on `mcp/`): `npm run mcp`, with th
 | `list_suggestions` | Your own open suggestions, oldest first; `state: "changes_requested"` finds the ones the human asked you to change |
 | `get_suggestion` | A suggestion's status: pending, changes_requested (with the human's `feedback`), outdated, approved, rejected, withdrawn; `revision`, `note`, and `subject` for actions |
 | `revise_suggestion` | Change your own open suggestion in place: new `markdown`, `title` or `schedule`, and a `note` replying to the human |
-| `withdraw_suggestion` | Take back your own open suggestion |
+| `withdraw_suggestion` | Take back your own pending, outdated or changes-requested suggestion |
 | `get_markdown_guide` | The Markdown agents can write (headings to `######`, lists, todos, quotes, pipe tables, ``` code fences, `> [!NOTE]` callouts, marks, links, mentions) and what isn't supported |
 
 Images are written as `![alt](https://…)` on a line of their own; pages read back uploaded images with their absolute URLs. Tools that take Markdown keep anything unsupported (images without an http(s) URL or inside a line of text, raw HTML, footnotes, a table without its `|---|` row, an unclosed fence) as text and say so in `warnings`, by line, e.g. `"Line 3: images need an http(s) URL or an uploaded image; kept as text"`.
 
 Agents create tasks, pages and projects directly, and apply the transitions of their working flow. Everything else goes through suggestions a human approves: changes to existing pages and descriptions (`suggest`), and renaming, deleting, rescheduling, cancelling work, tombstoning ideas and ending a chore series (`suggest_action`). Findings on explorations are the exception: agents add them directly, and edit and delete only their own. A work task another agent started is held by that agent until it leaves in progress.
+
+Every tool declares MCP annotations identifying reads, potentially destructive writes and idempotent operations. All operate within the app and declare `openWorldHint: false`.

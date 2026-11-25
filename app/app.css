@@ -2,6 +2,28 @@ body {
   margin: 0;
 }
 
+/* Document pages widen on large screens; other workspace screens keep their layout. */
+.MuiContainer-root:has(> .document-page) {
+  max-width: none;
+}
+
+.document-page {
+  max-width: 760px;
+  margin-inline: auto;
+}
+
+@media (min-width: 1600px) {
+  .document-page { max-width: 920px; }
+}
+
+@media (min-width: 2200px) {
+  .document-page { max-width: 1080px; }
+}
+
+@media (min-width: 2800px) {
+  .document-page { max-width: 1240px; }
+}
+
 /* Nested blocks are indented under their parent block. */
 .block-children {
   padding-inline-start: 1.5em;
@@ -90,7 +112,7 @@ body {
   background: color-mix(in srgb, var(--ds-secondary-container) 80%, transparent);
 }
 
-/* A block's handle sits in the margin to its left, shown while pointing at the block. */
+/* A block's handle sits in the margin to its left. */
 .editor-block {
   position: relative;
 }
@@ -119,7 +141,7 @@ body {
   }
 }
 
-/* The "+" sits left of the handle and shows with it, on pointing devices only. */
+/* The "+" sits left of the handle and shows with it. */
 .block-add {
   position: absolute;
   top: -3px;
@@ -134,22 +156,11 @@ body {
   left: -78px;
 }
 
-@media (hover: hover) {
-  .page-editor:not(.dragging-blocks) .editor-block:hover:not(:has(.editor-block:hover)) > .block-add,
-  .block-add:focus-within {
-    opacity: 1;
-  }
-}
-
-@media (hover: hover) {
-  .page-editor:not(.dragging-blocks) .editor-block:hover:not(:has(.editor-block:hover)) > .block-handle,
-  .block-handle:focus-within {
-    opacity: 1;
-  }
-}
-
-/* On touch screens: beside the block with the caret, and beside selected blocks. */
-.editor-block[data-selected="true"] > .block-handle {
+/* Show controls for the innermost focused block and for selected blocks. */
+.editor-block:focus-within:not(:has(.editor-block:focus-within)) > .block-handle,
+.editor-block:focus-within:not(:has(.editor-block:focus-within)) > .block-add,
+.editor-block[data-selected="true"] > .block-handle,
+.editor-block[data-selected="true"] > .block-add {
   opacity: 1;
 }
 
@@ -178,11 +189,6 @@ body {
     right: -64px;
   }
 
-  .editor-block:focus-within:not(:has(.editor-block:focus-within)) > .block-handle,
-  .editor-block:focus-within:not(:has(.editor-block:focus-within)) > .block-add,
-  .editor-block[data-selected="true"] > .block-add {
-    opacity: 1;
-  }
 }
 
 .dragging-blocks,
@@ -341,7 +347,7 @@ body {
   color: var(--editor-link);
   cursor: pointer;
   text-decoration: none;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .editable .mention::after {

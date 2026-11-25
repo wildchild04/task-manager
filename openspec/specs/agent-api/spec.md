@@ -27,7 +27,7 @@ Every request to `/api/agent/*` SHALL carry `Authorization: Bearer <token>` with
 - **THEN** the task's history shows the start by "builder"
 
 ### Requirement: Lean responses
-Responses SHALL contain only the fields each function documents. Lists SHALL return at most `limit` items (default 10 unless a function says otherwise, at most 50), with `more: true` and a `cursor` when there are more. Markdown texts SHALL be cut at `maxChars` characters (default 2000, at most 20000), with `more: true` and the `offset` to continue from. IDs SHALL be returned as their first 8 characters; requests SHALL accept a full ID or any prefix of at least 6 characters that matches exactly one item, and answer an ambiguous prefix with status 409. Errors SHALL be `{ error: { code, message } }` with a matching status.
+Responses SHALL contain only the fields each function documents. Lists SHALL return at most `limit` items (default 10 unless a function says otherwise, at most 50), with `more: true` and a `cursor` when there are more. Markdown texts SHALL be cut at `maxChars` characters (default 2000, at most 20000), with `more: true` and the `offset` to continue from. IDs SHALL be returned as their first 8 characters, with full IDs additionally provided for projects and tasks as documented below; requests SHALL accept a full ID or any prefix of at least 6 characters that matches exactly one item, and answer an ambiguous prefix with status 409. Errors SHALL be `{ error: { code, message } }` with a matching status.
 
 #### Scenario: Paging a list
 - **WHEN** a project has 25 tasks and `list_tasks` is called with `limit` 10
@@ -104,11 +104,11 @@ The API SHALL offer exactly these functions, each returning only the listed fiel
 
 | Function | Request | Response |
 |---|---|---|
-| `GET projects` | | `{ projects: [{ id, title }] }` |
+| `GET projects` | | `{ projects: [{ id, fullId, title }] }` |
 | `POST projects` | `{ title }` | `{ ok: true, id }` |
-| `GET tasks` | `project?`, `kind?`, `state?`, `query?` (title contains), `limit?`, `cursor?` | `{ tasks: [{ id, kind, state, title }], more, cursor? }`, most recently updated first |
+| `GET tasks` | `project?`, `kind?`, `state?`, `query?` (title contains), `limit?`, `cursor?` | `{ tasks: [{ id, fullId, kind, state, title }], more, cursor? }`, most recently updated first |
 | `POST tasks` | `{ project, kind, title, description?, urgency?, schedule?, iteratesOn? }` | `{ ok: true, id, state }` |
-| `GET task/:id` | | `{ id, kind, state, title, project, heldBy?, transitions, counts: { comments, references, findings? } }` (`transitions`: those this agent may apply now, never the ending ones; `findings` for explorations only) |
+| `GET task/:id` | | `{ id, fullId, kind, state, title, project, projectFullId, heldBy?, transitions, counts: { comments, references, findings? } }` (`transitions`: those this agent may apply now, never the ending ones; `findings` for explorations only) |
 | `GET task/:id/description` | `maxChars?`, `offset?`, `anchors?` | `{ markdown, more, offset?, assets? }` |
 | `GET task/:id/asset/:asset` | | `{ id, type, size, width?, height?, data }` (see Agents read images) |
 | `GET task/:id/comments` | `limit?` (default 5), `cursor?`, `maxChars?` (per comment, default 1000) | `{ comments: [{ id, author, markdown }], more, cursor? }`, newest first |

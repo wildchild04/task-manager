@@ -195,6 +195,7 @@ function removeReference(services: AppServices, task: TaskSummary, values: Recor
 
 /** Creates an open exploration referencing this task, or one of its comments. */
 function startExploration(services: AppServices, task: TaskSummary, values: Record<string, string>): ActionResult {
+  if (task.kind === "exploration") return invalid(values, {}, "An exploration cannot start another exploration");
   if (!values.title) return invalid(values, { title: "A title is required" });
   let reference = { kind: "task", id: task.id };
   if (values.commentId) {

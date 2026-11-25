@@ -96,6 +96,21 @@ describe("MCP server", () => {
     }
   });
 
+  it("annotates each tool's read and write behavior", async () => {
+    const client = await connect(services);
+    const { tools } = await client.listTools();
+    const reads = new Set(["list_projects", "list_tasks", "get_task", "read_description", "list_comments", "list_references", "list_findings", "search_pages", "read_page", "read_page_asset", "get_suggestion", "list_suggestions", "get_markdown_guide"]);
+    for (const tool of tools) {
+      expect(tool.annotations).toMatchObject({ openWorldHint: false, readOnlyHint: reads.has(tool.name) });
+      if (!reads.has(tool.name)) {
+        expect(tool.annotations).toMatchObject({
+          destructiveHint: ["edit_finding", "delete_finding", "revise_suggestion", "withdraw_suggestion"].includes(tool.name),
+          idempotentHint: ["edit_finding", "withdraw_suggestion"].includes(tool.name),
+        });
+      }
+    }
+  });
+
   it("shows an uploaded image as image content, and refuses others as tool errors", async () => {
     const client = await connect(services);
     const be32 = (n: number) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
@@ -131,7 +146,7 @@ describe("MCP server", () => {
     expect(result.isError).toBeFalsy();
     const body = JSON.parse(text(result));
     expect(body.tasks).toHaveLength(3);
-    expect(Object.keys(body.tasks[0]).sort()).toEqual(["id", "kind", "state", "title"]);
+    expect(Object.keys(body.tasks[0]).sort()).toEqual(["fullId", "id", "kind", "state", "title"]);
     expect(text(result)).not.toContain("\n");
   });
 
@@ -223,7 +238,7 @@ describe("MCP server", () => {
     const project = JSON.parse(text(await client.callTool({ name: "create_project", arguments: { title: "Garden" } })));
     expect(project).toEqual({ ok: true, id: expect.any(String) });
     const projects = JSON.parse(text(await client.callTool({ name: "list_projects", arguments: {} })));
-    expect(projects.projects).toContainEqual({ id: project.id, title: "Garden" });
+    expect(projects.projects).toContainEqual({ id: project.id, fullId: expect.any(String), title: "Garden" });
 
     const page = JSON.parse(text(await client.callTool({ name: "create_page", arguments: { title: "Scratch" } })));
     const made = JSON.parse(text(await client.callTool({ name: "suggest_action", arguments: { action: "delete", page: page.id } })));

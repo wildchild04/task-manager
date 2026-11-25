@@ -60,7 +60,7 @@ function checkHeld(services: AppServices, task: TaskSummary, actor: AgentActor) 
 
 /** Refuses changes to anything but work tasks. */
 function checkWork(task: TaskSummary) {
-  if (task.kind !== "work") throw new AgentError(403, "forbidden", `Agents can only change work tasks; this is a ${task.kind}`);
+  if (task.kind !== "work") throw new AgentError(403, "forbidden", `Agents can only change work tasks; this is ${task.kind === "exploration" ? "an" : "a"} ${task.kind}`);
 }
 
 const toAgentError = (error: unknown): never => {
@@ -166,7 +166,7 @@ export function markdownGuide() {
 // ----- Reads -----
 
 export function listProjects(services: AppServices) {
-  return { projects: services.projects.list().map((p) => ({ id: short(p.id), title: p.title })) };
+  return { projects: services.projects.list().map((p) => ({ id: short(p.id), fullId: p.id, title: p.title })) };
 }
 
 /** Creates a project, with its home page and library, as the app's form does. */
@@ -206,7 +206,7 @@ export function listTasks(services: AppServices, input: unknown) {
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id));
   const page = pageOf(tasks, (t) => t.id, q.limit, q.cursor);
   return {
-    tasks: page.items.map((t) => ({ id: short(t.id), kind: t.kind, state: t.state, title: t.title })),
+    tasks: page.items.map((t) => ({ id: short(t.id), fullId: t.id, kind: t.kind, state: t.state, title: t.title })),
     more: page.more,
     ...(page.cursor ? { cursor: page.cursor } : {}),
   };
@@ -234,10 +234,12 @@ export function getTask(services: AppServices, actor: AgentActor, id: string) {
   const heldBy = holder(services, task);
   return {
     id: short(task.id),
+    fullId: task.id,
     kind: task.kind,
     state: task.state,
     title: task.title,
     project: short(task.projectId),
+    projectFullId: task.projectId,
     ...(heldBy ? { heldBy } : {}),
     transitions: allowedTransitions(services, task, actor),
     counts: {

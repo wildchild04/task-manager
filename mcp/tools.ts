@@ -67,13 +67,13 @@ export function createAgentServer(call: AgentCall): McpServer {
   const server = new McpServer({ name: "notion-task-manager", version: "0.1.0" });
   const enc = encodeURIComponent;
 
-  server.registerTool("list_projects", { description: "List the projects. Returns [{ id, title }]." }, () =>
+  server.registerTool("list_projects", { annotations: { readOnlyHint: true, openWorldHint: false }, description: "List the projects. Returns { projects: [{ id, fullId, title }] }; fullId is the ID used in project page URLs." }, () =>
     run(call, "GET", "projects"),
   );
 
   server.registerTool(
     "create_project",
-    {
+    { annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
       description: "Create a project, with its home page and knowledge library. Returns { ok, id }.",
       inputSchema: { title: z.string() },
     },
@@ -82,9 +82,9 @@ export function createAgentServer(call: AgentCall): McpServer {
 
   server.registerTool(
     "list_tasks",
-    {
+    { annotations: { readOnlyHint: true, openWorldHint: false },
       description:
-        "List tasks, most recently updated first. Returns at most `limit` tasks (default 10) as { id, kind, state, title }, plus `more`; pass the returned `cursor` for the next ones. Kinds: exploration, update, work, chore. Work states: todo, in_progress, done, cancelled.",
+        "List tasks, most recently updated first. Returns at most `limit` tasks (default 10) as { id, fullId, kind, state, title }, plus `more`; fullId is the ID used in task page URLs. Pass the returned `cursor` for the next ones. Kinds: exploration, update, work, chore. Exploration and update states: open, promoted, tombstoned; work states: todo, in_progress, done, cancelled; chore states: todo, done, cancelled.",
       inputSchema: {
         project: z.string().optional().describe("Only this project's tasks (ID from list_projects)"),
         kind: z.enum(["exploration", "update", "work", "chore"]).optional(),
@@ -99,7 +99,7 @@ export function createAgentServer(call: AgentCall): McpServer {
 
   server.registerTool(
     "create_task",
-    {
+    { annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
       description:
         "Create a task in a project, in its kind's first state. `description` is Markdown (same as `comment`). Chores take `urgency` and `schedule`; updates take `iteratesOn` (a done work task). Returns { ok, id, state, warnings? }." +
         MARKDOWN_NOTE,
@@ -123,9 +123,9 @@ export function createAgentServer(call: AgentCall): McpServer {
 
   server.registerTool(
     "get_task",
-    {
+    { annotations: { readOnlyHint: true, openWorldHint: false },
       description:
-        "A task's summary: { id, kind, state, title, project, heldBy?, transitions, counts: { comments, references, findings? } } (`findings` for explorations). `transitions` are the ones you may apply now. Read the description, comments, findings and references with their own tools.",
+        "A task's summary: { id, fullId, kind, state, title, project, projectFullId, heldBy?, transitions, counts: { comments, references, findings? } }. fullId and projectFullId are the IDs used in page URLs (`findings` for explorations). `transitions` are the ones you may apply now. Read the description, comments, findings and references with their own tools.",
       inputSchema: { id },
     },
     ({ id }) => run(call, "GET", `task/${enc(id)}`),
@@ -133,7 +133,7 @@ export function createAgentServer(call: AgentCall): McpServer {
 
   server.registerTool(
     "read_description",
-    {
+    { annotations: { readOnlyHint: true, openWorldHint: false },
       description:
         "A task's description as Markdown, cut at `maxChars` (default 2000). If `more` is true, call again with the returned `offset`. Pending suggestions show as `<suggestion …>` … `</suggestion>`. Uploaded images are listed in `assets` as { id, alt }: look at one with read_page_asset.",
       inputSchema: { id, maxChars: maxChars(2000), offset, anchors },
@@ -143,7 +143,7 @@ export function createAgentServer(call: AgentCall): McpServer {
 
   server.registerTool(
     "list_comments",
-    {
+    { annotations: { readOnlyHint: true, openWorldHint: false },
       description:
         "A task's comments, newest first: at most `limit` (default 5) as { id, author, markdown }, each cut at `maxChars` (default 1000). `author` is \"human\" or an agent's name. Pass `cursor` for older ones.",
       inputSchema: { id, limit: limit(5), cursor, maxChars: maxChars(1000) },
@@ -153,7 +153,7 @@ export function createAgentServer(call: AgentCall): McpServer {
 
   server.registerTool(
     "list_references",
-    {
+    { annotations: { readOnlyHint: true, openWorldHint: false },
       description:
         "What a task references: at most `limit` (default 10) as { kind, id, title } (or { kind, id, missing: true }).",
       inputSchema: { id, limit: limit(10) },
@@ -163,7 +163,7 @@ export function createAgentServer(call: AgentCall): McpServer {
 
   server.registerTool(
     "transition",
-    {
+    { annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
       description:
         "Move a task through its lifecycle; get_task lists the `transitions` you may apply now. Explorations and updates (open, promoted, tombstoned): promote (turn it into a new work task born from it; `title` defaults to the idea's), revive. Work (todo, in_progress, done, cancelled): start (take it; you then hold it until it leaves in_progress), pause, complete, return (back to todo; needs a `reason`, posted as your comment), reopen. Chores (todo, done, cancelled): complete (`next`: create the following occurrence; defaults to yes when recurring), cancel (skips this occurrence). Returns { ok, state, work? } (`work`: the new work task's ID, after promote).",
       inputSchema: {
@@ -181,7 +181,7 @@ export function createAgentServer(call: AgentCall): McpServer {
 
   server.registerTool(
     "comment",
-    {
+    { annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
       description:
         "Comment on a work task, in Markdown (paragraphs, # headings, - lists, - [ ] todos, > quotes, **bold**, *italic*, `code`, [links](url); mention with @[Title](task:id) or @[Title](page:id)). Returns { ok, id, warnings? }." +
         MARKDOWN_NOTE,
@@ -192,7 +192,7 @@ export function createAgentServer(call: AgentCall): McpServer {
 
   server.registerTool(
     "list_findings",
-    {
+    { annotations: { readOnlyHint: true, openWorldHint: false },
       description:
         "An exploration's findings (its recorded results), newest first: at most `limit` (default 5) as { id, author, markdown }, each cut at `maxChars` (default 1000). `author` is \"human\" or an agent's name. Pass `cursor` for older ones.",
       inputSchema: { id, limit: limit(5), cursor, maxChars: maxChars(1000) },
@@ -202,7 +202,7 @@ export function createAgentServer(call: AgentCall): McpServer {
 
   server.registerTool(
     "add_finding",
-    {
+    { annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
       description:
         "Record a finding on an exploration (in any state): what you learned, decided or ruled out, in Markdown (same as `comment`). Findings are an exploration's results, kept apart from its description; they're added without approval, and you can edit and delete only your own. Returns { ok, id, warnings? }." +
         MARKDOWN_NOTE,
@@ -213,7 +213,7 @@ export function createAgentServer(call: AgentCall): McpServer {
 
   server.registerTool(
     "edit_finding",
-    {
+    { annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
       description:
         "Replace the whole content of one of your own findings with `markdown` (same as `comment`); `id` is the finding's ID from add_finding or list_findings. Returns { ok, warnings? }." +
         MARKDOWN_NOTE,
@@ -224,7 +224,7 @@ export function createAgentServer(call: AgentCall): McpServer {
 
   server.registerTool(
     "delete_finding",
-    {
+    { annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
       description: "Delete one of your own findings for good. Returns { ok }.",
       inputSchema: { id: z.string().describe("The finding's ID") },
     },
@@ -233,7 +233,7 @@ export function createAgentServer(call: AgentCall): McpServer {
 
   server.registerTool(
     "append_description",
-    {
+    { annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
       description:
         "Add Markdown to the end of a work task's description (same Markdown as `comment`). Returns { ok, warnings? }." +
         MARKDOWN_NOTE,
@@ -244,7 +244,7 @@ export function createAgentServer(call: AgentCall): McpServer {
 
   server.registerTool(
     "search_pages",
-    {
+    { annotations: { readOnlyHint: true, openWorldHint: false },
       description:
         "Find project home pages, knowledge library and workspace pages whose title contains `query`. Returns at most `limit` (default 10) as { id, title, place }.",
       inputSchema: { query: z.string(), limit: limit(10) },
@@ -254,7 +254,7 @@ export function createAgentServer(call: AgentCall): McpServer {
 
   server.registerTool(
     "read_page",
-    {
+    { annotations: { readOnlyHint: true, openWorldHint: false },
       description:
         "A page or project home as { title, markdown, assets? }, cut at `maxChars` (default 2000). Give a page ID from search_pages or a project ID from list_projects; a project ID reads its home page. If `more` is true, call again with the returned `offset`. Pending suggestions show as `<suggestion …>` … `</suggestion>`. `assets` lists the page's uploaded images as { id, alt } (the whole page, in order): look at one with read_page_asset.",
       inputSchema: { id: z.string().describe("Page ID from search_pages, or project ID for its home page"), maxChars: maxChars(2000), offset, anchors },
@@ -264,7 +264,7 @@ export function createAgentServer(call: AgentCall): McpServer {
 
   server.registerTool(
     "read_page_asset",
-    {
+    { annotations: { readOnlyHint: true, openWorldHint: false },
       description:
         "Look at an uploaded image from a page, project home or a task's description: give `page` (a page ID or project ID for its home) or `task`, and `asset`, an ID from the `assets` that read_page or read_description returned. Returns the image (PNG, JPEG, GIF or WebP) and { id, type, size, width?, height? }. Only images uploaded to that page or description; external image URLs are never fetched.",
       inputSchema: {
@@ -281,7 +281,7 @@ export function createAgentServer(call: AgentCall): McpServer {
 
   server.registerTool(
     "create_page",
-    {
+    { annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
       description:
         "Create a page titled `title`, with optional Markdown content (same as `comment`; mention with `@[Title](page:id)`). Where it goes: a workspace page by default; with `project`, a document at the top of that project's library; with `parent`, a page inside that page (workspace or library). Give `project` or `parent`, not both. It's added after the existing pages there. Returns { ok, id, warnings? }." +
         MARKDOWN_NOTE,
@@ -297,7 +297,7 @@ export function createAgentServer(call: AgentCall): McpServer {
 
   server.registerTool(
     "suggest",
-    {
+    { annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
       description:
         "Propose a change to a page, project home or a task's description; a human approves or rejects it, and nothing changes until then. Give `page` as a page ID or a project ID for its home page. Read it first with `anchors: true` to get block IDs. `insert` adds `markdown` after the block `after`, as the last children of `inside`, or at the end; `replace` swaps the block `target` for `markdown`; `delete` removes `target` and what's nested in it. `note` (at most 280 characters) tells the human why. Works on any page or task, including work another agent holds. A table is suggested on as a whole: its rows and cells can't be targets. Returns { ok, id, warnings? }." +
         MARKDOWN_NOTE,
@@ -317,7 +317,7 @@ export function createAgentServer(call: AgentCall): McpServer {
 
   server.registerTool(
     "suggest_action",
-    {
+    { annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
       description:
         "Propose an action for a human to approve or reject; nothing changes until then. On exactly one of `project`, `page` or `task`: `rename` (with `title`) or `delete` a project, a page or a task; `schedule` a chore in to do (`schedule`, or `null` to remove it); `transition`: cancel work, tombstone an exploration or update, or cancel a recurring chore's whole series (`transition: \"cancel\"`, `scope: \"series\"`). `note` (at most 280 characters) tells the human why. If the subject changes first, the suggestion becomes outdated. Returns { ok, id }.",
       inputSchema: {
@@ -341,7 +341,7 @@ export function createAgentServer(call: AgentCall): McpServer {
 
   server.registerTool(
     "get_suggestion",
-    {
+    { annotations: { readOnlyHint: true, openWorldHint: false },
       description:
         "A suggestion's status: { id, action, status, place, subject?, revision, note?, feedback?, resolvedAt? } (`subject`: what an action from suggest_action acts on). Status is pending, changes_requested (the human asked for changes: `feedback` is [{ text, at }], oldest first; revise it with revise_suggestion), outdated (its target or subject changed since; revise it against the page as it is now, or withdraw it), approved, rejected or withdrawn.",
       inputSchema: { id: z.string().describe("Suggestion ID from suggest or suggest_action") },
@@ -351,7 +351,7 @@ export function createAgentServer(call: AgentCall): McpServer {
 
   server.registerTool(
     "list_suggestions",
-    {
+    { annotations: { readOnlyHint: true, openWorldHint: false },
       description:
         "Your own open suggestions (from suggest and suggest_action), oldest first: at most `limit` (default 10) as { id, action, status, place, subject? }, plus `more`; pass the returned `cursor` for the next ones. `state` narrows them to pending, outdated or changes_requested; a changes_requested one has the human's feedback, which get_suggestion shows. Check it to find suggestions to revise.",
       inputSchema: {
@@ -365,7 +365,7 @@ export function createAgentServer(call: AgentCall): McpServer {
 
   server.registerTool(
     "revise_suggestion",
-    {
+    { annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
       description:
         "Change your own open suggestion in place, usually after the human asked for changes (see get_suggestion's `feedback`); the human then reviews it again. It keeps its ID, action, place and target or subject, and is checked against them as they are now. Give what fits its action: insert and replace take `markdown` (the new proposed blocks, replacing the old ones), rename takes `title`, schedule takes `schedule` (or null); any suggestion takes `note` (at most 280 characters), your reply to the human. To change the action, target or subject, withdraw it and suggest again. Returns { ok, revision, warnings? }." +
         MARKDOWN_NOTE,
@@ -386,7 +386,7 @@ export function createAgentServer(call: AgentCall): McpServer {
 
   server.registerTool(
     "withdraw_suggestion",
-    {
+    { annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
       description: "Take back your own open suggestion (pending, outdated or changes_requested; from suggest or suggest_action). Returns { ok }.",
       inputSchema: { id: z.string().describe("Suggestion ID from suggest or suggest_action") },
     },
@@ -395,7 +395,7 @@ export function createAgentServer(call: AgentCall): McpServer {
 
   server.registerTool(
     "get_markdown_guide",
-    {
+    { annotations: { readOnlyHint: true, openWorldHint: false },
       description:
         "The Markdown you can write in comments, descriptions, pages and suggestions: { blocks: [{ type, markdown, example }], inline, unsupported }. Check it before writing tables, code or callouts; what's unsupported is kept as text and reported in `warnings`.",
     },

@@ -459,6 +459,12 @@ describe("task screen", () => {
   });
 
   describe("starting from anything", () => {
+    it("refuses to start an exploration from another exploration", () => {
+      create("E", "exploration");
+      expect(post("E", { intent: "start-exploration", title: "Another" })).toMatchObject({
+        ok: false, formError: "An exploration cannot start another exploration",
+      });
+    });
     it("starts an exploration from a cancelled work task", () => {
       create("W", "work");
       services.tasks.transition("W", "cancel");
