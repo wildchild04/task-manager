@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { allPages, searchPages, workspacePageTree } from "../../app/lib/page-search.server";
+import { allPages, globalSearch, searchPages, workspacePageTree } from "../../app/lib/page-search.server";
 import { type AppServices, createInMemoryServices } from "~/composition";
 
 describe("page search", () => {
@@ -56,5 +56,31 @@ describe("page search", () => {
       { id: task.bodyPageId, title: "Architecture review", place: "Task · work · Taskhub", href: "/tasks/W" },
     ]);
     expect(searchPages(services, "", 2)).toHaveLength(2);
+  });
+
+  it("searches route IDs by prefix before title matches, without changing mention IDs", () => {
+    services.projects.create({ id: "abcd-project", title: "Another project" });
+    services.tasks.create({ id: "abcd-task", projectId: "P", kind: "work", title: "Review" });
+    services.blocks.apply([
+      { op: "insert", block: { id: "abcd", type: "page", content: [{ text: "Exact" }] }, parentId: null },
+      { op: "insert", block: { id: "other", type: "page", content: [{ text: "ABCD in title" }] }, parentId: null },
+    ]);
+    const results = globalSearch(services, "AbCd");
+    expect(results.map((r) => r.href)).toEqual(["/pages/abcd", "/projects/abcd-project", "/tasks/abcd-task", "/pages/other"]);
+    expect(results.slice(0, 3).map((r) => r.matchedId)).toEqual(["abcd", "abcd-project", "abcd-task"]);
+    expect(results[3]!.matchedId).toBeUndefined();
+    expect(globalSearch(services, "bcd-task")).toEqual([]);
+    expect(globalSearch(services, "abc").map((r) => r.href)).toEqual(["/pages/other"]);
+    expect(globalSearch(services, "   ")).toEqual([]);
+    expect(globalSearch(services, "taskhub").map((r) => r.href)).toContain("/projects/P");
+    expect(searchPages(services, "Review")[0]!.id).toBe(services.tasks.get("abcd-task")!.bodyPageId);
+  });
+
+  it("limits results to 20 and ranks title matches by earliest position", () => {
+    for (let i = 0; i < 25; i++) {
+      services.blocks.apply([{ op: "insert", block: { id: `page-${i}`, type: "page", content: [{ text: `Needle ${i}` }] }, parentId: null }]);
+    }
+    expect(globalSearch(services, "needle")).toHaveLength(20);
+    expect(globalSearch(services, "arch").map((r) => r.href).slice(0, 2)).toEqual(["/pages/arch", "/tasks/W"]);
   });
 });

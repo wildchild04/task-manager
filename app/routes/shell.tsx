@@ -3,6 +3,7 @@ import { type MouseEvent, useEffect, useState } from "react";
 import { Link as RouterLink, Outlet, type ShouldRevalidateFunctionArgs, useLocation, useNavigate } from "react-router";
 
 import { AccountMenu } from "../components/account-menu";
+import { GlobalSearch } from "../components/global-search";
 import { NewPageDialog } from "../components/new-page-dialog";
 import { NotificationBell } from "../components/notification-bell";
 import { NewProjectDialog } from "../components/new-project-dialog";
@@ -143,11 +144,12 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
 
   return (
     <PageShell
-      title="Workspace"
+      title={<span className="workspace-shell-title">Workspace</span>}
       navigation={navigation}
       navigationLabel="Workspace navigation"
       actions={
         <Stack direction="row" alignItems="center" spacing={1}>
+          <GlobalSearch />
           <NotificationBell items={notifications} />
           {/* Offered on desktop browsers only, so it shows once the page has loaded. */}
           {vim.offered && (

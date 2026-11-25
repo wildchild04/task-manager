@@ -5,6 +5,7 @@ export default [
   route("api/changes", "routes/api.changes.ts"),
   route("api/agent/*", "routes/api.agent.ts"),
   route("api/pages", "routes/api.pages.ts"),
+  route("api/search", "routes/api.search.ts"),
   route("api/content", "routes/api.content.ts"),
   route("content/:id", "routes/content.ts"),
   route("api/suggestions", "routes/api.suggestions.ts"),

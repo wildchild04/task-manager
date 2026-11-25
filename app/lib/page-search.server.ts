@@ -76,3 +76,23 @@ export function searchPages(services: AppServices, query: string, limit = 50): P
     .slice(0, limit)
     .map(({ page }) => page);
 }
+
+export type GlobalSearchResult = PageMatch & { matchedId?: string };
+
+/** Search navigable items by title or by the ID used in their route. */
+export function globalSearch(services: AppServices, query: string): GlobalSearchResult[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  return [...allPages(services), ...allTasks(services)]
+    .map((page) => {
+      const id = page.href.slice(page.href.lastIndexOf("/") + 1);
+      const idMatch = q.length >= 4 && id.toLowerCase().startsWith(q);
+      const at = page.title.toLowerCase().indexOf(q);
+      return { page: { ...page, id }, idMatch, exact: idMatch && id.toLowerCase() === q, at };
+    })
+    .filter(({ idMatch, at }) => idMatch || at >= 0)
+    .sort((a, b) => Number(b.idMatch) - Number(a.idMatch) || Number(b.exact) - Number(a.exact) ||
+      (a.idMatch ? 0 : a.at - b.at) || a.page.title.localeCompare(b.page.title) || a.page.href.localeCompare(b.page.href))
+    .slice(0, 20)
+    .map(({ page, idMatch }) => ({ ...page, ...(idMatch ? { matchedId: page.id } : {}) }));
+}

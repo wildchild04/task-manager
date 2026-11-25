@@ -2,6 +2,33 @@ body {
   margin: 0;
 }
 
+.global-search {
+  position: relative;
+  width: 240px;
+}
+
+@media (min-width: 901px) {
+  .global-search {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+  }
+}
+
+/* Keep the retry control reachable when the suggestion popup is open. */
+.global-search .MuiButton-root {
+  position: absolute;
+  right: 0;
+  top: 0;
+  z-index: 1400;
+}
+
+@media (max-width: 700px) {
+  .global-search { width: 90px; }
+  .workspace-shell-title, [data-page-shell] .account-email { display: none; }
+}
+
 /* Document pages widen on large screens; other workspace screens keep their layout. */
 .MuiContainer-root:has(> .document-page) {
   max-width: none;
