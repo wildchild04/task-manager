@@ -1,4 +1,4 @@
-import { Chip, Link, List, Stack, Tabs, Typography } from "@wildchild/design-system";
+import { Chip, Link, List, Stack, Switch, Tabs, Typography } from "@wildchild/design-system";
 import { useState } from "react";
 import { data, Link as RouterLink, redirect, useSearchParams } from "react-router";
 
@@ -43,29 +43,31 @@ export function meta({ data }: Route.MetaArgs) {
 type TabId = "description" | ProjectTabId | "library";
 
 /** A task tab: its items with their marker and detail, and a link to the full list. */
-function TaskTab({ tab }: { tab: ProjectTabView }) {
+function TaskTab({ tab, showCompleted, onShowCompleted }: { tab: ProjectTabView; showCompleted: boolean; onShowCompleted: (checked: boolean) => void }) {
+  const rows = (items: ProjectTabView["items"]) => items.map((item) => ({
+    id: item.id,
+    primary: <Link component={RouterLink} to={item.href} variant="standalone">{item.title}</Link>,
+    secondary: item.detail,
+    ...(item.chip ? { action: <Chip label={item.chip.label} color={item.chip.color} size="small" variant="outlined" /> } : {}),
+  }));
   return (
     <Stack spacing={1}>
+      <Switch label={`Show completed (${tab.completed.length})`} checked={showCompleted} onChange={onShowCompleted} />
       {tab.items.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
-          {`No ${tab.title.toLowerCase()} here.`}
+          {`No ${showCompleted && tab.completed.length ? "active " : ""}${tab.title.toLowerCase()} here.`}
         </Typography>
       ) : (
         <List
           dense
-          items={tab.items.map((item) => ({
-            id: item.id,
-            primary: (
-              <Link component={RouterLink} to={item.href} variant="standalone">
-                {item.title}
-              </Link>
-            ),
-            secondary: item.detail,
-            ...(item.chip
-              ? { action: <Chip label={item.chip.label} color={item.chip.color} size="small" variant="outlined" /> }
-              : {}),
-          }))}
+          items={rows(tab.items)}
         />
+      )}
+      {showCompleted && tab.completed.length > 0 && (
+        <section aria-label="Completed">
+          <Typography variant="h2">Completed</Typography>
+          <List dense items={rows(tab.completed)} />
+        </section>
       )}
       <Link component={RouterLink} to={tab.listHref} variant="standalone">
         {`All ${tab.title.toLowerCase()} →`}
@@ -100,6 +102,12 @@ export default function ProjectHome({ loaderData }: Route.ComponentProps) {
       { replace: true, preventScrollReset: true },
     );
   const taskTab = view.tabs.find((t) => t.id === tab);
+  const showCompleted = searchParams.get("completed") === "1";
+  const onShowCompleted = (checked: boolean) => setSearchParams((params) => {
+    if (checked) params.set("completed", "1");
+    else params.delete("completed");
+    return params;
+  }, { replace: true, preventScrollReset: true });
 
   return (
     <Stack spacing={2}>
@@ -146,7 +154,7 @@ export default function ProjectHome({ loaderData }: Route.ComponentProps) {
           </Typography>
         ))
       )}
-      {taskTab && <TaskTab tab={taskTab} />}
+      {taskTab && <TaskTab tab={taskTab} showCompleted={showCompleted} onShowCompleted={onShowCompleted} />}
       {tab === "library" && (
         <Stack spacing={1}>
           {view.library.length === 0 ? (

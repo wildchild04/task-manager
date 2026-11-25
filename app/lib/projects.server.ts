@@ -31,7 +31,7 @@ export type ProjectItemView = {
 
 export type ProjectTabId = "work" | "explorations" | "updates" | "chores";
 
-export type ProjectTabView = { id: ProjectTabId; title: string; items: ProjectItemView[]; listHref: string };
+export type ProjectTabView = { id: ProjectTabId; title: string; items: ProjectItemView[]; completed: ProjectItemView[]; listHref: string };
 
 export type GlanceView = { label: string; color?: "info" | "warning" | "error" };
 
@@ -65,6 +65,11 @@ export function projectHomeView(services: AppServices, projectId: string): Proje
       : `Updated ${formatDateTime(services.tasks.get(entry.id)!.updatedAt, timeZone)}`,
   });
   const stateChip = (state: string) => ({ label: stateLabel(state), color: stateColor(state) });
+  const allTasks = byRecency(services.tasks.list(projectId));
+  const completed = (kind: "work" | "exploration" | "update" | "chore") =>
+    allTasks
+      .filter((task) => task.kind === kind && (kind === "work" || kind === "chore" ? ["done", "cancelled"] : ["promoted", "tombstoned"]).includes(task.state))
+      .map((task) => item(taskItem(task), stateChip(task.state)));
 
   const inProgress = section("work-in-progress");
   const returned = section("returned-work");
@@ -101,6 +106,7 @@ export function projectHomeView(services: AppServices, projectId: string): Proje
         id: "work",
         title: "Work",
         listHref: list("work"),
+        completed: completed("work"),
         // In progress first, then returned, then the rest of the to-do work.
         items: [
           ...inProgress.map((t) => item(t, stateChip("in_progress"))),
@@ -108,12 +114,13 @@ export function projectHomeView(services: AppServices, projectId: string): Proje
           ...todo.map((t) => item(t, stateChip("todo"))),
         ],
       },
-      { id: "explorations", title: "Explorations", listHref: list("explorations"), items: explorations.map((t) => item(t)) },
-      { id: "updates", title: "Updates", listHref: list("updates"), items: updates.map((t) => item(t)) },
+      { id: "explorations", title: "Explorations", listHref: list("explorations"), items: explorations.map((t) => item(t)), completed: completed("exploration") },
+      { id: "updates", title: "Updates", listHref: list("updates"), items: updates.map((t) => item(t)), completed: completed("update") },
       {
         id: "chores",
         title: "Chores",
         listHref: list("chores"),
+        completed: completed("chore"),
         items: chores.map((t) => item(t, t.urgent ? { label: "Urgent", color: "error" } : undefined)),
       },
     ],

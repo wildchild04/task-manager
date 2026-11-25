@@ -89,6 +89,29 @@ describe("project screens", () => {
   });
 
   describe("project home and dashboard", () => {
+    it("lists completed tasks by kind and recency without changing active counts", () => {
+      work("W1");
+      services.tasks.transition("W1", "start");
+      services.tasks.transition("W1", "complete");
+      clock = "2026-10-15T08:00:00.000Z";
+      work("W2");
+      services.tasks.transition("W2", "cancel");
+      services.tasks.create({ id: "E", projectId: "P", kind: "exploration", title: "Idea" });
+      services.tasks.transition("E", "tombstone");
+      services.tasks.create({ id: "U", projectId: "P", kind: "update", title: "Update", iteratesOn: "W1" });
+      services.tasks.transition("U", "tombstone");
+      services.tasks.create({ id: "C", projectId: "P", kind: "chore", title: "Chore" });
+      services.tasks.transition("C", "complete");
+      const tabs = projectHomeView(services, "P")!.tabs;
+      expect(tabs.map((tab) => [tab.id, tab.completed.map((item) => [item.id, item.chip?.label])])).toEqual([
+        ["work", [["W2", "Cancelled"], ["W1", "Done"]]],
+        ["explorations", [["E", "Tombstoned"]]],
+        ["updates", [["U", "Tombstoned"]]],
+        ["chores", [["C", "Done"]]],
+      ]);
+      expect(tabs.every((tab) => tab.items.length === 0)).toBe(true);
+    });
+
     it("shows a quick glance and the tabs' lists, in progress work first", () => {
       work("W1");
       work("W2");
